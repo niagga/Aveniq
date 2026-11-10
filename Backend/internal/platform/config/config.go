@@ -34,9 +34,12 @@ type Config struct {
 // clone runs against the hermetic local stack without any .env file.
 func Load() (Config, error) {
 	cfg := Config{
-		Env:         AppEnv(strings.TrimSpace(getEnv("APP_ENV", string(EnvDevelopment)))),
-		HTTPAddr:    getEnv("HTTP_ADDR", "127.0.0.1:8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable"),
+		Env:      AppEnv(strings.TrimSpace(getEnv("APP_ENV", string(EnvDevelopment)))),
+		HTTPAddr: getEnv("HTTP_ADDR", "127.0.0.1:8080"),
+		// The application role, not the database owner: row-level security is
+		// ignored by superusers and BYPASSRLS roles, so connecting as the owner
+		// would silently disable tenant isolation.
+		DatabaseURL: getEnv("DATABASE_URL", "postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable"),
 		RedisAddr:   getEnv("REDIS_ADDR", "127.0.0.1:6380"),
 		BaseDomain:  getEnv("BASE_DOMAIN", "localhost"),
 	}

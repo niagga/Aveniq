@@ -5,10 +5,67 @@
 package sqlcgen
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type AuditLog struct {
+	ID        int64
+	TenantID  pgtype.UUID
+	ActorID   pgtype.UUID
+	Action    string
+	Entity    string
+	EntityID  *string
+	Ip        *netip.Addr
+	Metadata  []byte
+	CreatedAt time.Time
+}
+
+type Invitation struct {
+	ID         pgtype.UUID
+	TenantID   pgtype.UUID
+	Email      string
+	RoleCode   string
+	TokenHash  string
+	InvitedBy  pgtype.UUID
+	ExpiresAt  time.Time
+	AcceptedAt pgtype.Timestamptz
+	CreatedAt  time.Time
+}
+
+// Platform-wide permission catalog. Codes are stable API surface.
+type Permission struct {
+	Code        string
+	Domain      string
+	Description string
+}
+
+type Role struct {
+	Code        string
+	Name        string
+	Description string
+}
+
+type RolePermission struct {
+	RoleCode       string
+	PermissionCode string
+}
+
+type Session struct {
+	ID       pgtype.UUID
+	TenantID pgtype.UUID
+	UserID   pgtype.UUID
+	// SHA-256 of the refresh token. The token itself is never stored.
+	RefreshHash string
+	UserAgent   *string
+	Ip          *netip.Addr
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	RevokedAt   pgtype.Timestamptz
+	ReplacedBy  pgtype.UUID
+}
 
 // Isolation root. Every business record belongs to exactly one tenant.
 type Tenant struct {
@@ -17,6 +74,22 @@ type Tenant struct {
 	Slug      string
 	Name      string
 	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type User struct {
+	ID       pgtype.UUID
+	TenantID pgtype.UUID
+	Email    string
+	// Argon2id encoded hash. Never a plaintext or reversible value.
+	PasswordHash    string
+	FullName        string
+	RoleCode        string
+	IsActive        bool
+	EmailVerifiedAt pgtype.Timestamptz
+	// TOTP shared secret, encrypted at the application layer.
+	MfaSecret *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

@@ -61,6 +61,13 @@ en cada transición de tarea.
 | T9 | S11 | E0 | Cliente OpenAPI generado y página que consume la API Go | inline | — |
 | T10 | S8 | E0 | `docker-compose` + Caddy para el camino con Docker | inline | — |
 | T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
+| T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | pendiente |
+| T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | pendiente |
+| T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | worker | pendiente |
+| T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
+| T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
+
+E0 (T1–T11) publicado en el commit `06f745a`.
 
 ## Log
 
@@ -118,3 +125,57 @@ Los scripts fijan `TEMP`/`TMP`/`PGTMPDIR` a `.local/tmp`.
 
 Riesgo de revisión declarado: el commit inicial tiene ~5.5k líneas porque no existe historial previo
 contra el cual trocear. Los cortes por unidad de review empiezan en E1.
+
+**L6 — Decisiones de diseño de E1**
+
+El aislamiento multi-tenant se diseña en la base, no solo en el código. Cuatro decisiones que no son
+negociables, porque cada una tiene una forma silenciosa de fallar:
+
+1. **`FORCE ROW LEVEL SECURITY`.** En PostgreSQL el dueño de una tabla *ignora* sus políticas RLS. Como
+   el rol de la aplicación es el dueño de las tablas en el entorno local, sin `FORCE` las políticas no se
+   aplican y todo parece funcionar. Es el error más caro de esta etapa.
+2. **Cerrar por defecto.** `current_setting('app.tenant_id', true)` devuelve NULL cuando no se seteó. La
+   política debe usar `NULLIF(..., '')::uuid` y comparar contra `tenant_id`; una sesión sin contexto no ve
+   **ninguna** fila. Nunca al revés.
+3. **`WITH CHECK`, no solo `USING`.** `USING` filtra lecturas; sin `WITH CHECK` un bug podría *escribir*
+   una fila en el tenant equivocado. Las dos cláusulas van juntas.
+4. **El contexto se setea por transacción** con `SET LOCAL app.tenant_id`, nunca por conexión
+   (`SET`), porque las conexiones vienen del pool y se reusan entre requests de tenants distintos.
+
+Además: `roles` y `permissions` son catálogos **globales** (código fijo), no por tenant. Roles
+personalizados por tenant quedan fuera de E1. El rol `admin` **no** recibe permisos `clinical:*`: el
+administrador del sistema no lee historias clínicas. Ese es el punto entero de la matriz.
+
+**L7 — E1/T12: IAM, roles y RLS (completado)**
+
+**Hallazgo crítico.** Al verificar las políticas con datos reales, RLS no hacía nada: cada tenant veía
+las filas del otro, y una sesión sin contexto también veía todo. Causa: el rol `aveniq` con el que se
+inicializó el clúster local tiene `rolsuper = true` y `rolbypassrls = true`, y PostgreSQL deja que
+ambos atributos ignoren RLS por completo. `FORCE ROW LEVEL SECURITY` **no** alcanza a un superusuario.
+La migración 0002 era, en la práctica, decorativa: el código parecía correcto y el aislamiento no
+existía. Si esto se descubre en producción, se descubre con datos clínicos de dos consultorios
+mezclados.
+
+**Corrección.** Migración 0003 crea `aveniq_app` (`NOSUPERUSER`, `NOBYPASSRLS`, dueño de nada), le
+otorga privilegios sobre todas las tablas y `ALTER DEFAULT PRIVILEGES` para las futuras. La API y el
+worker conectan con ese rol; las migraciones siguen con el dueño. Los tres entornos lo crean:
+`scripts/local-up.ps1`, `infra/docker/init/01-app-role.sql` y el workflow de CI.
+
+Evidencia observada, antes y después:
+
+| Escenario | Con el rol dueño | Con `aveniq_app` |
+| --- | --- | --- |
+| `app.tenant_id` = A | 2 filas | 1 fila |
+| `app.tenant_id` = B | 2 filas | 1 fila |
+| Sin contexto | 2 filas | 0 filas |
+| Contexto vacío | 2 filas | 0 filas |
+| INSERT en tenant ajeno | aceptado | `SQLSTATE 42501` |
+
+- `TestIsolation` pasa con 6 subtests y deja cero bases huérfanas. Sin `TEST_DATABASE_URL` y
+  `TEST_APP_DATABASE_URL` se saltea, así que `go test ./...` sigue verde sin base de datos.
+- `go vet` limpio, `sqlc generate` sin cambios, `go build` limpio.
+- API corriendo con el rol de aplicación: `/readyz` 200, `GET /api/v1/tenants` 200,
+  `POST /api/v1/tenants` 201.
+
+Pendiente de E1: T13 dominio IAM y repositorio sqlc; T14 auth con argon2id, rotación de refresh y
+detección de reuso; T15 matriz de permisos e invitaciones; T16 tests de la capa HTTP.

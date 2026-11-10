@@ -78,7 +78,7 @@ system-wide installs.
 # 1. one-time: toolchain, portable database and queue
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 
-# 2. database
+# 2. database (migrations run as the owner role, not as the application role)
 cd Backend
 goose -dir migrations postgres "postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable" up
 
@@ -115,14 +115,47 @@ variable, so a fresh clone runs with no `.env` file. Override through the enviro
 | --- | --- | --- |
 | `APP_ENV` | `development` | `production` enables JSON logs and requires TLS on the DSN |
 | `HTTP_ADDR` | `127.0.0.1:8080` | |
-| `DATABASE_URL` | `postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable` | |
+| `DATABASE_URL` | `postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable` | application role, RLS enforced |
 | `REDIS_ADDR` | `127.0.0.1:6380` | |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `BASE_DOMAIN` | `localhost` | suffix used to resolve a tenant from the request host |
 | `API_ORIGIN` (frontend) | `http://127.0.0.1:8080` | server-side only; never reaches the browser |
 
+### Two database roles, and why
+
+PostgreSQL lets **superusers and roles with `BYPASSRLS` ignore every row-level security
+policy**, and lets the owner of a table bypass it unless `FORCE ROW LEVEL SECURITY` is set.
+A single owner role therefore makes multi-tenant isolation look correct while it protects
+nothing — every tenant sees every row.
+
+So there are two roles:
+
+| Role | Used by | Properties |
+| --- | --- | --- |
+| `aveniq` | migrations (`goose`) | owner of the schema |
+| `aveniq_app` | API and worker | `NOSUPERUSER`, `NOBYPASSRLS`, owns nothing |
+
+`scripts/local-up.ps1`, `infra/docker/init/01-app-role.sql` and the CI workflow all create
+the application role; migration `0003_grant_app_role.sql` grants it privileges on every
+table, including tables added by later migrations.
+
 There is no committed `.env` file on purpose: the defaults are the local stack, and
 secrets belong in the environment of whoever runs the process.
+
+### Integration tests
+
+The isolation test builds a throwaway database, applies the real migrations and asserts
+that one tenant cannot read or write another's rows. It skips unless both connections
+are provided:
+
+```bash
+export TEST_DATABASE_URL="postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable"
+export TEST_APP_DATABASE_URL="postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable"
+go test ./internal/infrastructure/postgres/ -run TestIsolation -v
+```
+
+Both are needed: the migrator connection creates and seeds, the application role proves
+the enforcement. Running the test with the owner role would pass while testing nothing.
 
 ---
 

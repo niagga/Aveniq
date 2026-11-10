@@ -36,6 +36,12 @@ $DbUser    = 'aveniq'
 $DbPass    = 'aveniq_dev'
 $DbName    = 'aveniq'
 
+# The API connects with a separate role on purpose. PostgreSQL lets superusers and
+# BYPASSRLS roles ignore every row-level security policy, so connecting as the
+# owner would make tenant isolation decorative.
+$AppUser = 'aveniq_app'
+$AppPass = 'aveniq_app_dev'
+
 function Write-Step($Message) { Write-Host "  $Message" -ForegroundColor Cyan }
 function Write-Ok($Message) { Write-Host "  $Message" -ForegroundColor Green }
 function Write-Warn($Message) { Write-Host "  $Message" -ForegroundColor Yellow }
@@ -133,6 +139,26 @@ if ($exists -ne '1') {
 else {
     Write-Ok "database '$DbName' present"
 }
+
+# ─── Application role ───
+# Row-level security is ignored by superusers, by roles holding BYPASSRLS and,
+# unless FORCE is set, by the owner of the table. `aveniq` here has all three
+# luxuries; `aveniq_app` has none of them, which is what makes isolation real.
+Write-Step "ensuring the application role '$AppUser'"
+$appRoleSql = @"
+DO `$`$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$AppUser') THEN
+        CREATE ROLE $AppUser NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+    END IF;
+    ALTER ROLE $AppUser LOGIN PASSWORD '$AppPass';
+END
+`$`$;
+"@
+& (Join-Path $PgBin 'psql.exe') -h 127.0.0.1 -p $PgPort -U $DbUser -d $DbName -v ON_ERROR_STOP=1 -q -c $appRoleSql
+if ($LASTEXITCODE -ne 0) { throw "Failed to create the application role '$AppUser'" }
+Write-Ok "role '$AppUser' ready (grants come from migration 0003)"
+
 $env:PGPASSWORD = $null
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,6 +228,7 @@ if ($ping -ne 'PONG') { throw "Redis did not answer PING (got '$ping')" }
 Write-Ok 'redis ready'
 
 Write-Host "`nLocal stack is up." -ForegroundColor Green
-Write-Host "  DATABASE_URL = postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable"
+Write-Host "  DATABASE_URL = postgres://${AppUser}:${AppPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable  (application role, RLS enforced)"
+Write-Host "  MIGRATOR     = postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable  (owner role, migrations only)"
 Write-Host "  REDIS_ADDR   = 127.0.0.1:${RedisPort}"
 Write-Host "  Logs         = $LogDir"

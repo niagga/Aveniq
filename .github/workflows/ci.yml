@@ -17,6 +17,29 @@ jobs:
       run:
         working-directory: Backend
 
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: aveniq
+          POSTGRES_PASSWORD: aveniq_dev
+          POSTGRES_DB: aveniq
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aveniq -d aveniq"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The isolation test builds a scratch database, applies the real migrations
+      # and asserts what each tenant can see. It needs both connections: the
+      # migrator creates and seeds, the application role proves the enforcement.
+      TEST_DATABASE_URL: postgres://aveniq:aveniq_dev@127.0.0.1:5432/aveniq?sslmode=disable
+      TEST_APP_DATABASE_URL: postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5432/aveniq?sslmode=disable
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +50,14 @@ jobs:
 
       - name: Install sqlc
         run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+
+      # Row-level security is ignored by superusers and BYPASSRLS roles, so the
+      # application must connect as a role that is neither. Migration 0003 grants
+      # it the privileges; the login and password belong to the environment.
+      - name: Create the application role
+        run: |
+          PGPASSWORD=aveniq_dev psql -h 127.0.0.1 -U aveniq -d aveniq -v ON_ERROR_STOP=1 \
+            -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aveniq_app') THEN CREATE ROLE aveniq_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; END IF; ALTER ROLE aveniq_app LOGIN PASSWORD 'aveniq_app_dev'; END \$\$;"
 
       - name: Fail if generated queries are stale
         run: |
