@@ -1,0 +1,45 @@
+# Caddy is the single entry point.
+#
+# One origin for everything is a security decision, not a convenience: the browser
+# sees only this host, so session cookies are first-party, CORS never enters the
+# picture, and the Go API is never reachable directly from the internet.
+
+{
+	# Local development: plain HTTP on port 8443. Production blocks use real
+	# domains and get certificates automatically.
+	auto_https off
+}
+
+:8443 {
+	# Operational endpoints of the API, useful while debugging.
+	handle /healthz {
+		reverse_proxy api:8080
+	}
+
+	handle /readyz {
+		reverse_proxy api:8080
+	}
+
+	# The API owns /api/*.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Everything else is the Next.js application.
+	handle {
+		reverse_proxy web:3000
+	}
+
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

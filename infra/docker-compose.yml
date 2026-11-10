@@ -1,0 +1,97 @@
+# Aveniq — local development stack.
+#
+# This is the canonical environment: `docker compose -f infra/docker-compose.yml up`
+# reproduces exactly what production runs. It requires Docker Desktop with WSL2,
+# which is not installed on the current machine; scripts/local-*.ps1 provide the
+# equivalent hermetic stack without Docker.
+#
+# Ports match scripts/local-up.ps1 so DATABASE_URL and REDIS_ADDR work unchanged
+# in both paths.
+
+name: aveniq
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: aveniq-postgres
+    environment:
+      POSTGRES_USER: aveniq
+      POSTGRES_PASSWORD: aveniq_dev
+      POSTGRES_DB: aveniq
+      # Deterministic collation: string ordering must not depend on the host locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aveniq -d aveniq"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: aveniq-redis
+    # Queue durability comes from asynq's own retry semantics; Redis is a cache
+    # plus a queue here, so persistence is deliberately off.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ../Backend
+      dockerfile: ../infra/docker/Dockerfile.api
+    container_name: aveniq-api
+    environment:
+      APP_ENV: development
+      HTTP_ADDR: 0.0.0.0:8080
+      DATABASE_URL: postgres://aveniq:aveniq_dev@postgres:5432/aveniq?sslmode=disable
+      REDIS_ADDR: redis:6379
+      LOG_LEVEL: info
+      BASE_DOMAIN: localhost
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ../Backend
+      dockerfile: ../infra/docker/Dockerfile.worker
+    container_name: aveniq-worker
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgres://aveniq:aveniq_dev@postgres:5432/aveniq?sslmode=disable
+      REDIS_ADDR: redis:6379
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../Frontend
+      dockerfile: ../infra/docker/Dockerfile.web
+    container_name: aveniq-web
+    environment:
+      API_ORIGIN: http://api:8080
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:

@@ -1,0 +1,6 @@
+# Build artifacts and local state must never enter the image context.
+tmp/
+bin/
+.local/
+*.exe
+coverage.*

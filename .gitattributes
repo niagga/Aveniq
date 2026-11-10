@@ -1,0 +1,13 @@
+# Normalise line endings so a Windows checkout and a Linux CI runner agree.
+# Without this, git rewrites every text file to CRLF on clone and diffs become noise.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF so PowerShell 5.1 parses them reliably.
+*.ps1 text eol=crlf
+
+# Binaries and generated artifacts.
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.exe binary

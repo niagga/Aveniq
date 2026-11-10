@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+  Design tokens. They are the single source of truth for colour and spacing in
+  the app; components must reference these names, never raw hex values.
+*/
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f7f9;
+  --color-border: #e3e6ea;
+  --color-ink: #16181d;
+  --color-ink-muted: #5c6472;
+  --color-brand: #2f5d8a;
+  --color-brand-ink: #ffffff;
+  --color-success: #1f7a4d;
+  --color-warning: #8a5a00;
+  --color-danger: #a4232b;
+
+  --radius-panel: 0.75rem;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect users who ask the system to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

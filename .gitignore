@@ -1,0 +1,47 @@
+# ─── Local hermetic toolchain (portable Postgres, Redis, downloads) ───
+.local/
+
+# ─── Go ───
+Backend/bin/
+Backend/tmp/
+*.exe
+*.exe~
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# ─── Node / Next.js ───
+node_modules/
+Frontend/node_modules/
+Frontend/.next/
+Frontend/out/
+Frontend/.turbo/
+Frontend/next-env.d.ts
+*.tsbuildinfo
+.pnpm-store/
+.pnpm-debug.log*
+
+# ─── Environment ───
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ─── Data & secrets never committed ───
+*.pem
+*.key
+*.crt
+!infra/certs/README.md
+
+# ─── Editor / OS ───
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# ─── Harness generated ───
+.atl/
+design/*/comments.json

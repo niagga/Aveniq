@@ -1,0 +1,24 @@
+version: "2"
+
+sql:
+  - engine: postgresql
+    # sqlc reads the goose migrations so the generated types always match the
+    # real, migrated schema instead of a hand-maintained copy of it.
+    schema: migrations
+    queries: internal/infrastructure/postgres/queries
+
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/infrastructure/postgres/sqlcgen
+        sql_package: pgx/v5
+        emit_json_tags: false
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        emit_interface: false
+
+        overrides:
+          # Keep timestamps as plain time.Time: the domain has no interest in
+          # pgtype wrappers and the columns are NOT NULL.
+          - db_type: timestamptz
+            go_type: time.Time
