@@ -179,3 +179,21 @@ Evidencia observada, antes y después:
 
 Pendiente de E1: T13 dominio IAM y repositorio sqlc; T14 auth con argon2id, rotación de refresh y
 detección de reuso; T15 matriz de permisos e invitaciones; T16 tests de la capa HTTP.
+
+**L8 — Corte de jornada (T12 cerrado, T13 sin iniciar)**
+
+Estado al detener:
+
+- Rama `feat/e1-iam-rls`, commit `a65c581`, árbol limpio. **Sin pushear.**
+- Revisión nativa: el usuario desactivó el switch para este clon (`clone_local: off`). La lineage
+  `review-709b7cd4cda86349` quedó en `reviewing` porque el reviewer `nan/deepseek-v4-flash` agotó su
+  ventana de salida (`stopReason: length`, 184k caracteres de razonamiento, 0 de texto) y no se recolectó
+  ningún artefacto. Queda resumible vía `STATUS` o abandonable con decisión explícita. **Esta candidata no
+  fue revisada por la vía nativa**: la verificación existente es la del writer.
+
+Punto de reanudación de T13, para no reabrir la discusión:
+
+El adaptador de Postgres necesita exponer el contexto de tenant **por transacción** (algo como
+`WithTenant(ctx, tenantID, func(tx) error)`), porque RLS lee `app.tenant_id`. Setearlo por conexión con
+`SET` filtaría tenants entre requests: el pool reutiliza conexiones entre consultorios distintos. Ese
+diseño se define antes de escribir el dominio.
