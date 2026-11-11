@@ -11,8 +11,33 @@ import (
 	"context"
 	"time"
 
+	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
+
+// UserRepository persists and reads the IAM user aggregate.
+//
+// Implementations must map their own failures onto the domain sentinels
+// (iam.ErrNotFound, iam.ErrEmailTaken) so the application layer never has to
+// recognise a driver-specific error. Every call runs inside a tenant scope:
+// see TenantScope.
+type UserRepository interface {
+	Create(ctx context.Context, subject iam.User) error
+	ByID(ctx context.Context, id iam.UserID) (iam.User, error)
+	ByEmail(ctx context.Context, email string) (iam.User, error)
+	List(ctx context.Context, limit, offset int32) ([]iam.User, error)
+	Update(ctx context.Context, subject iam.User) error
+	Delete(ctx context.Context, id iam.UserID) error
+}
+
+// TenantScope runs a unit of work inside a transaction that carries the tenant
+// context row-level security reads (app.tenant_id). It is the transactional
+// boundary the IAM repositories assume: decision 4 of L6 — the context is set
+// per transaction with the transactional form of SET LOCAL, never per
+// connection, because pooled connections are reused across tenants.
+type TenantScope interface {
+	WithTenant(ctx context.Context, tenantID string, fn func(ctx context.Context) error) error
+}
 
 // TenantRepository persists and reads the tenant aggregate.
 //
