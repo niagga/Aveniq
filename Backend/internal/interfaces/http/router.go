@@ -46,8 +46,7 @@ type Deps struct {
 	Logger         *slog.Logger
 	ServiceVersion string
 	CreateTenant   *tenantapp.CreateUseCase
-	ListTenants    *tenantapp.ListUseCase
-	GetTenant      *tenantapp.GetBySlugUseCase
+	GetTenantByID  *tenantapp.GetByIDUseCase
 	Login          *authapp.LoginUseCase
 	Refresh        *authapp.RefreshUseCase
 	Logout         *authapp.LogoutUseCase

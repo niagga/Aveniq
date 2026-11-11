@@ -54,6 +54,17 @@ func (r *inMemoryTenantRepository) BySlug(_ context.Context, slug string) (tenan
 	return subject, nil
 }
 
+// ByID exists because the port grew it for T19: an authenticated session resolves
+// its practice from the token, never from the slug in the URL.
+func (r *inMemoryTenantRepository) ByID(_ context.Context, id tenant.ID) (tenant.Tenant, error) {
+	for _, subject := range r.rows {
+		if subject.ID == id {
+			return subject, nil
+		}
+	}
+	return tenant.Tenant{}, tenant.ErrNotFound
+}
+
 func (r *inMemoryTenantRepository) List(_ context.Context, limit, _ int32) ([]tenant.Tenant, error) {
 	if r.listErr != nil {
 		return nil, r.listErr

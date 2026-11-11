@@ -36,6 +36,7 @@ func NewTenantRepository(pool *pgxpool.Pool) *TenantRepository {
 var _ interface {
 	Create(ctx context.Context, subject tenant.Tenant) error
 	BySlug(ctx context.Context, slug string) (tenant.Tenant, error)
+	ByID(ctx context.Context, id tenant.ID) (tenant.Tenant, error)
 	List(ctx context.Context, limit, offset int32) ([]tenant.Tenant, error)
 } = (*TenantRepository)(nil)
 
@@ -63,6 +64,23 @@ func (r *TenantRepository) Create(ctx context.Context, subject tenant.Tenant) er
 // BySlug returns the tenant matching the slug, or tenant.ErrNotFound.
 func (r *TenantRepository) BySlug(ctx context.Context, slug string) (tenant.Tenant, error) {
 	row, err := r.queries.GetTenantBySlug(ctx, slug)
+	if err != nil {
+		return tenant.Tenant{}, translateError(err)
+	}
+	return toDomain(row)
+}
+
+// ByID returns the tenant matching the identity, or tenant.ErrNotFound.
+//
+// This is the read the authenticated handlers use: the identity comes from the
+// signed token, so a session can only ever resolve its own practice.
+func (r *TenantRepository) ByID(ctx context.Context, id tenant.ID) (tenant.Tenant, error) {
+	parsed, err := toPGUUID(id)
+	if err != nil {
+		return tenant.Tenant{}, err
+	}
+
+	row, err := r.queries.GetTenantByID(ctx, parsed)
 	if err != nil {
 		return tenant.Tenant{}, translateError(err)
 	}

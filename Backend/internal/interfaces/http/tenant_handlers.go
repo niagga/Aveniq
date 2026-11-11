@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	"github.com/niagga/aveniq/backend/internal/domain/iam"
 )
 
 // tenantBody is the wire representation of a tenant. It is a deliberate copy of
@@ -34,30 +35,41 @@ func toTenantBody(view tenantapp.TenantView) tenantBody {
 }
 
 type tenantHandlers struct {
-	create *tenantapp.CreateUseCase
-	list   *tenantapp.ListUseCase
-	get    *tenantapp.GetBySlugUseCase
-	logger *slog.Logger
+	create  *tenantapp.CreateUseCase
+	getByID *tenantapp.GetByIDUseCase
+	logger  *slog.Logger
 }
 
-// registerTenantRoutes declares the tenant endpoints. Each huma.Operation becomes
-// both an HTTP route and an entry in the OpenAPI document.
+// registerTenantRoutes declares the tenant endpoints.
+//
+// The two reads are authenticated and identity-scoped: the practice comes from the
+// signed token, never from the URL or the body, so a session cannot ask for another
+// practice's row. Creation stays public on purpose — it is the only door through
+// which a new practice can exist, and E3 turns it into a real signup with
+// verification and rate limiting.
 func registerTenantRoutes(api huma.API, deps Deps) {
 	handlers := &tenantHandlers{
-		create: deps.CreateTenant,
-		list:   deps.ListTenants,
-		get:    deps.GetTenant,
-		logger: deps.Logger,
+		create:  deps.CreateTenant,
+		getByID: deps.GetTenantByID,
+		logger:  deps.Logger,
+	}
+
+	// Coarse on purpose: the per-domain permission matrix is E3, and this guard
+	// exists to be replaced by it, not to imitate it.
+	domainGuard := huma.Middlewares{
+		requireRoles(api, deps.AccessTokens, iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional),
 	}
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "list-tenants",
 		Method:        http.MethodGet,
 		Path:          APIPrefix + "/tenants",
-		Summary:       "List tenants",
-		Description:   "Returns one page of tenants, newest first.",
+		Summary:       "Describe the current practice",
+		Description:   "Returns the practice the session belongs to. It is a list for compatibility with the client, but a session can only ever see one: the platform-wide view belongs to an operator surface that does not exist yet.",
 		Tags:          []string{"tenants"},
 		DefaultStatus: http.StatusOK,
+		Security:      []map[string][]string{{securitySchemeBearer: {}}},
+		Middlewares:   domainGuard,
 	}, handlers.listTenants)
 
 	huma.Register(api, huma.Operation{
@@ -65,7 +77,7 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		Method:        http.MethodPost,
 		Path:          APIPrefix + "/tenants",
 		Summary:       "Register a tenant",
-		Description:   "Creates a tenant in trial state. Slugs are unique platform-wide.",
+		Description:   "Creates a tenant in trial state. Slugs are unique platform-wide. This is the public onboarding door until E3 turns it into a verified signup.",
 		Tags:          []string{"tenants"},
 		DefaultStatus: http.StatusCreated,
 	}, handlers.createTenant)
@@ -74,19 +86,16 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		OperationID:   "get-tenant",
 		Method:        http.MethodGet,
 		Path:          APIPrefix + "/tenants/{slug}",
-		Summary:       "Get a tenant by slug",
-		Description:   "Resolves the tenant that a subdomain points at.",
+		Summary:       "Get the current practice by slug",
+		Description:   "Resolves the practice the session belongs to. Any other slug answers 404, not 403: confirming that another practice exists is itself information.",
 		Tags:          []string{"tenants"},
 		DefaultStatus: http.StatusOK,
+		Security:      []map[string][]string{{securitySchemeBearer: {}}},
+		Middlewares:   domainGuard,
 	}, handlers.getTenant)
 }
 
 // ─── list ────────────────────────────────────────────────────────────────────
-
-type listTenantsInput struct {
-	Limit  int32 `query:"limit" minimum:"1" maximum:"100" default:"20" doc:"Page size."`
-	Offset int32 `query:"offset" minimum:"0" default:"0" doc:"Rows to skip."`
-}
 
 type listTenantsOutput struct {
 	Body struct {
@@ -94,20 +103,34 @@ type listTenantsOutput struct {
 	}
 }
 
-func (h *tenantHandlers) listTenants(ctx context.Context, in *listTenantsInput) (*listTenantsOutput, error) {
-	result, err := h.list.Execute(ctx, tenantapp.ListInput{Limit: in.Limit, Offset: in.Offset})
+func (h *tenantHandlers) listTenants(ctx context.Context, _ *struct{}) (*listTenantsOutput, error) {
+	view, err := h.currentTenant(ctx)
 	if err != nil {
-		return nil, problem(ctx, h.logger, err)
-	}
-
-	items := make([]tenantBody, 0, len(result.Tenants))
-	for _, view := range result.Tenants {
-		items = append(items, toTenantBody(view))
+		return nil, err
 	}
 
 	out := &listTenantsOutput{}
-	out.Body.Items = items
+	out.Body.Items = []tenantBody{toTenantBody(view)}
 	return out, nil
+}
+
+// currentTenant resolves the practice named by the verified token.
+//
+// A missing identity here is a wiring defect, not a request problem: the route is
+// registered behind the guard, so reaching this point without one means the route
+// was declared without it.
+func (h *tenantHandlers) currentTenant(ctx context.Context) (tenantapp.TenantView, error) {
+	identity, ok := IdentityFrom(ctx)
+	if !ok {
+		h.logger.ErrorContext(ctx, "identity-scoped route reached without an identity")
+		return tenantapp.TenantView{}, huma.Error500InternalServerError("Unexpected error")
+	}
+
+	view, err := h.getByID.Execute(ctx, tenantapp.GetByIDInput{ID: identity.TenantID})
+	if err != nil {
+		return tenantapp.TenantView{}, problem(ctx, h.logger, err)
+	}
+	return view, nil
 }
 
 // ─── create ──────────────────────────────────────────────────────────────────
@@ -120,7 +143,7 @@ type createTenantInput struct {
 }
 
 type createTenantOutput struct {
-	Location string     `header:"Location" doc:"URL of the created tenant."`
+	Location string `header:"Location" doc:"URL of the created tenant."`
 	Body     tenantBody
 }
 
@@ -150,9 +173,15 @@ type getTenantOutput struct {
 }
 
 func (h *tenantHandlers) getTenant(ctx context.Context, in *getTenantInput) (*getTenantOutput, error) {
-	view, err := h.get.Execute(ctx, tenantapp.GetBySlugInput{Slug: in.Slug})
+	view, err := h.currentTenant(ctx)
 	if err != nil {
-		return nil, problem(ctx, h.logger, err)
+		return nil, err
+	}
+
+	// A slug belonging to another practice answers exactly what a nonexistent one
+	// answers. Anything else would turn this route into an existence oracle.
+	if view.Slug != in.Slug {
+		return nil, huma.Error404NotFound("The requested tenant does not exist")
 	}
 
 	return &getTenantOutput{Body: toTenantBody(view)}, nil
