@@ -77,7 +77,7 @@ en cada transición de tarea.
 | T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
-| T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
+| T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | inline | `c1f0f89` |
 | T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | inline | `aa422af`, `51d4779` |
@@ -926,3 +926,58 @@ nombre corrupto en lugar de recibir un 400. Atajarlo exige validar el cuerpo cru
 queda para cuando haya más superficie de entrada, no para el MVP.
 
 Pendiente: T23 (frontend de pacientes), T24 (historia clínica), T28 (agenda), T16 y T15.
+
+**L22 — T16: HTTP layer tests (committed)**
+
+Note on language: entries up to L21 were recorded in Spanish because the conversation was in
+Spanish. Everything committed to the repository is now written in English (L19 of the Engram record
+`aveniq/language-policy`), so this entry and the ones that follow are in English. Previous entries
+stay as they were: they are history, not drafts.
+
+### What was added
+
+One file, `Backend/internal/interfaces/http/http_layer_test.go`, package `http_test`. It drives the
+real router through `httptest` — real huma registration, real `requireRoles`, real `problem()` — with
+in-memory doubles for `PatientRepository`, `DocumentCatalog`, `TenantScope`, `TenantRepository`,
+`Clock` and `IDGenerator`.
+
+Access tokens are minted directly with `authn.NewAccessTokens(...).Issue(...)` instead of going
+through the login use case: the signed token is the contract the guard reads, and a test that had to
+authenticate first would fail for two reasons at once.
+
+Covered:
+
+| Area | Cases |
+| --- | --- |
+| Authentication | no header on patients, create, tenants and me → 401; a token signed with a foreign key → 401 |
+| Role guard | `accountant` → 403 on both domain routes, with no body leaked; `owner` → 200 |
+| Cross-tenant isolation | a patient created with practice A's token is 404 by id and absent from the list under practice B's token, and readable by A |
+| Error mapping | unknown document kind for the country → 422 naming the field; duplicate normalized document → 409; unknown id → 404; second deactivation → 409; editing a deactivated patient → 409; `limit=500` → 422 |
+| Identity | `/auth/me` answers the tenant and role that came from the token |
+
+### On evidence
+
+**No RED was observed.** The tests were written against working code, so they are regression tests by
+construction and passing proves nothing on its own. Verified by mutation instead: adding
+`iam.RoleAccountant` to the allowed roles in `patient_handlers.go` makes
+`TestDomainRoutesAreGuardedByRole` fail with `/api/v1/patients with accountant = 200, want 403`.
+Reverted and green again.
+
+That is the same gap L21 recorded for the UTF-8 false positive, and the reason the mutation step is
+worth its two minutes: a test that has never failed is a hypothesis, not a guarantee.
+
+### What this still does not cover
+
+- `/auth/login`, `/auth/refresh` and `/auth/logout` at the HTTP level. Their use cases are covered by
+  unit tests and the cookie helpers by `auth_cookie_test.go`, but the routes themselves are verified
+  end-to-end only. Adding them needs doubles for the user and session repositories in this package,
+  which is a slice of its own.
+- The OpenAPI document is served but not asserted: no test fails if an operation loses its `Security`
+  requirement or a schema drifts. Worth a small test when the frontend client is generated again.
+
+### State of E1 and E2
+
+E1 is now complete except T15 (permission matrix, invitations, trial sign-up), which L14 moved to E3.
+E2 has the whole patient slice: schema (T20, T20b), domain and persistence (T21), application and HTTP
+(T22), and the HTTP layer under test (T16). Remaining in E2: T23 (patient frontend), T24–T27 (clinical
+record), T28–T31 (agenda), T32 (end-to-end verification).
