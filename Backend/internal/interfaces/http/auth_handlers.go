@@ -21,9 +21,11 @@ type loginBody struct {
 	Password   string `json:"password" minLength:"1" maxLength:"1024" doc:"Plain password; only ever sent over TLS."`
 }
 
-// refreshBody carries the token to rotate or revoke.
+// refreshBody carries the token to rotate or revoke. It is optional: a browser
+// sends the HttpOnly cookie instead, and the body exists for clients that are not
+// a browser.
 type refreshBody struct {
-	RefreshToken string `json:"refreshToken" minLength:"1" doc:"Opaque refresh token from the previous login or rotation."`
+	RefreshToken string `json:"refreshToken,omitempty" doc:"Opaque refresh token. Optional when the cookie is sent instead."`
 }
 
 // sessionIdentity is the identity the issued tokens carry. It is repeated in the
@@ -34,15 +36,14 @@ type sessionIdentity struct {
 	Role     string `json:"role" doc:"Role code of the user inside the tenant."`
 }
 
-// sessionBody is the token pair. The refresh token lives 30 days and rotates on
-// every use; storing it is the client's problem, and a browser client should keep
-// it out of JavaScript-reachable storage.
+// sessionBody is the token pair. The access token stays in the body because the
+// client needs it; the refresh token does not, and travels in an HttpOnly cookie
+// instead, so it is never reachable from JavaScript.
 type sessionBody struct {
 	AccessToken      string          `json:"accessToken" doc:"Short-lived bearer token."`
 	TokenType        string          `json:"tokenType" enum:"Bearer" doc:"Always Bearer."`
 	ExpiresIn        int             `json:"expiresIn" doc:"Access token lifetime, in seconds."`
-	RefreshToken     string          `json:"refreshToken" doc:"Rotate it on every use; reusing a spent one revokes the session chain."`
-	RefreshExpiresAt string          `json:"refreshExpiresAt" format:"date-time" doc:"Expiry of the refresh grant, RFC 3339 in UTC."`
+	RefreshExpiresAt string          `json:"refreshExpiresAt" format:"date-time" doc:"Expiry of the refresh grant, RFC 3339 in UTC. Use it to know when a new login is required."`
 	User             sessionIdentity `json:"user"`
 }
 
@@ -51,19 +52,27 @@ type loginInput struct {
 }
 
 type loginOutput struct {
-	Body sessionBody
+	SetCookie string `header:"Set-Cookie" doc:"HttpOnly cookie holding the refresh grant."`
+	Body      sessionBody
 }
 
 type refreshInput struct {
-	Body refreshBody
+	Cookie string `cookie:"aveniq_refresh" doc:"Refresh grant set by login or by the previous rotation."`
+	Body   *refreshBody
 }
 
 type refreshOutput struct {
-	Body sessionBody
+	SetCookie string `header:"Set-Cookie" doc:"Rotated HttpOnly cookie holding the new refresh grant."`
+	Body      sessionBody
 }
 
 type logoutInput struct {
-	Body refreshBody
+	Cookie string `cookie:"aveniq_refresh" doc:"Refresh grant to revoke."`
+	Body   *refreshBody
+}
+
+type logoutOutput struct {
+	SetCookie string `header:"Set-Cookie" doc:"Clears the refresh-grant cookie."`
 }
 
 // meOutput is the identity resolved from the bearer token, with nothing read from
@@ -78,6 +87,7 @@ type authHandlers struct {
 	login   *authapp.LoginUseCase
 	refresh *authapp.RefreshUseCase
 	logout  *authapp.LogoutUseCase
+	cookie  RefreshCookieConfig
 	logger  *slog.Logger
 }
 
@@ -89,6 +99,7 @@ func registerAuthRoutes(api huma.API, deps Deps) {
 		login:   deps.Login,
 		refresh: deps.Refresh,
 		logout:  deps.Logout,
+		cookie:  deps.RefreshCookie,
 		logger:  deps.Logger,
 	}
 
@@ -144,24 +155,46 @@ func (h *authHandlers) loginHandler(ctx context.Context, in *loginInput) (*login
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
-	return &loginOutput{Body: toSessionBody(session)}, nil
+
+	return &loginOutput{
+		SetCookie: h.cookie.issue(session.RefreshToken),
+		Body:      toSessionBody(session),
+	}, nil
 }
 
 func (h *authHandlers) refreshHandler(ctx context.Context, in *refreshInput) (*refreshOutput, error) {
-	session, err := h.refresh.Execute(ctx, authapp.RefreshInput{RefreshToken: in.Body.RefreshToken})
+	session, err := h.refresh.Execute(ctx, authapp.RefreshInput{
+		RefreshToken: h.cookie.presented(in.Cookie, bodyToken(in.Body)),
+	})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
-	return &refreshOutput{Body: toSessionBody(session)}, nil
+
+	return &refreshOutput{
+		SetCookie: h.cookie.issue(session.RefreshToken),
+		Body:      toSessionBody(session),
+	}, nil
 }
 
 // logoutHandler answers 204 whatever happened, except for a storage failure: the
-// client can only act on "you are logged out".
-func (h *authHandlers) logoutHandler(ctx context.Context, in *logoutInput) (*struct{}, error) {
-	if err := h.logout.Execute(ctx, authapp.LogoutInput{RefreshToken: in.Body.RefreshToken}); err != nil {
+// client can only act on "you are logged out". The cookie is always cleared,
+// including when the token was already revoked or unknown.
+func (h *authHandlers) logoutHandler(ctx context.Context, in *logoutInput) (*logoutOutput, error) {
+	if err := h.logout.Execute(ctx, authapp.LogoutInput{
+		RefreshToken: h.cookie.presented(in.Cookie, bodyToken(in.Body)),
+	}); err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
-	return nil, nil
+
+	return &logoutOutput{SetCookie: h.cookie.clear()}, nil
+}
+
+// bodyToken reads the optional body form of the credential.
+func bodyToken(body *refreshBody) string {
+	if body == nil {
+		return ""
+	}
+	return body.RefreshToken
 }
 
 func (h *authHandlers) meHandler(ctx context.Context, _ *struct{}) (*meOutput, error) {
@@ -184,7 +217,6 @@ func toSessionBody(session authapp.Session) sessionBody {
 		AccessToken:      session.AccessToken,
 		TokenType:        "Bearer",
 		ExpiresIn:        int(session.ExpiresIn / time.Second),
-		RefreshToken:     session.RefreshToken,
 		RefreshExpiresAt: session.RefreshExpiresAt.UTC().Format(time.RFC3339),
 		User: sessionIdentity{
 			ID:       session.UserID,

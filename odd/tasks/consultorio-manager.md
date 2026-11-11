@@ -78,7 +78,7 @@ en cada transición de tarea.
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
-| T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | — | — |
+| T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | — | — |
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | — | — |
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | — | — |
@@ -534,3 +534,42 @@ se cierra junto con T19, porque los tests de la capa HTTP cubren justamente el g
 Riesgo de la etapa, para que quede dicho: T17–T32 son ~16 cortes y del orden del doble de código que
 E1. Y hasta E3, la única barrera entre un usuario autenticado de un consultorio y la historia clínica de
 sus pacientes es el guard grueso del punto 3.
+
+**L15 — E2/T17: el refresh grant pasa a cookie `HttpOnly` (commiteado)**
+
+Cambio de contrato, no cosmético: `POST /auth/login` y `POST /auth/refresh` ya no devuelven
+`refreshToken` en el cuerpo; setean `aveniq_refresh` con `HttpOnly`, `SameSite=Lax`,
+`Path=/api/v1/auth` y `Secure` fuera de desarrollo. `POST /auth/logout` la borra con
+`Max-Age=0`. El cuerpo sigue aceptando el token como fallback para clientes que no son
+navegador (tests, CLI), y la cookie gana cuando llegan las dos.
+
+¿Por qué importa: el refresh es la mitad de vida larga del par (30 días). En el cuerpo,
+todo cliente estaba obligado a guardarlo donde JavaScript lo lee, y un XSS pasaba a ser
+toma de cuenta completa. El access token sigue en el cuerpo: es corto (15 min) y el cliente
+lo necesita en memoria para el header `Authorization`.
+
+Evidencia end-to-end (API en `8081`, tenant y usuario reales):
+
+| Paso | Resultado |
+| --- | --- |
+| login | 200; `Set-Cookie: aveniq_refresh=v1.…` con `HttpOnly`, `SameSite=Lax`, `Max-Age=2592000` |
+| cuerpo del login | 0 ocurrencias de `refreshToken`; campos: `accessToken`, `tokenType`, `expiresIn`, `refreshExpiresAt`, `user` |
+| refresh con **solo** la cookie, sin body | 200 y cookie rotada |
+| reuso de la cookie anterior | 401 "already used; the session chain was revoked" |
+| la cookie rotada después del reuso | 401 (cadena muerta) |
+| logout | 204 con `aveniq_refresh=; Max-Age=0; …` |
+| refresh tras logout | 401 |
+| `openapi.json` | declara el parámetro cookie |
+
+Un detalle que costó un ciclo y queda fijado por test: `http.Cookie` serializa
+`MaxAge: -1` como `Max-Age=0`. Mi primer test esperaba `Max-Age=-1` y falló; el test estaba
+mal, no el código. La RFC 6265 define `Max-Age=0` como "expirar ya", que es exactamente la
+instrucción de borrado. Es la clase de aserción que conviene tener escrita: si alguien
+"arregla" el `-1` del código para que coincida con el número del wire, rompe el borrado.
+
+Deuda declarada, no olvidada: no hay token CSRF porque el frontend es mismo-origen y
+`SameSite=Lax` ya bloquea POST cross-site. El día que haya un origen distinto (o un
+subdominio sirviendo la app) hay que sumarlo. Y en producción conviene evaluar el prefijo
+`__Host-`, que exige `Secure` y `Path=/`, incompatible con el path acotado que usamos hoy.
+
+Pendiente de E2: T18 login en el frontend, T19 guard de tenant y rol, y los tres dominios.

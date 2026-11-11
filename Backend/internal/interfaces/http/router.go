@@ -52,6 +52,7 @@ type Deps struct {
 	Refresh        *authapp.RefreshUseCase
 	Logout         *authapp.LogoutUseCase
 	AccessTokens   *authn.AccessTokens
+	RefreshCookie  RefreshCookieConfig
 	ReadyChecks    []ReadyCheck
 }
 
