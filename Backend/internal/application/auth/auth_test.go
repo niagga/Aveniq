@@ -466,8 +466,16 @@ func TestRefresh(t *testing.T) {
 		}
 
 		// The stolen copy is presented after the legitimate rotation.
+		//
+		// Two scopes are expected, not one: the revocation must run in its own
+		// committed transaction. If it rode inside the failing unit of work,
+		// WithTenant would roll it back and the reuse would leave the chain alive.
+		w.scope.opened = 0
 		if _, err := w.refresh.Execute(ctx, auth.RefreshInput{RefreshToken: first.RefreshToken}); !errors.Is(err, auth.ErrRefreshReused) {
 			t.Fatalf("error = %v, want %v", err, auth.ErrRefreshReused)
+		}
+		if w.scope.opened != 2 {
+			t.Fatalf("tenant scopes opened = %d, want 2: the lookup and a separate, committed revocation", w.scope.opened)
 		}
 
 		// Both the spent grant and the live successor are now dead.

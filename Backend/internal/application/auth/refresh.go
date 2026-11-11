@@ -49,42 +49,59 @@ func NewRefreshUseCase(deps RefreshDeps) *RefreshUseCase {
 // the scope can be opened before asking row-level security anything: the tenant
 // segment is never a permission, and the hash covers the whole string, so a moved
 // secret matches no row.
+//
+// Refusals are decided inside the read transaction, but they never write in it.
+// WithTenant rolls back when the unit of work returns an error, so a revocation
+// performed on a failing path would be undone by the very error that motivates it.
+// The chain revocation therefore runs afterwards, in its own committed
+// transaction.
 func (uc *RefreshUseCase) Execute(ctx context.Context, in RefreshInput) (Session, error) {
 	parsed, err := authn.ParseRefreshToken(in.RefreshToken)
 	if err != nil {
 		return Session{}, ErrInvalidRefreshToken
 	}
 
-	var issued Session
+	now := uc.deps.Clock.Now()
+
+	var (
+		issued   Session
+		refusal  error
+		revokeID iam.SessionID
+	)
+
 	err = uc.deps.Scope.WithTenant(ctx, parsed.TenantID, func(ctx context.Context) error {
 		current, err := uc.deps.Sessions.ByRefreshHash(ctx, iam.RefreshHash(parsed.Hash))
 		if err != nil {
 			if errors.Is(err, iam.ErrNotFound) {
-				return ErrInvalidRefreshToken
+				refusal = ErrInvalidRefreshToken
+				return nil
 			}
 			return err
 		}
 
-		now := uc.deps.Clock.Now()
 		if current.RevokedAt != nil {
 			// Decision 3 of L11: the stolen copy and the legitimate client both hold
 			// a token of this chain and nothing here can tell them apart, so the whole
 			// line dies and a fresh login is required.
-			return uc.revokeChain(ctx, current.ID, now, ErrRefreshReused)
+			refusal, revokeID = ErrRefreshReused, current.ID
+			return nil
 		}
 		if !now.Before(current.ExpiresAt) {
-			return ErrSessionExpired
+			refusal = ErrSessionExpired
+			return nil
 		}
 
 		user, err := uc.deps.Users.ByID(ctx, current.UserID)
 		if err != nil {
 			if errors.Is(err, iam.ErrNotFound) {
-				return uc.revokeChain(ctx, current.ID, now, ErrInvalidRefreshToken)
+				refusal, revokeID = ErrInvalidRefreshToken, current.ID
+				return nil
 			}
 			return err
 		}
 		if !user.IsActive {
-			return uc.revokeChain(ctx, current.ID, now, ErrInvalidRefreshToken)
+			refusal, revokeID = ErrInvalidRefreshToken, current.ID
+			return nil
 		}
 
 		successor, refreshToken, err := uc.issuer.newSession(user)
@@ -108,15 +125,26 @@ func (uc *RefreshUseCase) Execute(ctx context.Context, in RefreshInput) (Session
 	if err != nil {
 		return Session{}, err
 	}
+
+	if revokeID != "" {
+		if err := uc.revokeChain(ctx, parsed.TenantID, revokeID, now); err != nil {
+			return Session{}, err
+		}
+	}
+	if refusal != nil {
+		return Session{}, refusal
+	}
 	return issued, nil
 }
 
-// revokeChain ends every session reachable from the presented one and returns the
-// cause, so the caller cannot confuse a replay with an expired grant. A revoke that
-// finds nothing is not an error: the point was that nothing stays alive.
-func (uc *RefreshUseCase) revokeChain(ctx context.Context, id iam.SessionID, now time.Time, cause error) error {
-	if _, err := uc.deps.Sessions.RevokeChain(ctx, id, now); err != nil && !errors.Is(err, iam.ErrNotFound) {
-		return err
-	}
-	return cause
+// revokeChain ends every session reachable from the presented one, in its own
+// transaction that commits. A walk that finds nothing left to revoke is not an
+// error: the point was that nothing stays alive.
+func (uc *RefreshUseCase) revokeChain(ctx context.Context, tenantID string, id iam.SessionID, at time.Time) error {
+	return uc.deps.Scope.WithTenant(ctx, tenantID, func(ctx context.Context) error {
+		if _, err := uc.deps.Sessions.RevokeChain(ctx, id, at); err != nil && !errors.Is(err, iam.ErrNotFound) {
+			return err
+		}
+		return nil
+	})
 }
