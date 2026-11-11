@@ -70,6 +70,9 @@ The current machine has **no Docker and no WSL**, so the supported path is the h
 local stack: portable PostgreSQL and Redis inside `.local/`, no administrator rights, no
 system-wide installs.
 
+pnpm is pinned by `packageManager` in `Frontend/package.json`, so run it through corepack
+(`corepack pnpm <command>`), which always resolves the pinned version.
+
 ---
 
 ## Quickstart (no Docker)
@@ -78,20 +81,29 @@ system-wide installs.
 # 1. one-time: toolchain, portable database and queue
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 
-# 2. database (migrations run as the owner role, not as the application role)
+# 2. every session, after a login, reboot or shutdown: start PostgreSQL and Redis
+powershell -ExecutionPolicy Bypass -File scripts/local-up.ps1
+
+# 3. database (migrations run as the owner role, not as the application role)
 cd Backend
 goose -dir migrations postgres "postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable" up
 
-# 3. API (terminal 1)
+# 4. API (terminal 1)
 go run ./cmd/api
 
-# 4. web (terminal 2)
+# 5. web (terminal 2)
 cd ../Frontend
-pnpm dev
+corepack pnpm dev
 ```
 
 Then open <http://localhost:3000>. The API document is at
 <http://127.0.0.1:8080/docs> and the raw spec at `/openapi.json`.
+
+The local stack does not start itself and does not survive a reboot, so step 2 is not
+optional: without it the API exits with `postgres: cannot reach the database: …
+127.0.0.1:5433 … actively refused it`. Run `scripts/local-status.ps1` to see whether
+PostgreSQL and Redis are up, and always stop them with `scripts/local-down.ps1` —
+killing the terminal mid-start leaves an orphaned `postmaster.pid` behind.
 
 ### Local service ports
 

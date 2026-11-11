@@ -15,14 +15,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
+	"github.com/niagga/aveniq/backend/internal/platform/authn"
 )
 
 const (
 	// APIPrefix versions the public surface so breaking changes can ship a v2
 	// without breaking deployed clients.
 	APIPrefix = "/api/v1"
+
+	// securitySchemeBearer names the bearer scheme in the OpenAPI document, so the
+	// generated TypeScript client knows which operations need a token.
+	securitySchemeBearer = "bearerAuth"
 
 	maxRequestBodyBytes = 1 << 20 // 1 MiB
 	serverErrorStatus   = http.StatusInternalServerError
@@ -42,6 +48,10 @@ type Deps struct {
 	CreateTenant   *tenantapp.CreateUseCase
 	ListTenants    *tenantapp.ListUseCase
 	GetTenant      *tenantapp.GetBySlugUseCase
+	Login          *authapp.LoginUseCase
+	Refresh        *authapp.RefreshUseCase
+	Logout         *authapp.LogoutUseCase
+	AccessTokens   *authn.AccessTokens
 	ReadyChecks    []ReadyCheck
 }
 
@@ -67,6 +77,7 @@ func NewRouter(deps Deps) http.Handler {
 	// TypeScript client needs no prefix knowledge.
 	api := humachi.New(router, apiConfig(deps.ServiceVersion))
 	registerTenantRoutes(api, deps)
+	registerAuthRoutes(api, deps)
 
 	return router
 }
@@ -85,6 +96,16 @@ func apiConfig(version string) huma.Config {
 	// is the single source of truth for the generated TypeScript client.
 	cfg.OpenAPIPath = "/openapi"
 	cfg.DocsPath = "/docs"
+
+	// The access token is a bearer credential signed with HMAC-SHA256; declaring it
+	// here is what makes the document say which operations need one.
+	cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
+		securitySchemeBearer: {
+			Type:         "http",
+			Scheme:       "bearer",
+			BearerFormat: "HMAC-SHA256",
+		},
+	}
 	return cfg
 }
 
@@ -194,6 +215,14 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("That state transition is not allowed")
 	case errors.As(err, &validationErr):
 		return huma.Error422UnprocessableEntity(validationErr.Error())
+	case errors.Is(err, authapp.ErrInvalidCredentials):
+		return huma.Error401Unauthorized("The credentials are not valid")
+	case errors.Is(err, authapp.ErrInvalidRefreshToken):
+		return huma.Error401Unauthorized("The refresh token is not valid")
+	case errors.Is(err, authapp.ErrRefreshReused):
+		return huma.Error401Unauthorized("This refresh token was already used; the session chain was revoked")
+	case errors.Is(err, authapp.ErrSessionExpired):
+		return huma.Error401Unauthorized("The session expired; log in again")
 	default:
 		logger.ErrorContext(ctx, "unhandled error", slog.String("error", err.Error()))
 		return huma.NewError(serverErrorStatus, "Unexpected error")
