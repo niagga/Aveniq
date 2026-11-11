@@ -108,20 +108,35 @@ if ($LASTEXITCODE -eq 0) {
 else {
     Write-Step 'starting'
 
-    # pg_ctl must not be piped: on Windows the postgres child inherits stdout and
-    # keeps the pipe open forever, hanging the caller. Start-Process with file
-    # redirection gives the child a real file handle and -Wait returns reliably.
+    # Two traps here, both about handles that outlive the command:
+    #  - `& pg_ctl ...` in a pipeline never returns, because postgres inherits the
+    #    pipe and keeps it open for its whole life;
+    #  - `Start-Process -Wait` (or any -RedirectStandard* on a daemon) blocks the
+    #    same way, for the same reason: PowerShell waits on handles the server keeps.
+    # So: start pg_ctl without -Wait and without redirection (its own failure
+    # messages reach this console), and poll the readiness condition ourselves --
+    # the same condition `pg_ctl -w` polls -- under a bounded deadline. The server
+    # log is written by postgres itself through pg_ctl's -l.
     $pgCtlArgs = "-D `"$PgData`" -l `"$(Join-Path $LogDir 'postgres.log')`" " +
-        "-o `"-p $PgPort -c listen_addresses=127.0.0.1`" -w -t 60 -s start"
+        "-o `"-p $PgPort -c listen_addresses=127.0.0.1`" -s start"
 
     $pgStart = Start-Process -FilePath (Join-Path $PgBin 'pg_ctl.exe') `
         -ArgumentList $pgCtlArgs `
-        -RedirectStandardOutput (Join-Path $LogDir 'pg_ctl.out.log') `
-        -RedirectStandardError (Join-Path $LogDir 'pg_ctl.err.log') `
-        -NoNewWindow -PassThru -Wait
+        -NoNewWindow -PassThru
 
-    if ($pgStart.ExitCode -ne 0) {
-        throw "Postgres failed to start (exit $($pgStart.ExitCode)). See $LogDir\postgres.log"
+    $deadline = (Get-Date).AddSeconds(60)
+    $started = $false
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 250
+        & (Join-Path $PgBin 'pg_isready.exe') -h 127.0.0.1 -p $PgPort -q *> $null
+        if ($LASTEXITCODE -eq 0) { $started = $true; break }
+        # pg_ctl reports an immediate failure (bad arguments, unreadable data
+        # directory) instead of leaving a server that will never become ready.
+        if ($pgStart.HasExited -and $pgStart.ExitCode -ne 0) { break }
+    }
+
+    if (-not $started) {
+        throw "Postgres did not become ready within 60s. See $LogDir\postgres.log"
     }
     Write-Ok 'started'
 }
@@ -190,26 +205,29 @@ else {
         Write-Step 'starting'
     }
 
+    # Redis writes its own log through --logfile: a PowerShell redirect would give
+    # the daemon a handle PowerShell then waits on, and the script would never
+    # return once the server is up.
+    $redisLogFile = Join-Path $LogDir 'redis.log'
     $redisArgs = @(
         '--port', $RedisPort,
         '--bind', '127.0.0.1',
         '--dir', $RedisDir,
         '--dbfilename', 'dump.rdb',
+        '--logfile', $redisLogFile,
         '--save', '""',
         '--appendonly', 'no'
     )
     $redisProc = Start-Process -FilePath (Join-Path $RedisDir 'redis-server.exe') `
         -ArgumentList $redisArgs `
         -WorkingDirectory $RedisDir `
-        -RedirectStandardOutput (Join-Path $LogDir 'redis.log') `
-        -RedirectStandardError (Join-Path $LogDir 'redis.err.log') `
         -WindowStyle Hidden `
         -PassThru
     Set-Content -Path $redisPidFile -Value $redisProc.Id
     Start-Sleep -Milliseconds 800
 
     if ($redisProc.HasExited) {
-        throw "Redis failed to start. See $LogDir\redis.log and $LogDir\redis.err.log"
+        throw "Redis failed to start. See $redisLogFile"
     }
     Write-Ok 'started'
 }
