@@ -23,6 +23,26 @@ type AuditLog struct {
 	CreatedAt time.Time
 }
 
+type Country struct {
+	Code string
+	Name string
+}
+
+type DocumentKind struct {
+	CountryCode string
+	Code        string
+	Label       string
+	Pattern     string
+	Normalizer  string
+	Checksum    *string
+}
+
+type FiscalCondition struct {
+	CountryCode string
+	Code        string
+	Label       string
+}
+
 type Invitation struct {
 	ID         pgtype.UUID
 	TenantID   pgtype.UUID
@@ -47,13 +67,16 @@ type Patient struct {
 	EmergencyContactName  *string
 	EmergencyContactPhone *string
 	FiscalCondition       *string
-	Cuit                  *string
 	LegalName             *string
 	FiscalAddress         *string
 	AdministrativeNotes   *string
 	IsActive              bool
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+	Country               *string
+	DocumentNormalized    *string
+	TaxID                 *string
+	TaxIDKind             *string
 }
 
 // Platform-wide permission catalog. Codes are stable API surface.
@@ -88,6 +111,15 @@ type Session struct {
 	ReplacedBy  pgtype.UUID
 }
 
+type TaxIDKind struct {
+	CountryCode string
+	Code        string
+	Label       string
+	Pattern     string
+	Normalizer  string
+	Checksum    *string
+}
+
 // Isolation root. Every business record belongs to exactly one tenant.
 type Tenant struct {
 	ID pgtype.UUID
@@ -97,6 +129,7 @@ type Tenant struct {
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Country   string
 }
 
 type User struct {

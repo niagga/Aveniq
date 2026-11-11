@@ -82,14 +82,15 @@ en cada transición de tarea.
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | inline | `aa422af`, `51d4779` |
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | inline | `2cf9dd7` |
+| T20b | S16, S5 | E2 | Migración `0005`: países, catálogo de documentos y datos fiscales por país, con seed AR/ES/PT/BR | inline | `b1daf13` |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
-| T24 | S1, S16 | E2 | Migración `0005`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
+| T24 | S1, S16 | E2 | Migración `0006`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
-| T28 | S15, S5 | E2 | Migración `0006`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
+| T28 | S15, S5 | E2 | Migración `0007`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
 | T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | — | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | — | — |
@@ -720,3 +721,70 @@ Evidencia (`TestPatientsSchemaPrivileges`, 5 subtests, todos verdes):
 Nota de higiene: el test de esquema reusa `newScratchDatabase`, `migrate` y `seedTenants` de la
 suite existente y agrega un helper local `withTenantSetting`, porque `set_config` transaccional es
 la única forma que RLS lee y no estaba expuesto como utilidad de test.
+
+**L19 — E2/T20b: el país es dato, no una rama (commiteado)**
+
+Corrección de una suposición mía, hecha por el usuario: **0004 asumía Argentina**. Estaba horneado en
+tres lugares —`CHECK` de `document_type` con DNI/LC/LE/CUIT, `patients_cuit_shape` de once dígitos, y
+`fiscal_condition` con la lista de AFIP— y ninguno sobrevive a España, Portugal o Brasil.
+
+Se arregló **antes** de escribir el dominio (T21), que es el único momento en que sale barato: la tabla
+estaba vacía. Después de T21 habría sido una migración de datos de identidad.
+
+Decisiones del usuario: países iniciales AR, ES, PT, BR; **el país se elige por consultorio y por
+paciente**, con herencia del consultorio cuando el paciente no lo define.
+
+### El modelo
+
+`countries`, `document_kinds`, `tax_id_kinds` y `fiscal_conditions`. Cada uno lleva lo que el dominio
+necesita para validar sin conocer el país: `pattern` (forma canónica), `normalizer` (`digits`,
+`alnum_upper`, `as_is`) y `checksum` (nombre de la estrategia en Go: `ar_cuit`, `es_dni`, `es_nie`,
+`pt_nif`, `br_cpf`, `br_cnpj`, `pt_cc`). Agregar un país es insertar filas; agregar una estrategia de
+verificación es una entrada en un mapa, no un `switch` por capa.
+
+`tax_id_kinds` es una tabla **separada** de `document_kinds` a propósito: con una sola tabla y un flag
+`is_tax`, ninguna FK podría exigir "este código tiene que ser fiscal", y ese chequeo terminaría en un
+trigger.
+
+Una limitación queda escrita en la migración para que nadie la reintente: **un `CHECK` no puede leer
+otra tabla**, así que el `pattern` por país lo aplica el dominio. La base se queda con lo que sí puede
+sostener declarativamente: el tipo existe *y pertenece al país de la fila*.
+
+### Cambios en `patients`
+
+- `country` (FK a `countries`), que el adaptador escribe siempre resuelto — el paciente hereda el del
+  consultorio cuando no lo define, así ninguna fila lleva documento sin país contra el cual validarlo.
+- `document_normalized` y el índice único reconstruido sobre `(tenant_id, document_type,
+  document_normalized)`: `30.111.222` y `30111222` son la misma persona.
+- `cuit` → `tax_id` + `tax_id_kind`, con FK a `tax_id_kinds`.
+- `fiscal_condition` pasa a FK a `fiscal_conditions` por país: `monotributo` ya no es válido en Portugal.
+- Los catálogos quedan de **solo lectura** para `aveniq_app` (`REVOKE INSERT, UPDATE, DELETE`): agregar
+  un país es una migración, no un request.
+
+### Un bug que encontró mi propio test
+
+La primera versión de `patients_document_complete` exigía que el país estuviera **ausente** cuando no
+hay documento. El test de condición fiscal lo rompió: un paciente con condición fiscal y sin documento
+es el caso normal de cualquier consultorio que empieza. Corregido: el país se exige cuando hay algo
+que validar, no cuando hay documento.
+
+Evidencia (`TestPatientsCountryModel`, 6 subtests, todos verdes):
+
+| Caso | Resultado |
+| --- | --- |
+| país por defecto del tenant | `AR` |
+| NIE español con número alfanumérico | aceptado |
+| NIE bajo `AR` | `SQLSTATE 23503` |
+| documento sin país | `SQLSTATE 23514` |
+| `monotributo` bajo `AR` / bajo `PT` | aceptado / `23503` |
+| mismo documento normalizado dos veces en un tenant | `23505` |
+| `aveniq_app` lee catálogos | OK |
+| `aveniq_app` inserta un país | `SQLSTATE 42501` |
+
+Y el test de T20 tuvo que actualizarse: sus inserts de documento ahora necesitan país y forma
+normalizada. Es la consecuencia esperada de un modelo más estricto, no una regresión.
+
+`goose up` + `goose down` + `goose up` verificado sobre la base local; suite completa con y sin DSN en
+verde; `sqlc generate` idempotente (agrega `Country`, `DocumentKind`, `TaxIDKind`, `FiscalCondition`).
+
+**Renumeración:** la historia clínica pasa a ser la migración `0006` (T24) y la agenda `0007` (T28).

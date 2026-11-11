@@ -105,31 +105,33 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 
 	// S16's uniqueness rule, verified at the schema instead of assumed: the same
 	// person may be a patient in two practices, but the document identifies them
-	// once per practice.
+	// once per practice. Since 0005 the comparison is on the normalized value and
+	// the country is required alongside the document.
 	t.Run("a document is unique inside a tenant and shared across tenants", func(t *testing.T) {
-		const document = "30111222"
+		const normalized = "30111222"
 
-		insertWithDocument := func(ctx context.Context, tenantID string) error {
+		insertWithDocument := func(ctx context.Context, tenantID, typed string) error {
 			return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
 				_, err := app.Exec(ctx, `
-					INSERT INTO patients (id, tenant_id, full_name, document_type, document_number, created_at, updated_at)
-					VALUES ($1, $2, $3, 'dni', $4, now(), now())`,
-					uuid.NewString(), tenantID, "Persona Compartida", document)
+					INSERT INTO patients (id, tenant_id, full_name, country, document_type, document_number, document_normalized, created_at, updated_at)
+					VALUES ($1, $2, $3, 'AR', 'dni', $4, $5, now(), now())`,
+					uuid.NewString(), tenantID, "Persona Compartida", typed, normalized)
 				return err
 			})
 		}
 
-		if err := insertWithDocument(ctx, scratchTenantA); err != nil {
+		if err := insertWithDocument(ctx, scratchTenantA, "30.111.222"); err != nil {
 			t.Fatalf("cannot insert the first patient with document: %v", err)
 		}
 
-		duplicate := insertWithDocument(ctx, scratchTenantA)
+		// Different as typed, identical once normalized: the same person.
+		duplicate := insertWithDocument(ctx, scratchTenantA, normalized)
 		var pgErr *pgconn.PgError
 		if !errors.As(duplicate, &pgErr) || pgErr.Code != "23505" {
 			t.Fatalf("the same document twice in one tenant = %v, want SQLSTATE 23505", duplicate)
 		}
 
-		if err := insertWithDocument(ctx, scratchTenantB); err != nil {
+		if err := insertWithDocument(ctx, scratchTenantB, "30.111.222"); err != nil {
 			t.Fatalf("the same document in another tenant must be allowed: %v", err)
 		}
 	})

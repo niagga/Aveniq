@@ -15,7 +15,7 @@ import (
 const createTenant = `-- name: CreateTenant :one
 INSERT INTO tenants (id, slug, name, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $5)
-RETURNING id, slug, name, status, created_at, updated_at
+RETURNING id, slug, name, status, created_at, updated_at, country
 `
 
 type CreateTenantParams struct {
@@ -42,12 +42,13 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Country,
 	)
 	return i, err
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, status, created_at, updated_at
+SELECT id, slug, name, status, created_at, updated_at, country
 FROM tenants
 WHERE id = $1
 `
@@ -63,12 +64,13 @@ func (q *Queries) GetTenantByID(ctx context.Context, id pgtype.UUID) (Tenant, er
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Country,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT id, slug, name, status, created_at, updated_at
+SELECT id, slug, name, status, created_at, updated_at, country
 FROM tenants
 WHERE slug = $1
 `
@@ -83,12 +85,13 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (Tenant, err
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Country,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, status, created_at, updated_at
+SELECT id, slug, name, status, created_at, updated_at, country
 FROM tenants
 ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
@@ -115,6 +118,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Ten
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Country,
 		); err != nil {
 			return nil, err
 		}
