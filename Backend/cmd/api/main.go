@@ -16,10 +16,12 @@ import (
 	"syscall"
 	"time"
 
+	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/redisx"
 	httpiface "github.com/niagga/aveniq/backend/internal/interfaces/http"
+	"github.com/niagga/aveniq/backend/internal/platform/authn"
 	"github.com/niagga/aveniq/backend/internal/platform/clock"
 	"github.com/niagga/aveniq/backend/internal/platform/config"
 	"github.com/niagga/aveniq/backend/internal/platform/idgen"
@@ -37,6 +39,9 @@ const (
 	readTimeout       = 15 * time.Second
 	writeTimeout      = 30 * time.Second
 	idleTimeout       = 60 * time.Second
+	// accessTokenTTL is deliberately short: E1 has no access-token revocation, so
+	// the only bound on a stolen token is its expiry (decision 5 of L11).
+	accessTokenTTL = 15 * time.Minute
 )
 
 func main() {
@@ -74,6 +79,42 @@ func run() error {
 
 	// ─── Adapters → ports ───
 	tenantRepository := postgres.NewTenantRepository(pool)
+	userRepository := postgres.NewUserRepository(pool)
+	sessionRepository := postgres.NewSessionRepository(pool)
+	transactor := postgres.NewTransactor(pool)
+
+	// ─── Authentication primitives ───
+	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
+	if err != nil {
+		return err
+	}
+
+	// The dummy hash is minted once, here, so the login path can spend the same
+	// verification time for an address that does not exist.
+	dummyHash, err := hasher.Hash(idgen.UUIDGenerator{}.NewID())
+	if err != nil {
+		return err
+	}
+
+	accessTokens, err := authn.NewAccessTokens([]byte(cfg.AccessTokenSecret), accessTokenTTL, time.Now)
+	if err != nil {
+		return err
+	}
+
+	loginUseCase, err := authapp.NewLoginUseCase(authapp.LoginDeps{
+		Tenants:   tenantRepository,
+		Users:     userRepository,
+		Sessions:  sessionRepository,
+		Scope:     transactor,
+		Verifier:  hasher,
+		Tokens:    accessTokens,
+		Clock:     clock.New(),
+		IDs:       idgen.UUIDGenerator{},
+		DummyHash: dummyHash,
+	})
+	if err != nil {
+		return err
+	}
 
 	// ─── Ports → use cases ───
 	deps := httpiface.Deps{
@@ -82,6 +123,21 @@ func run() error {
 		CreateTenant:   tenantapp.NewCreateUseCase(tenantRepository, clock.New(), idgen.UUIDGenerator{}),
 		ListTenants:    tenantapp.NewListUseCase(tenantRepository),
 		GetTenant:      tenantapp.NewGetBySlugUseCase(tenantRepository),
+		Login:          loginUseCase,
+		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
+			Users:    userRepository,
+			Sessions: sessionRepository,
+			Scope:    transactor,
+			Tokens:   accessTokens,
+			Clock:    clock.New(),
+			IDs:      idgen.UUIDGenerator{},
+		}),
+		Logout: authapp.NewLogoutUseCase(authapp.LogoutDeps{
+			Sessions: sessionRepository,
+			Scope:    transactor,
+			Clock:    clock.New(),
+		}),
+		AccessTokens: accessTokens,
 		ReadyChecks: []httpiface.ReadyCheck{
 			{Name: "postgres", Check: pool.Ping},
 			{Name: "redis", Check: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }},

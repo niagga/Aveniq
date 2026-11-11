@@ -28,7 +28,19 @@ type Config struct {
 	// BaseDomain is the registrable suffix used to resolve a tenant from the
 	// request host (for example "aveniq.app" resolves sur.aveniq.app).
 	BaseDomain string
+	// AccessTokenSecret signs the HMAC-SHA256 access tokens. Development has a
+	// fixed default so a fresh clone runs with no .env file; production must set
+	// its own, and validate() refuses to start otherwise.
+	AccessTokenSecret string
 }
+
+// developmentAccessTokenSecret is deliberately recognisable: it must never be a
+// production secret, and validate() rejects it outside development.
+const developmentAccessTokenSecret = "aveniq-development-only-access-token-secret"
+
+// minAccessTokenSecretBytes is the shortest signing key accepted. A short key is
+// a configuration mistake, and it must fail at startup instead of on a request.
+const minAccessTokenSecretBytes = 32
 
 // Load reads the environment, applying development-friendly defaults so a fresh
 // clone runs against the hermetic local stack without any .env file.
@@ -39,9 +51,10 @@ func Load() (Config, error) {
 		// The application role, not the database owner: row-level security is
 		// ignored by superusers and BYPASSRLS roles, so connecting as the owner
 		// would silently disable tenant isolation.
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable"),
-		RedisAddr:   getEnv("REDIS_ADDR", "127.0.0.1:6380"),
-		BaseDomain:  getEnv("BASE_DOMAIN", "localhost"),
+		DatabaseURL:       getEnv("DATABASE_URL", "postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable"),
+		RedisAddr:         getEnv("REDIS_ADDR", "127.0.0.1:6380"),
+		BaseDomain:        getEnv("BASE_DOMAIN", "localhost"),
+		AccessTokenSecret: getEnv("AUTH_ACCESS_SECRET", developmentAccessTokenSecret),
 	}
 
 	level, err := parseLevel(getEnv("LOG_LEVEL", "info"))
@@ -71,6 +84,16 @@ func (c Config) validate() error {
 	}
 	if c.RedisAddr == "" {
 		return fmt.Errorf("config: REDIS_ADDR must not be empty")
+	}
+
+	if len(c.AccessTokenSecret) < minAccessTokenSecretBytes {
+		return fmt.Errorf("config: AUTH_ACCESS_SECRET must be at least %d bytes", minAccessTokenSecretBytes)
+	}
+	// Signing production tokens with the value committed in this repository would
+	// let anyone mint an access token for any tenant. Unlike the database DSN, this
+	// one has no safe default.
+	if c.Env != EnvDevelopment && c.AccessTokenSecret == developmentAccessTokenSecret {
+		return fmt.Errorf("config: AUTH_ACCESS_SECRET must be set explicitly outside development")
 	}
 
 	// TLS to the database is not optional outside development: silently talking
