@@ -16,7 +16,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/platform/authn"
 )
@@ -43,16 +45,22 @@ type ReadyCheck struct {
 // Deps holds everything the router needs. The composition root builds and
 // injects them, which keeps this package free of wiring decisions.
 type Deps struct {
-	Logger         *slog.Logger
-	ServiceVersion string
-	CreateTenant   *tenantapp.CreateUseCase
-	GetTenantByID  *tenantapp.GetByIDUseCase
-	Login          *authapp.LoginUseCase
-	Refresh        *authapp.RefreshUseCase
-	Logout         *authapp.LogoutUseCase
-	AccessTokens   *authn.AccessTokens
-	RefreshCookie  RefreshCookieConfig
-	ReadyChecks    []ReadyCheck
+	Logger            *slog.Logger
+	ServiceVersion    string
+	CreateTenant      *tenantapp.CreateUseCase
+	GetTenantByID     *tenantapp.GetByIDUseCase
+	Login             *authapp.LoginUseCase
+	Refresh           *authapp.RefreshUseCase
+	Logout            *authapp.LogoutUseCase
+	CreatePatient     *patientapp.CreateUseCase
+	UpdatePatient     *patientapp.UpdateUseCase
+	DeactivatePatient *patientapp.DeactivateUseCase
+	ActivatePatient   *patientapp.ActivateUseCase
+	GetPatient        *patientapp.GetUseCase
+	ListPatients      *patientapp.ListUseCase
+	AccessTokens      *authn.AccessTokens
+	RefreshCookie     RefreshCookieConfig
+	ReadyChecks       []ReadyCheck
 }
 
 // NewRouter builds the HTTP handler: operational endpoints, then the versioned
@@ -78,6 +86,7 @@ func NewRouter(deps Deps) http.Handler {
 	api := humachi.New(router, apiConfig(deps.ServiceVersion))
 	registerTenantRoutes(api, deps)
 	registerAuthRoutes(api, deps)
+	registerPatientRoutes(api, deps)
 
 	return router
 }
@@ -201,12 +210,25 @@ func bodyLimit(next http.Handler) http.Handler {
 // client.
 func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var validationErr *tenant.ValidationError
+	var patientValidationErr *patient.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
 	case errors.As(err, &clientErr):
 		// Already a transport-level error produced deeper in this layer.
 		return err
+	case errors.As(err, &patientValidationErr):
+		// 422 with the field the domain refused: a form that loses that detail turns
+		// "the DNI is invalid" into "we could not save", and the phone rings.
+		return huma.Error422UnprocessableEntity(patientValidationErr.Error())
+	case errors.Is(err, patient.ErrDocumentInvalid):
+		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, patient.ErrDocumentTaken):
+		return huma.Error409Conflict("A patient with that document already exists in this practice")
+	case errors.Is(err, patient.ErrNotFound):
+		return huma.Error404NotFound("The requested patient does not exist")
+	case errors.Is(err, patient.ErrInvalidTransition):
+		return huma.Error409Conflict("That state transition is not allowed")
 	case errors.Is(err, tenant.ErrNotFound):
 		return huma.Error404NotFound("The requested tenant does not exist")
 	case errors.Is(err, tenant.ErrSlugTaken):
