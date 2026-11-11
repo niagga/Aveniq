@@ -138,6 +138,9 @@ func run() error {
 			Clock:    clock.New(),
 		}),
 		AccessTokens: accessTokens,
+		// The refresh grant is a browser cookie: HttpOnly so JavaScript cannot read
+		// it, and Secure everywhere except the local plain-HTTP loopback.
+		RefreshCookie: httpiface.DefaultRefreshCookieConfig(authapp.RefreshSessionTTL, !cfg.IsDevelopment()),
 		ReadyChecks: []httpiface.ReadyCheck{
 			{Name: "postgres", Check: pool.Ping},
 			{Name: "redis", Check: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }},
