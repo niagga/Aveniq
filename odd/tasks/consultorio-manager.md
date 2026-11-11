@@ -84,7 +84,7 @@ en cada transición de tarea.
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | inline | `2cf9dd7` |
 | T20b | S16, S5 | E2 | Migración `0005`: países, catálogo de documentos y datos fiscales por país, con seed AR/ES/PT/BR | inline | `b1daf13` |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | inline | `50cb193`, `db2f998`, `b36a756` |
-| T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
+| T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | worker + inline | `5182547`, `5d467fb` |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
@@ -862,3 +862,67 @@ Los tests de esquema de T20 y T20b se actualizaron porque `country` ahora es obl
 consecuencia esperada de un invariante más fuerte, no una regresión.
 
 Pendiente: T22 (HTTP de pacientes), T23 (frontend), T16 (tests de la capa HTTP) y T15 (matriz).
+
+**L21 — E2/T22: casos de uso y HTTP de pacientes (commiteado)**
+
+Dos cortes: capa de aplicación (`5182547`, delegada al writer) y HTTP con wiring (`5d467fb`, inline).
+Fue el primer writer que aceptó la tarea desde T14.
+
+### Lo que el worker entregó, verificado
+
+Diez archivos en `internal/application/patient/`: seis casos de uso, `ProfileInput`/`PatientView` y un
+`normalizeProfile` compartido. Verifiqué sin confiar en el reporte: `gofmt` limpio, `build`/`vet`
+limpios, 18 tests verdes, y la propiedad que más importaba —**la normalización de catálogo corre antes
+de `WithTenant`**— confirmada leyendo `create.go`: el único `WithTenant` envuelve el alta, y las
+llamadas al catálogo viven en `normalizeProfile`, fuera.
+
+`List` valida paginación en el caso de uso (rechaza `limit` fuera de 1..100 y `offset` negativo) en vez
+de dejar que el driver devuelva `2201X`, que es lo que L10 había registrado.
+
+### Lo que agregué en el corte de HTTP
+
+Seis rutas, todas detrás del guard de rol de T19 y con el tenant saliendo del token. El mapeo de
+errores es la parte que hace usable el formulario:
+
+| Error | Respuesta |
+| --- | --- |
+| `*patient.ValidationError` | 422 con el campo |
+| `patient.ErrDocumentInvalid` (tipo desconocido, dígito verificador) | 422 con el motivo |
+| `patient.ErrDocumentTaken` | 409 |
+| `patient.ErrNotFound` | 404 |
+| `patient.ErrInvalidTransition` | 409 |
+
+**No hay `DELETE`.** La baja es `POST /patients/{id}/deactivate`: la fila sobrevive porque la historia
+clínica va a colgar de ella, y un `DELETE` que responde 204 estaría mintiendo sobre lo que pasó.
+
+### Evidencia end-to-end (API real, base local, dos usuarios reales)
+
+| Caso | Resultado |
+| --- | --- |
+| alta con `30.111.222` | 201, `number` tal cual se tipeó, `country=AR`, `isActive=true` |
+| el mismo documento como `30111222` | 409 |
+| NIE bajo AR (el catálogo no lo tiene) | 422 |
+| NIE español con dígito verificador inválido | 422 |
+| NIE español válido (`x-1234567-l`) | 201 |
+| nombre en blanco | 422 |
+| sin token / con `accountant` | 401 / 403 |
+| detalle, PATCH y baja lógica | 200, 200 (`isActive=false`), 200 |
+| listado con `activeOnly=true` tras la baja | 0 filas |
+| reactivación | 200 (`isActive=true`) |
+| id inexistente | 404 |
+| `limit=500` | 422 |
+
+### Un falso positivo que vale registrar
+
+La primera pasada mostró que buscar `Lucía` devolvía 0 filas, y parecía un bug de búsqueda con acentos.
+No lo era: los bytes guardados eran `efbfbd` (U+FFFD) porque **mi terminal mandó Latin-1, no UTF-8**.
+Repetido con el cuerpo en UTF-8 crudo (`printf` con escapes), la fila se guardó como `c3b1` (ñ) y la
+búsqueda acentuada devolvió su fila. Limpié las dos filas corruptas que había dejado en la base de
+desarrollo.
+
+Hallazgo real que queda anotado, de menor prioridad: **`encoding/json` reemplaza UTF-8 inválido por
+U+FFFD en vez de rechazar el request**, así que un cliente que mande bytes mal formados guarda un
+nombre corrupto en lugar de recibir un 400. Atajarlo exige validar el cuerpo crudo antes de decodificar;
+queda para cuando haya más superficie de entrada, no para el MVP.
+
+Pendiente: T23 (frontend de pacientes), T24 (historia clínica), T28 (agenda), T16 y T15.
