@@ -7,10 +7,59 @@ package sqlcgen
 
 import (
 	"context"
+	"net/netip"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createSession = `-- name: CreateSession :one
+
+INSERT INTO sessions (id, tenant_id, user_id, refresh_hash, user_agent, ip, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, tenant_id, user_id, refresh_hash, user_agent, ip, created_at, expires_at, revoked_at, replaced_by
+`
+
+type CreateSessionParams struct {
+	ID          pgtype.UUID
+	TenantID    pgtype.UUID
+	UserID      pgtype.UUID
+	RefreshHash string
+	UserAgent   *string
+	Ip          *netip.Addr
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
+// Sessions: the refresh grants. Same rule as the users above — the tenant comes
+// from app.tenant_id, never from a WHERE clause, and a statement without tenant
+// context sees zero rows and writes none.
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, createSession,
+		arg.ID,
+		arg.TenantID,
+		arg.UserID,
+		arg.RefreshHash,
+		arg.UserAgent,
+		arg.Ip,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.UserID,
+		&i.RefreshHash,
+		&i.UserAgent,
+		&i.Ip,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.ReplacedBy,
+	)
+	return i, err
+}
 
 const createUser = `-- name: CreateUser :one
 
@@ -79,6 +128,54 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, tenant_id, user_id, refresh_hash, user_agent, ip, created_at, expires_at, revoked_at, replaced_by
+FROM sessions
+WHERE id = $1
+`
+
+func (q *Queries) GetSessionByID(ctx context.Context, id pgtype.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByID, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.UserID,
+		&i.RefreshHash,
+		&i.UserAgent,
+		&i.Ip,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.ReplacedBy,
+	)
+	return i, err
+}
+
+const getSessionByRefreshHash = `-- name: GetSessionByRefreshHash :one
+SELECT id, tenant_id, user_id, refresh_hash, user_agent, ip, created_at, expires_at, revoked_at, replaced_by
+FROM sessions
+WHERE refresh_hash = $1
+`
+
+func (q *Queries) GetSessionByRefreshHash(ctx context.Context, refreshHash string) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByRefreshHash, refreshHash)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.UserID,
+		&i.RefreshHash,
+		&i.UserAgent,
+		&i.Ip,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.ReplacedBy,
+	)
+	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
@@ -173,6 +270,99 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeSession = `-- name: RevokeSession :execrows
+UPDATE sessions
+SET revoked_at = $2
+WHERE id = $1
+  AND revoked_at IS NULL
+`
+
+type RevokeSessionParams struct {
+	ID        pgtype.UUID
+	RevokedAt pgtype.Timestamptz
+}
+
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSession, arg.ID, arg.RevokedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeSessionChain = `-- name: RevokeSessionChain :execrows
+WITH RECURSIVE chain (id, replaced_by) AS (
+    SELECT s.id, s.replaced_by
+    FROM sessions AS s
+    WHERE s.id = $1
+    UNION ALL
+    SELECT s.id, s.replaced_by
+    FROM sessions AS s
+    JOIN chain AS c ON s.id = c.replaced_by
+)
+UPDATE sessions
+SET revoked_at = $2
+WHERE sessions.id IN (SELECT c.id FROM chain AS c)
+  AND sessions.revoked_at IS NULL
+`
+
+type RevokeSessionChainParams struct {
+	ID        pgtype.UUID
+	RevokedAt pgtype.Timestamptz
+}
+
+// Reuse detection kills the whole chain, not the presented leaf: the stolen copy
+// and the legitimate one compete, and nothing here can tell which is which.
+func (q *Queries) RevokeSessionChain(ctx context.Context, arg RevokeSessionChainParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSessionChain, arg.ID, arg.RevokedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rotateSession = `-- name: RotateSession :execrows
+UPDATE sessions
+SET revoked_at = $2,
+    replaced_by = $3
+WHERE id = $1
+  AND revoked_at IS NULL
+`
+
+type RotateSessionParams struct {
+	ID         pgtype.UUID
+	RevokedAt  pgtype.Timestamptz
+	ReplacedBy pgtype.UUID
+}
+
+// Revoke the presented grant and point it at its successor. The `revoked_at IS
+// NULL` guard is what makes rotation single-use: a second attempt affects zero
+// rows instead of overwriting the first successor.
+func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rotateSession, arg.ID, arg.RevokedAt, arg.ReplacedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sessionUserVisible = `-- name: SessionUserVisible :one
+SELECT u.id
+FROM users AS u
+WHERE u.id = $1
+`
+
+// The cross-tenant guard of decision 7: a foreign key check inside `sessions`
+// does not go through row-level security, so knowing a user UUID from another
+// tenant would be enough to build a session on it. This makes the user's
+// visibility in the open scope a precondition of the insert.
+func (q *Queries) SessionUserVisible(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, sessionUserVisible, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const updateUser = `-- name: UpdateUser :one

@@ -59,3 +59,17 @@ type Clock interface {
 type IDGenerator interface {
 	NewID() string
 }
+
+// SessionRepository persists the refresh sessions of the IAM aggregate.
+//
+// Decision 7 of L11 lives in the implementation: a foreign key inside `sessions`
+// does not go through row-level security, so building a session on a user UUID
+// from another tenant must be refused by the adapter, not by a caller that could
+// forget. Every call runs inside a tenant scope (see TenantScope).
+type SessionRepository interface {
+	Create(ctx context.Context, subject iam.Session) error
+	ByRefreshHash(ctx context.Context, hash iam.RefreshHash) (iam.Session, error)
+	Rotate(ctx context.Context, previous, successor iam.Session) error
+	Revoke(ctx context.Context, id iam.SessionID, at time.Time) error
+	RevokeChain(ctx context.Context, id iam.SessionID, at time.Time) (int64, error)
+}
