@@ -23,8 +23,17 @@ type tenantContextKey struct{}
 // another practice's request.
 //
 // Repositories must be called inside fn: their statements run against the open
-// transaction, where row-level security can see app.tenant_id. Outside it, the
-// policies fail closed — reads return zero rows and writes raise SQLSTATE 42501.
+// transaction, where row-level security can see app.tenant_id. Called outside it,
+// the adapter refuses before reaching the database instead of relying on what the
+// policies happen to return.
+//
+// What the policies raise, because the difference is easy to get wrong: WITH
+// CHECK is evaluated only when a statement writes the row-level column. An INSERT
+// that omits or contradicts app.tenant_id raises SQLSTATE 42501, but an UPDATE or
+// DELETE targeting another tenant's row raises nothing at all — USING filters the
+// row, the statement affects zero rows, and sqlc's :one reports pgx.ErrNoRows.
+// Both directions are covered by tests, and callers must treat "zero rows" as
+// not-found, never as evidence that the scope check passed.
 type Transactor struct {
 	pool *pgxpool.Pool
 }

@@ -22,9 +22,16 @@ var (
 	ErrEmailTaken = errors.New("iam: email already taken in this tenant")
 	// ErrInvalidTransition reports a lifecycle change the aggregates do not allow.
 	ErrInvalidTransition = errors.New("iam: invalid transition")
-	// ErrTenantScopeMissing reports a write attempted outside WithTenant. Row-level
-	// security fails closed (SQLSTATE 42501) when app.tenant_id was never set.
+	// ErrTenantScopeMissing reports an operation attempted without an open tenant
+	// transaction. It is raised by the adapter before any statement runs, so it
+	// never depends on what row-level security happens to return.
 	ErrTenantScopeMissing = errors.New("iam: no tenant context: the operation must run inside WithTenant")
+	// ErrInsufficientPrivilege reports that the database refused a statement the
+	// role is not allowed to run. It is deliberately distinct from
+	// ErrTenantScopeMissing: a REVOKE or a missing grant is an operational
+	// problem, and reporting it as "no tenant context" would send whoever reads
+	// the logs looking in the wrong place.
+	ErrInsufficientPrivilege = errors.New("iam: the database role is not allowed to run this statement")
 )
 
 // ValidationError reports a violated invariant and names the offending field so

@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,6 +48,25 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err := pool.Ping(pingCtx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: cannot reach the database: %w", err)
+	}
+
+	// Row-level security is the only thing separating one tenant's data from
+	// another's, and PostgreSQL lets a SUPERUSER or a role holding BYPASSRLS
+	// ignore every policy. That is not hypothetical: the local cluster's
+	// original role had both attributes, which made the entire IAM isolation
+	// layer decorative while every test still passed. Refusing to start turns
+	// that silent catastrophe into a startup failure.
+	var restricted bool
+	if err := pool.QueryRow(pingCtx, `
+		SELECT NOT (rolsuper OR rolbypassrls)
+		FROM pg_roles
+		WHERE rolname = current_user`).Scan(&restricted); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("postgres: cannot inspect the connection role: %w", err)
+	}
+	if !restricted {
+		pool.Close()
+		return nil, errors.New("postgres: refusing to start: the connection role is a superuser or holds BYPASSRLS, which ignores row-level security and disables tenant isolation; connect as the application role instead")
 	}
 
 	return pool, nil

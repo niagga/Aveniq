@@ -12,14 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres/sqlcgen"
 )
 
-// rlsViolationCode is PostgreSQL's SQLSTATE for "insufficient privilege", which
-// is what a WITH CHECK policy raises when app.tenant_id was never set.
-const rlsViolationCode = "42501"
+// insufficientPrivilegeCode is PostgreSQL's SQLSTATE for "insufficient
+// privilege". It covers a missing grant as well as a WITH CHECK policy refusing
+// an insert, which is exactly why it must not be reported as a scope problem.
+const insufficientPrivilegeCode = "42501"
 
 // usersTenantEmailUnique is the constraint behind the per-tenant email
 // uniqueness: the same human may belong to two practices, the same address
@@ -28,11 +30,11 @@ const usersTenantEmailUnique = "users_tenant_email_unique"
 
 // UserRepository is the PostgreSQL adapter for port.UserRepository.
 //
-// Every method assumes it runs inside Transactor.WithTenant: row-level security
-// derives the tenant from app.tenant_id, so the queries carry no tenant filter
-// of their own. Called outside a tenant transaction, the policies fail closed —
-// reads return zero rows (mapped to iam.ErrNotFound) and writes raise 42501
-// (mapped to iam.ErrTenantScopeMissing).
+// Every method requires Transactor.WithTenant: row-level security derives the
+// tenant from app.tenant_id, so the queries carry no tenant filter of their own.
+// Called outside a tenant transaction the adapter returns
+// iam.ErrTenantScopeMissing before touching the database, so a missing scope is
+// always loud and never disguised as an empty result.
 type UserRepository struct {
 	queries *sqlcgen.Queries
 }
@@ -42,36 +44,39 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{queries: sqlcgen.New(pool)}
 }
 
-// Compile-time proof that the adapter satisfies the port.
-var _ interface {
-	Create(ctx context.Context, subject iam.User) error
-	ByID(ctx context.Context, id iam.UserID) (iam.User, error)
-	ByEmail(ctx context.Context, email string) (iam.User, error)
-	List(ctx context.Context, limit, offset int32) ([]iam.User, error)
-	Update(ctx context.Context, subject iam.User) error
-	Delete(ctx context.Context, id iam.UserID) error
-} = (*UserRepository)(nil)
+// Compile-time proof that the adapter satisfies the port. Asserting the port
+// itself, and not a copy of its method set, is what turns a rename in port.go
+// into a build failure here instead of a surprise at the composition root.
+var _ port.UserRepository = (*UserRepository)(nil)
 
-// scoped returns the query layer bound to the open tenant transaction when one
-// is in the context, or the pool otherwise. The pool path is what makes an
-// out-of-scope mutation impossible rather than dangerous: RLS rejects it.
-func (r *UserRepository) scoped(ctx context.Context) *sqlcgen.Queries {
-	if tx, ok := tenantTransaction(ctx); ok {
-		return r.queries.WithTx(tx)
+// scoped returns the query layer bound to the open tenant transaction. It fails
+// instead of falling back to the pool: a pooled connection carries no tenant
+// setting, so a statement outside a transaction would be filtered by the
+// policies into zero rows and look like an ordinary not-found. An explicit error
+// says what actually happened.
+func (r *UserRepository) scoped(ctx context.Context) (*sqlcgen.Queries, error) {
+	tx, ok := tenantTransaction(ctx)
+	if !ok {
+		return nil, iam.ErrTenantScopeMissing
 	}
-	return r.queries
+	return r.queries.WithTx(tx), nil
 }
 
 // Create inserts a new user, translating uniqueness conflicts and a missing
 // tenant scope into domain errors so the application layer never has to
 // recognise a driver-specific code.
 func (r *UserRepository) Create(ctx context.Context, subject iam.User) error {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return err
+	}
+
 	tenantID, err := toPGUUIDFromTenant(subject.TenantID)
 	if err != nil {
 		return err
 	}
 
-	_, err = r.scoped(ctx).CreateUser(ctx, sqlcgen.CreateUserParams{
+	_, err = queries.CreateUser(ctx, sqlcgen.CreateUserParams{
 		ID:              toPGUUIDFromIAM(subject.ID),
 		TenantID:        tenantID,
 		Email:           subject.Email,
@@ -93,7 +98,12 @@ func (r *UserRepository) Create(ctx context.Context, subject iam.User) error {
 // ByID returns the user with the given identity, visible only if it belongs to
 // the current tenant, or iam.ErrNotFound.
 func (r *UserRepository) ByID(ctx context.Context, id iam.UserID) (iam.User, error) {
-	row, err := r.scoped(ctx).GetUserByID(ctx, toPGUUIDFromIAM(id))
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return iam.User{}, err
+	}
+
+	row, err := queries.GetUserByID(ctx, toPGUUIDFromIAM(id))
 	if err != nil {
 		return iam.User{}, translateIAMError(err)
 	}
@@ -102,7 +112,12 @@ func (r *UserRepository) ByID(ctx context.Context, id iam.UserID) (iam.User, err
 
 // ByEmail resolves a user by canonical email within the current tenant.
 func (r *UserRepository) ByEmail(ctx context.Context, email string) (iam.User, error) {
-	row, err := r.scoped(ctx).GetUserByEmail(ctx, email)
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return iam.User{}, err
+	}
+
+	row, err := queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		return iam.User{}, translateIAMError(err)
 	}
@@ -111,7 +126,12 @@ func (r *UserRepository) ByEmail(ctx context.Context, email string) (iam.User, e
 
 // List returns one page of the current tenant's users, newest first.
 func (r *UserRepository) List(ctx context.Context, limit, offset int32) ([]iam.User, error) {
-	rows, err := r.scoped(ctx).ListUsers(ctx, sqlcgen.ListUsersParams{
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := queries.ListUsers(ctx, sqlcgen.ListUsersParams{
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -134,7 +154,12 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int32) ([]iam.U
 // absent: it is the login identity and changing it is a future decision, not a
 // side effect of UpdateUser.
 func (r *UserRepository) Update(ctx context.Context, subject iam.User) error {
-	_, err := r.scoped(ctx).UpdateUser(ctx, sqlcgen.UpdateUserParams{
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = queries.UpdateUser(ctx, sqlcgen.UpdateUserParams{
 		ID:              toPGUUIDFromIAM(subject.ID),
 		PasswordHash:    string(subject.PasswordHash),
 		FullName:        subject.FullName,
@@ -152,7 +177,12 @@ func (r *UserRepository) Update(ctx context.Context, subject iam.User) error {
 
 // Delete removes the user. A missing (or invisible) user is iam.ErrNotFound.
 func (r *UserRepository) Delete(ctx context.Context, id iam.UserID) error {
-	affected, err := r.scoped(ctx).DeleteUser(ctx, toPGUUIDFromIAM(id))
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return err
+	}
+
+	affected, err := queries.DeleteUser(ctx, toPGUUIDFromIAM(id))
 	if err != nil {
 		return translateIAMError(err)
 	}
@@ -194,11 +224,12 @@ func translateIAMError(err error) error {
 		switch {
 		case pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == usersTenantEmailUnique:
 			return fmt.Errorf("%w: constraint %s", iam.ErrEmailTaken, pgErr.ConstraintName)
-		case pgErr.Code == rlsViolationCode:
-			// The only way this adapter loses a privilege is the row-level
-			// security policy: no tenant context, no access. Fail loudly in
-			// the domain's vocabulary instead of leaking SQLSTATE.
-			return iam.ErrTenantScopeMissing
+		case pgErr.Code == insufficientPrivilegeCode:
+			// A missing grant and a WITH CHECK rejection share this SQLSTATE.
+			// Neither is a scope problem — the adapter already refuses to run
+			// without a tenant transaction — so report the privilege honestly
+			// instead of sending whoever reads the logs after the wrong bug.
+			return fmt.Errorf("%w: %s", iam.ErrInsufficientPrivilege, pgErr.Message)
 		}
 	}
 
