@@ -63,7 +63,7 @@ en cada transición de tarea.
 | T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
 | T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | pendiente |
 | T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
-| T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | worker | en curso |
+| T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
 
@@ -383,3 +383,71 @@ Hallazgos que la unidad 2 necesita:
   usó" en "este token no existe" y apagaría la detección de reuso.
 - `gofmt -l` reporta `Backend/internal/interfaces/http/tenant_handlers.go`, preexistente a esta
   tarea y no tocado acá.
+
+**L13 — E1/T14 completo: casos de uso, HTTP y un bug que solo aparecía de punta a punta**
+
+T14 cerrado en seis commits sobre `feat/e1-t14-auth`. La unidad 2 se partió en dos por
+tamaño de review: casos de uso con sus dobles (`5f50e49`) y capa HTTP + wiring (`011d1ca`).
+
+| Commit | Contenido |
+| --- | --- |
+| `5f50e49` | `application/auth`: login, refresh, logout + 18 subtests con dobles en memoria |
+| `98f2dd3` | corrección del bug de rollback en la revocación por reuso |
+| `011d1ca` | middleware de identidad, handlers huma, esquema bearer en OpenAPI, `AUTH_ACCESS_SECRET` |
+
+**El bug que motivó el commit de corrección.** La primera versión revocaba la cadena de
+sucesores **dentro** del `WithTenant` que después devolvía `ErrRefreshReused`. Como
+`WithTenant` hace rollback cuando la unidad de trabajo devuelve error, la revocación se
+deshacía a sí misma: el token robado se rechazaba, el sucesor legítimo seguía vivo y
+seguía rotando. El bug es invisible en los tests de casos de uso porque el doble de
+`TenantScope` no tiene rollback que deshacer; apareció recién al ejercitar la API real.
+Diseño corregido: la negativa se decide en la transacción de lectura, que no escribe; la
+revocación corre después, en su propia transacción que commitea. El test de reuso ahora
+fija la forma (dos aperturas de scope) en vez de confiar en el efecto.
+
+Regla general que dejó: **en este proyecto, "escribir y después devolver error" dentro de
+`WithTenant` no funciona.** Cualquier efecto que deba sobrevivir a un fallo va en su propia
+transacción.
+
+**Evidencia end-to-end** (API en `127.0.0.1:8081` sobre la base local, tenant y usuario
+reales creados por SQL con un hash argon2id minteado con los parámetros de producción):
+
+| Paso | Respuesta |
+| --- | --- |
+| `POST /auth/login` credenciales válidas | 200, `expiresIn=900`, `tokenType=Bearer`, `role=owner` |
+| `GET /auth/me` con el token | 200, id/tenantId/role del usuario |
+| `GET /auth/me` sin token / token basura | 401 / 401 |
+| login con password incorrecta | 401 |
+| login con email inexistente | 401, **mismo cuerpo** que la password incorrecta |
+| login con tenant inexistente | 401 |
+| `POST /auth/refresh` | 200, refresh nuevo (rotación real) |
+| reuso del token gastado | 401 "already used; the session chain was revoked" |
+| refresh con el sucesor después del reuso | **401** (antes del fix: 200) |
+| `POST /auth/logout` | 204 |
+| logout repetido / con basura | 204 / 204 |
+| refresh después de logout | 401 |
+
+**Prueba de mutación de la paridad de tiempo.** Se quitó la verificación contra el hash
+dummy en la rama de email inexistente y el subtest falló con
+`verified hashes = [], want exactly the dummy hash`. Restaurado y verde.
+
+Decisiones materializadas en la capa HTTP:
+
+- Solo `/auth/me` exige identidad. Gatear `/tenants` habría inventado una política que es
+  de T15, y habría roto el cliente actual.
+- El refresh token viaja en el cuerpo, no en cookie `HttpOnly`. Es una decisión de
+  transporte que el frontend todavía no tomó: si el cliente es un navegador, debería ser
+  cookie. Queda anotado, no resuelto.
+- `AUTH_ACCESS_SECRET` tiene default de desarrollo para no romper la promesa de "clon
+  nuevo corre sin `.env`", y `validate()` rechaza ese default fuera de desarrollo. Un
+  secreto de firma commiteado dejaría a cualquiera mintear un token para cualquier tenant.
+- `me` no consulta la base: la identidad viaja firmada en el token, que es el punto entero
+  de un access token.
+
+Pendiente de E1: T15 matriz de permisos por dominio, invitaciones y alta de tenant en trial;
+T16 tests de la capa HTTP y de fuga cross-tenant en CI.
+
+Notas de higiene: `gofmt -l` reporta `tenant_handlers.go` como preexistente; reformatearlo
+quedó fuera de este corte a propósito. El writer de ODD no estuvo disponible en toda la
+jornada (dos intentos, `repository preparation unavailable`, sin tarea encolada), así que
+T14 se escribió inline; por eso la columna Ruta dice `inline` y no `worker`.
