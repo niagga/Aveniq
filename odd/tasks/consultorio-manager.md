@@ -83,14 +83,14 @@ en cada transición de tarea.
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | inline | `aa422af`, `51d4779` |
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | inline | `2cf9dd7` |
 | T20b | S16, S5 | E2 | Migración `0005`: países, catálogo de documentos y datos fiscales por país, con seed AR/ES/PT/BR | inline | `b1daf13` |
-| T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
+| T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | inline | `50cb193`, `db2f998`, `b36a756` |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
-| T24 | S1, S16 | E2 | Migración `0006`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
+| T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
-| T28 | S15, S5 | E2 | Migración `0007`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
+| T28 | S15, S5 | E2 | Migración `0008`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
 | T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | — | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | — | — |
@@ -788,3 +788,77 @@ normalizada. Es la consecuencia esperada de un modelo más estricto, no una regr
 verde; `sqlc generate` idempotente (agrega `Country`, `DocumentKind`, `TaxIDKind`, `FiscalCondition`).
 
 **Renumeración:** la historia clínica pasa a ser la migración `0006` (T24) y la agenda `0007` (T28).
+
+**L20 — E2/T21: dominio y persistencia de pacientes (commiteado)**
+
+Tres cortes en `feat/e2-t21-patient-domain`: dominio (`50cb193`), corrección de precisión de
+timestamps (`db2f998`) y persistencia (`b36a756`).
+
+### El dominio no sabe en qué país está
+
+Una regla de país llega **como dato** (`DocumentKind`: `pattern`, `normalizer`, `checksum`) y el
+agregado la aplica. Agregar un país es una fila de catálogo más una entrada en
+`map[string]func(string) error`; no hay un `if country == ...` en ninguna capa.
+
+Orden del pipeline, y el orden es la mitad del diseño: **normalizar → patrón → dígito verificador**.
+Normalizar primero es lo que hace que `30.111.222` y `30111222` sean la misma persona y que un NIE
+en minúsculas no burle el índice único.
+
+Estrategias implementadas y verificadas con vectores conocidos: `ar_cuit` (mod 11 con pesos),
+`br_cpf`, `br_cnpj`, `es_dni` (tabla de 23 letras), `es_nie` (X/Y/Z como 0/1/2), `pt_nif`.
+**`es_nif` y `pt_cc` quedan como `shapeOnly`, escrito por nombre**: el patrón sigue rechazando
+basura y el hueco se encuentra buscándolo, en vez de descubrirse cuando un dígito inválido pasa.
+
+**Una estrategia desconocida falla cerrado.** Si el catálogo nombra un `checksum` que nadie
+implementó, el documento se rechaza. Saltearlo en silencio haría que todos los documentos de ese
+tipo parezcan validados.
+
+### Dos cosas que el código me obligó a cambiar
+
+1. **`Reconstitute` con 17 parámetros posicionales.** Dos `*string` intercambiados compilan, corren,
+   y escriben el contacto de emergencia en la dirección fiscal. Pasó a un struct `Stored`.
+2. **Precisión de timestamps.** Postgres guarda microsegundos y `time.Now()` trae nanosegundos, así
+   que "CreatedAt no cambió" dependía de dónde corriera la comparación. Lo encontró el test de
+   edición; se corrigió en el agregado (`stored()`), que es el lugar más barato para que dominio y
+   almacenamiento coincidan.
+
+### Persistencia
+
+Mismo molde que el repositorio de usuarios de T13, que ya había sido verificado adversarialmente:
+`scoped()` que **se niega antes de tocar la base** en vez de caer al pool, **cero `WHERE tenant_id`**
+en las queries (lo pone RLS), y los códigos del driver traducidos a centinelas del dominio:
+
+| SQLSTATE | Se traduce a | Por qué |
+| --- | --- | --- |
+| `23505` en el índice del documento | `ErrDocumentTaken` | es un conflicto de negocio, no un error de driver |
+| `23503` en una referencia al catálogo | `ErrDocumentInvalid` | "este país no tiene ese tipo" es lo que el llamador hizo mal |
+| `42501` | `ErrInsufficientPrivilege` | un grant faltante no es un problema de scope |
+
+El adaptador del catálogo corre **sin** scope de tenant a propósito: los catálogos son globales y
+un caso de uso necesita normalizar el documento **antes** de abrir la transacción donde va a escribir.
+
+**Migración `0006`**: `patients.country` pasa a `NOT NULL`. 0005 la dejó nullable porque un paciente
+puede existir sin documento, pero el agregado siempre resuelve un país (elegido o heredado del
+consultorio), así que un NULL solo podía significar una escritura que salteó el dominio. Moverlo al
+esquema es lo que permite que el adaptador deje de tratar la columna como opcional.
+
+Búsqueda: fragmento del nombre **o documento normalizado exacto**. Una coincidencia parcial sobre un
+identificador es cómo la ficha de un paciente termina mostrándose por otro.
+
+### Evidencia
+
+- Dominio: 29 tests/subtests verdes, incluidos los seis algoritmos de dígito verificador con vectores
+  reales (`20-12345678-6`, `529.982.247-25`, `11.222.333/0001-81`, `12345678Z`, `X1234567L`,
+  `123456789`) y sus pares inválidos.
+- Persistencia: 7 subtests de repositorio (alta y lectura con datos de país, documento duplicado,
+  tipo inexistente para el país rechazado por la FK, scope ausente, invisibilidad cross-tenant,
+  edición, filtros de listado) y 4 de catálogo.
+- Suite completa con y sin DSN; `gofmt` limpio; `sqlc generate` idempotente.
+
+### Efectos en el plan
+
+`0006` corre la numeración otra vez: historia clínica pasa a `0007` (T24) y agenda a `0008` (T28).
+Los tests de esquema de T20 y T20b se actualizaron porque `country` ahora es obligatorio — es la
+consecuencia esperada de un invariante más fuerte, no una regresión.
+
+Pendiente: T22 (HTTP de pacientes), T23 (frontend), T16 (tests de la capa HTTP) y T15 (matriz).
