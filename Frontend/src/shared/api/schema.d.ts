@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a session
+         * @description Exchanges a tenant slug, an email and a password for an access token and a refresh grant. Unknown tenant, unknown email, inactive user and wrong password are answered identically.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a session
+         * @description Revokes the presented refresh grant. It answers 204 even for an unknown or already revoked token, so it cannot be used to test whether a token exists.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Describe the current identity
+         * @description Returns the identity carried by the access token.
+         */
+        get: operations["whoami"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the session
+         * @description Spends the presented refresh token and returns a new pair. Presenting an already spent token revokes the whole session chain.
+         */
+        post: operations["refresh-session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants": {
         parameters: {
             query?: never;
@@ -126,6 +206,82 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["TenantBody"][] | null;
         };
+        LoginBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LoginBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Login address.
+             * @example ana@consultorio.test
+             */
+            email: string;
+            /** @description Plain password; only ever sent over TLS. */
+            password: string;
+            /**
+             * @description Slug of the practice the account belongs to.
+             * @example consultorio-sur
+             */
+            tenantSlug: string;
+        };
+        RefreshBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshBody.json
+             */
+            readonly $schema?: string;
+            /** @description Opaque refresh token. Optional when the cookie is sent instead. */
+            refreshToken?: string;
+        };
+        SessionBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SessionBody.json
+             */
+            readonly $schema?: string;
+            /** @description Short-lived bearer token. */
+            accessToken: string;
+            /**
+             * Format: int64
+             * @description Access token lifetime, in seconds.
+             */
+            expiresIn: number;
+            /**
+             * Format: date-time
+             * @description Expiry of the refresh grant, RFC 3339 in UTC. Use it to know when a new login is required.
+             */
+            refreshExpiresAt: string;
+            /**
+             * @description Always Bearer.
+             * @enum {string}
+             */
+            tokenType: "Bearer";
+            user: components["schemas"]["SessionIdentity"];
+        };
+        SessionIdentity: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SessionIdentity.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: uuid
+             * @description User identifier.
+             */
+            id: string;
+            /** @description Role code of the user inside the tenant. */
+            role: string;
+            /**
+             * Format: uuid
+             * @description Tenant the user belongs to.
+             */
+            tenantId: string;
+        };
         TenantBody: {
             /**
              * Format: uri
@@ -162,6 +318,141 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Refresh grant to revoke. */
+                aveniq_refresh?: string;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    whoami: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionIdentity"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "refresh-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Refresh grant set by login or by the previous rotation. */
+                aveniq_refresh?: string;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-tenants": {
         parameters: {
             query?: {
