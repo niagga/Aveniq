@@ -46,6 +46,18 @@ en cada transición de tarea.
 **S13 — Todo lo necesario instalado para correr en local**
 > "quiero que instales todo lo que sea necesario para la aplicación correr en local"
 
+**S14 — Historia clínica del MVP: ficha estructurada más evoluciones por encuentro**
+> "Ficha estructurada + evoluciones"
+
+**S15 — Agenda del MVP: turnos con estado más series recurrentes**
+> "Turnos + series recurrentes"
+
+**S16 — El paciente se registra con datos fiscales desde el inicio**
+> "+ datos fiscales"
+
+**S17 — E2 no incluye la gestión de usuarios del sistema; users CRUD e invitaciones van en E3**
+> "No incluir users CRUD"
+
 ## Tasks
 
 | ID | Spec | Etapa | Descripción | Ruta | Commit |
@@ -66,6 +78,22 @@ en cada transición de tarea.
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
+| T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | — | — |
+| T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | — | — |
+| T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | — | — |
+| T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | — | — |
+| T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
+| T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
+| T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
+| T24 | S1, S16 | E2 | Migración `0005`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
+| T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
+| T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
+| T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
+| T28 | S15, S5 | E2 | Migración `0006`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
+| T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
+| T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | — | — |
+| T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | — | — |
+| T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | — | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -451,3 +479,58 @@ Notas de higiene: `gofmt -l` reporta `tenant_handlers.go` como preexistente; ref
 quedó fuera de este corte a propósito. El writer de ODD no estuvo disponible en toda la
 jornada (dos intentos, `repository preparation unavailable`, sin tarea encolada), así que
 T14 se escribió inline; por eso la columna Ruta dice `inline` y no `worker`.
+
+**L14 — Desglose de E2: pacientes, historia clínica y agenda**
+
+Decisiones del usuario, verbatim: "Ficha estructurada + evoluciones", "Turnos + series recurrentes",
+"+ datos fiscales", "No incluir users CRUD". Es la rama cara de las dos que importaban: ficha **y**
+evoluciones, y series recurrentes. E2 pasa a ser la etapa más grande hasta ahora (T17–T32).
+
+Reglas de diseño fijadas acá, porque cada una tiene una forma silenciosa de fallar:
+
+1. **Toda tabla nueva nace con RLS forzado.** `tenant_id`, `ENABLE` + `FORCE ROW LEVEL SECURITY` y
+   política contra `NULLIF(current_setting('app.tenant_id', true), '')::uuid`, igual que `0002`.
+   Los `GRANT` **no** deberían hacer falta porque `0003` dejó `ALTER DEFAULT PRIVILEGES`, pero eso se
+   verifica en T20 en vez de confiarse: si el default privilege no alcanza, el síntoma es `42501` en
+   producción y un test de aislamiento que igual pasa.
+2. **El tenant sale del token, nunca del cuerpo ni del host.** Un `tenant_id` en el body es un
+   agujero: firmado no es lo mismo que autorizado. El host sigue sirviendo para la marca, no para el
+   scope.
+3. **Guard grueso hasta E3.** Las rutas de dominio exigen un rol con acceso (owner, admin,
+   professional). Es deliberadamente tosco y lo reemplaza la matriz de E3. Riesgo residual aceptado y
+   explícito: un `assistant` queda afuera aunque en la práctica necesite ver la agenda. Prefiero negar
+   de más a filtrar de menos.
+4. **La autoría de una evolución sale del token.** Si el `author_user_id` viniera del cuerpo, cualquiera
+   podría firmar una nota clínica ajena. Esto no es un detalle de validación: es la diferencia entre un
+   registro y un relato.
+5. **Lectura de historia clínica con auditoría.** T26 incluye registrar quién leyó qué HC. Es la deuda
+   que L10 dejó abierta: `audit_log` con `tenant_id NULL` no se puede escribir con el rol de aplicación
+   (`42501`), así que T26 empieza resolviendo esa ruta de escritura. Sin eso, en E2 se leen datos
+   clínicos sin rastro, y no hay matriz de permisos (E3) que compense.
+6. **Series materializadas, no calculadas al leer.** Al crear o editar una serie se emiten los turnos
+   concretos del rango; cada turno se edita y cancela por separado. Regla dura: **una edición de la
+   serie no toca un turno ya atendido**. Sin esa regla, mover el horario semanal reescribe sesiones que
+   ya ocurrieron.
+7. **Zona horaria por tenant.** `tenants.timezone` (default `America/Argentina/Buenos_Aires`),
+   instantes guardados en UTC, expansión de series en la zona del tenant. Sin esto, "todos los martes
+   18:00" se corre una hora dos veces por año.
+8. **Solapamiento en la base.** `EXCLUDE USING gist (professional_user_id WITH =, tstzrange(starts_at,
+   ends_at) WITH &&) WHERE (status <> 'cancelled')`, que exige `btree_gist`. Si el entorno de
+   despliegue no permite extensiones, el fallback es un chequeo dentro de la misma transacción; el
+   default es la constraint, porque una validación en Go pierde contra dos requests concurrentes.
+9. **Refresh en cookie `HttpOnly`** (T17). El cliente es un navegador, así que el token deja de viajar
+   en el cuerpo: `SameSite=Lax`, `HttpOnly`, `Secure` fuera de desarrollo. Sin token CSRF mientras el
+   frontend siga siendo mismo-origen; se revisa el día que haya un origen distinto.
+
+Orden: primero sesión en el navegador (T17, T18), después el guard (T19), y recién ahí los dominios.
+Sin T19 no hay nada que proteger; sin T17/T18 no hay forma de ejercitar T19 desde el producto.
+Cada dominio entra en tres cortes (migración → dominio y repositorio → HTTP) más su corte de frontend,
+para que cada uno quede cerca de las 400 líneas de review.
+
+Fuera de E2, a propósito: facturación (S2), notificaciones al paciente, adjuntos, y users CRUD con
+invitaciones (S17). T15 sigue pendiente y se hace en E3, con dominios reales sobre los que razonar; T16
+se cierra junto con T19, porque los tests de la capa HTTP cubren justamente el guard nuevo.
+
+Riesgo de la etapa, para que quede dicho: T17–T32 son ~16 cortes y del orden del doble de código que
+E1. Y hasta E3, la única barrera entre un usuario autenticado de un consultorio y la historia clínica de
+sus pacientes es el guard grueso del punto 3.
