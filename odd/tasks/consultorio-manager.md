@@ -79,7 +79,7 @@ en cada transición de tarea.
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
 | T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
-| T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | — | — |
+| T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | — | — |
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | — | — |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
@@ -573,3 +573,52 @@ subdominio sirviendo la app) hay que sumarlo. Y en producción conviene evaluar 
 `__Host-`, que exige `Secure` y `Path=/`, incompatible con el path acotado que usamos hoy.
 
 Pendiente de E2: T18 login en el frontend, T19 guard de tenant y rol, y los tres dominios.
+
+**L16 — E2/T18: sesión en el navegador (commiteado)**
+
+Decisión del usuario, entre tres opciones: **memoria + coordinación entre pestañas**. El access
+token vive solo en un store en memoria; nunca en `localStorage` ni `sessionStorage`.
+
+El detalle que obligó a elegir con cuidado, y que conviene no olvidar: **cada refresh gasta el
+token presentado, y el servidor responde a un token gastado revocando la cadena entera**. Con dos
+pestañas abiertas, cada una con su propio ciclo de refresco, la segunda presenta un token que la
+primera ya gastó, y las dos quedan deslogueadas. Eso no es un bug del servidor: es la detección de
+reuso de T14 haciendo su trabajo. El cliente es el que no puede provocarla.
+
+Cómo se resolvió:
+
+- `navigator.locks` (Web Locks) serializa el refresco: una sola pestaña lo ejecuta.
+- `BroadcastChannel` publica el token resultante; las demás lo adoptan en vez de rotar por su
+  cuenta.
+- Al montar, cualquier pestaña sin token pide uno bajo el lock, y dentro del lock vuelve a
+  verificar si ya hay sesión: si otra pestaña refrescó mientras esperaba, no gasta otra rotación.
+- Un temporizador refresca a los ~14 minutos, no al recibir un 401: un request que falla por token
+  vencido ya es un request perdido.
+
+Evidencia observada (Next en `3000` con `API_ORIGIN` a la API local):
+
+| Verificación | Resultado |
+| --- | --- |
+| `pnpm typecheck` | limpio |
+| `pnpm build` | limpio; rutas `/` (dinámica) y `/login` (estática) |
+| `GET /login` | 200 con los tres campos (`tenantSlug`, `email`, `password`) y el botón |
+| `GET /` | 200; el gate renderiza "Verificando sesión…" |
+| `POST /api/v1/auth/login` vía el proxy de Next | 200 y `Set-Cookie` llega al navegador |
+| `POST /api/v1/auth/refresh` con **solo** la cookie, vía el proxy | 200 |
+
+Ese último par importa: confirma que el proxy mismo-origen de `next.config.ts` no rompe ni el
+`Set-Cookie` ni el path acotado de la cookie.
+
+Límite honesto de esta verificación: **la coordinación entre pestañas no se ejercitó en tiempo de
+ejecución**. No hay automatización de navegador en el proyecto, así que Web Locks y
+`BroadcastChannel` están verificados por tipos y revisión, no por una prueba. Un smoke test con
+Playwright —dos contextos, refresco simultáneo, sesión viva— corresponde a T32.
+
+Riesgo declarado que T19 debe cerrar: el gate es de UX, no de seguridad. `page.tsx` sigue siendo un
+Server Component que consulta la API antes de que el gate corra en el browser, así que el payload
+renderizado contiene los consultorios aunque el visitante no tenga sesión. Hoy la API no exige token
+para `/tenants`; en cuanto T19 lo exija, el gate pasa a acompañar a una barrera real en vez de
+sustituirla.
+
+`Frontend/AGENTS.md` entra al repo porque lo escribe `next dev` en cada arranque y el propio archivo
+pide commitearlo en vez de pelear con el árbol sucio.
