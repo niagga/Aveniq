@@ -42,6 +42,17 @@ func (f *fakeTenantRepository) List(context.Context, int32, int32) ([]tenant.Ten
 	return nil, nil
 }
 
+// ByID resolves the practice from the signed identity, which is how T19 scopes a
+// session to its own tenant.
+func (f *fakeTenantRepository) ByID(_ context.Context, id tenant.ID) (tenant.Tenant, error) {
+	for _, subject := range f.bySlug {
+		if subject.ID == id {
+			return subject, nil
+		}
+	}
+	return tenant.Tenant{}, tenant.ErrNotFound
+}
+
 type fakeUserRepository struct {
 	users []iam.User
 }

@@ -121,8 +121,7 @@ func run() error {
 		Logger:         logger,
 		ServiceVersion: version,
 		CreateTenant:   tenantapp.NewCreateUseCase(tenantRepository, clock.New(), idgen.UUIDGenerator{}),
-		ListTenants:    tenantapp.NewListUseCase(tenantRepository),
-		GetTenant:      tenantapp.NewGetBySlugUseCase(tenantRepository),
+		GetTenantByID:  tenantapp.NewGetByIDUseCase(tenantRepository),
 		Login:          loginUseCase,
 		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
 			Users:    userRepository,

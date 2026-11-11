@@ -80,7 +80,7 @@ en cada transición de tarea.
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
 | T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
-| T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | — | — |
+| T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | inline | `aa422af`, `51d4779` |
 | T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | — | — |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
@@ -622,3 +622,54 @@ sustituirla.
 
 `Frontend/AGENTS.md` entra al repo porque lo escribe `next dev` en cada arranque y el propio archivo
 pide commitearlo en vez de pelear con el árbol sucio.
+
+**L17 — E2/T19: el tenant sale del token y las rutas de dominio exigen identidad (commiteado)**
+
+Hasta este corte, la sesión del navegador era una idea de UX: `/tenants` respondía a cualquiera.
+Ahora no.
+
+- `GET /api/v1/tenants` y `GET /api/v1/tenants/{slug}` exigen bearer token y resuelven la práctica
+  desde el claim `tid` **firmado**, no desde la URL ni del cuerpo. `app.tenant_id` deja de ser
+  elegible por el llamador.
+- `GET /tenants` cambia de semántica: devuelve **la práctica de la sesión**, una sola. La vista
+  plataforma-wide es de operador y no tiene ruta todavía; mantener la lista completa habría dejado
+  un endpoint que enumera consultorios detrás de un guard.
+- Un slug ajeno responde **404**, no 403. Confirmar que otra práctica existe ya es información.
+- Guard de rol grueso: owner, admin, professional. `accountant` recibe 403.
+- `POST /tenants` queda **público a propósito**: es la única puerta por la que una práctica puede
+  existir. E3 lo convierte en signup verificado con rate limiting. Está escrito como decisión, no
+  como olvido.
+
+Consecuencia arquitectónica que hay que registrar, porque invierte lo decidido en E0: **el panel
+pasa a ser Client Component**. El access token vive en memoria del navegador, así que el servidor no
+tiene credencial para pedir datos en nombre del usuario; un Server Component ahí recibe 401. Lo que
+sigue igual es la frontera que importaba: `API_ORIGIN` es server-only y todo pasa por el proxy
+mismo-origen. Y el formulario de alta de consultorio sale del panel: una práctica se crea desde
+afuera, en el onboarding, no desde adentro de una sesión. Vuelve en E3 como pantalla pública.
+
+El cambio de `port.TenantRepository` (se agregó `ByID`) rompió los dos dobles de test que lo
+implementan, que es exactamente lo que se espera de un puerto: los ajustes aparecieron en el build,
+no en producción.
+
+Evidencia end-to-end (API real, tenant y usuarios reales: owner y accountant):
+
+| Caso | Resultado |
+| --- | --- |
+| `GET /tenants` sin token | 401 |
+| `GET /tenants/{slug}` sin token | 401 |
+| `GET /tenants` con owner | 200, **1** ítem, `slug=e2e-t14` |
+| `GET /tenants/e2e-t14` con owner | 200 |
+| `GET /tenants/consultorio-sur` con owner | 404 (existe, pero no es mía) |
+| `GET /tenants` con accountant | 403 |
+| `GET /auth/me` con accountant | 200 (identidad, sin guard de rol: correcto) |
+| `POST /tenants` sin token | 201 (onboarding público) |
+
+Suite Go completa (con y sin DSN), `gofmt` limpio, `sqlc generate` idempotente, `pnpm typecheck` y
+`pnpm build` limpios; el build ahora marca `/` como estática, porque ya no consulta la API en el
+servidor.
+
+Lo que este corte **no** trae: los tests de la capa HTTP completa (T16). Se agregaron dos unitarios
+reales —`bearerToken` con 9 casos y la ausencia de identidad sin middleware— pero ejercitar el router
+entero con dobles de puertos sigue siendo T16, y ahora tiene un motivo más claro: el guard nuevo es
+justo lo que hay que fijar con tests. Riesgo aceptado y escrito desde L14: un `assistant` queda
+afuera del dominio aunque en la práctica pueda necesitar ver la agenda.

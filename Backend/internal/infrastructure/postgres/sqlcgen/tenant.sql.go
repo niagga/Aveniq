@@ -46,6 +46,27 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 	return i, err
 }
 
+const getTenantByID = `-- name: GetTenantByID :one
+SELECT id, slug, name, status, created_at, updated_at
+FROM tenants
+WHERE id = $1
+`
+
+// The identity-scoped read: a session may only fetch the practice its token names.
+func (q *Queries) GetTenantByID(ctx context.Context, id pgtype.UUID) (Tenant, error) {
+	row := q.db.QueryRow(ctx, getTenantByID, id)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 SELECT id, slug, name, status, created_at, updated_at
 FROM tenants

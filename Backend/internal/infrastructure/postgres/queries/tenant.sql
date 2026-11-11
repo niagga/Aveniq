@@ -13,3 +13,9 @@ SELECT *
 FROM tenants
 ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2;
+
+-- name: GetTenantByID :one
+-- The identity-scoped read: a session may only fetch the practice its token names.
+SELECT *
+FROM tenants
+WHERE id = $1;
