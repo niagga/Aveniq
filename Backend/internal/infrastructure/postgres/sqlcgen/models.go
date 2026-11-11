@@ -73,7 +73,7 @@ type Patient struct {
 	IsActive              bool
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
-	Country               *string
+	Country               string
 	DocumentNormalized    *string
 	TaxID                 *string
 	TaxIDKind             *string

@@ -41,8 +41,8 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 	insert := func(ctx context.Context, tenantID, fullName string) error {
 		return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, full_name, created_at, updated_at)
-				VALUES ($1, $2, $3, now(), now())`,
+				INSERT INTO patients (id, tenant_id, full_name, country, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', now(), now())`,
 				uuid.NewString(), tenantID, fullName)
 			return err
 		})
@@ -91,8 +91,8 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 	t.Run("writing into another tenant is refused by the policy", func(t *testing.T) {
 		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, full_name, created_at, updated_at)
-				VALUES ($1, $2, $3, now(), now())`,
+				INSERT INTO patients (id, tenant_id, full_name, country, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', now(), now())`,
 				uuid.NewString(), scratchTenantB, "Intruso")
 			return err
 		})

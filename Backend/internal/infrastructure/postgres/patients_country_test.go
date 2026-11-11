@@ -101,7 +101,7 @@ func TestPatientsCountryModel(t *testing.T) {
 
 	t.Run("a document without its country is refused", func(t *testing.T) {
 		half := patient{documentType: text("dni"), document: text("30111222"), normalized: text("30111222")}
-		expectCode(t, insert(ctx, scratchTenantB, half), "23514", "document without country")
+		expectCode(t, insert(ctx, scratchTenantB, half), "23502", "document without country")
 	})
 
 	t.Run("fiscal condition belongs to the country too", func(t *testing.T) {
