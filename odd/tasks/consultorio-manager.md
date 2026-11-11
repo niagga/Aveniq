@@ -63,7 +63,7 @@ en cada transición de tarea.
 | T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
 | T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | pendiente |
 | T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
-| T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | worker | pendiente |
+| T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | worker | en curso |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
 
@@ -292,3 +292,94 @@ Advertencias **no** corregidas, preexistentes en `a65c581` o fuera del alcance d
 Evidencia: `go build`, `go vet` y `gofmt` limpios; `go test ./...` con ambos DSN verde, con
 `TestUserRepositoryRefusesToRunOutsideTenantScope` y `TestUserRepositoryRejectsCrossTenantAccess`
 (5 subtests) nuevos, y `TestIsolation` intacto.
+
+**L11 — Decisiones de diseño de T14 (auth), antes de escribir código**
+
+La autenticación tiene una diferencia con T12/T13: el aislamiento multi-tenant lo resuelve la base,
+pero *quién es el que llama* no lo puede resolver RLS. Estas decisiones se fijan acá porque cada una
+cambia el contrato del endpoint y equivocarse implica reescribir.
+
+1. **El login necesita el tenant, no solo el email.** El email es único por tenant, no global: el mismo
+   humano puede existir en dos consultorios. Por eso `POST /api/v1/auth/login` recibe
+   `{tenant_slug, email, password}`. Resolver el tenant por slug ocurre **fuera** del scope (la tabla
+   `tenants` no tiene RLS); a partir de ahí todo corre dentro de `WithTenant`.
+2. **El refresh token lleva el tenant en claro.** Para rotar hay que abrir el scope antes de buscar la
+   sesión, y RLS no deja buscar sin scope. Formato `v1.<tenant-uuid>.<32 bytes base64url>`, y en
+   `sessions.refresh_hash` se guarda el SHA-256 **del token completo**. Cambiar el prefijo cambia el
+   hash y no matchea ninguna fila: el tenant no es un permiso, es una pista de búsqueda. El secreto
+   sigue siendo el segundo segmento.
+3. **Reuso = matar la cadena, no la hoja.** Si se presenta un token cuyo `revoked_at` no es NULL, no se
+   responde "vencido": se revoca toda la cadena de sucesores (`replaced_by`) porque el token robado y
+   el legítimo compiten, y no se sabe cuál es cuál. Se responde error, no un token nuevo.
+4. **T14 autentica; T15 autoriza.** El middleware resuelve identidad (tenant, usuario, rol) y la pone en
+   el contexto. La matriz de permisos por dominio es T15: mezclarlas ahora haría que el middleware
+   tenga que importar cada dominio futuro.
+5. **Access token firmado con HMAC-SHA256, sin dependencias nuevas.** Claims `sub`, `tid`, `role`, `iat`,
+   `exp`. Se implementa con `crypto/hmac` y `encoding/base64` del stdlib en vez de sumar una librería
+   JWT cuyo `alg` haya que defender: no se acepta `alg` del token, se verifica siempre HS256 propio.
+   Vida corta (15 min) porque no hay revocación de access tokens en E1.
+6. **Argon2id con parámetros explícitos y verificables.** `m=64 MiB, t=3, p=4`, salt de 16 bytes, key de
+   32 bytes, codificación PHC estándar. El verificador parsea los parámetros **del hash almacenado**, no
+   de una constante: si mañana se suben los costos, los hashes viejos siguen verificando.
+7. **El agujero de la FK cross-tenant se cierra en el adaptador.** `SessionRepository.Create` verifica en
+   la misma transacción que el `user_id` es visible en el scope (`SELECT 1 FROM users WHERE id = $1`):
+   RLS devuelve cero filas para un usuario de otro tenant y la sesión no se crea. Se resuelve en el
+   adaptador y no en el caso de uso para que ningún llamador futuro pueda olvidarlo.
+8. **Sin usuarios activos no hay login, y sin revelar cuál falló.** `is_active = false` y contraseña
+   incorrecta producen el mismo error y el mismo tiempo de respuesta: se verifica el hash contra un
+   dummy cuando el usuario no existe o está inactivo. Un oráculo de "este email existe" en un SaaS de
+   salud es un problema de privacidad, no de UX.
+
+Cortes de review previstos, sobre `feat/e1-t14-auth`:
+
+| Unidad | Contenido | Por qué se separa |
+| --- | --- | --- |
+| 1 | `platform/authn` (argon2id, tokens, verificación) + `SessionRepository` y queries | Primitivas sin HTTP: se pueden romper sin tocar la API |
+| 2 | Casos de uso login/refresh/logout + middleware + handlers + wiring | Es donde vive la lógica de rotación y reuso |
+
+
+**L12 — E1/T14 unidad 1: primitivas de auth y sesiones (commiteado)**
+
+Unidad 1 de L11 completa, en tres cortes sobre `feat/e1-t14-auth`:
+
+| Commit | Unidad | Contenido |
+| --- | --- | --- |
+| `6a3f9eb` | authn: hashing | argon2id PHC, parámetros leídos del hash almacenado |
+| `1905de1` | authn: tokens | refresh `v1.<tenant>.<32B>` + SHA-256 del token completo; access HMAC-SHA256 propio |
+| `3b09615` | sesiones | `SessionRepository`, queries, guard cross-tenant, rotación y `RevokeChain` |
+
+Decisión de dependencia tomada por el orquestador, no por el worker: `golang.org/x/crypto`
+no figuraba en `go.mod` (solo transitivamente en `go.sum`), y argon2id vive ahí. Se agregó
+`v0.58.0` — la versión que ya estaba en el árbol — en vez de dejarla subir a `v0.59.0`, para
+que el corte no arrastre un bump ajeno a T14.
+
+Evidencia observada:
+
+- RED de las primitivas: `go test ./internal/platform/authn/` → `no non-test Go files`.
+- RED del adaptador: **no se observó**. El writer de ODD falló dos veces con
+  `Writer repository preparation was unavailable or its session/target changed`, sin encolar
+  tarea, así que la unidad se escribió inline y la implementación precedió a los tests. Se
+  compensó con prueba de mutación, no con una declaración de confianza (ver abajo).
+- `gofmt` limpio en todo lo tocado; `go build ./...` y `go vet ./...` limpios.
+- `sqlc generate` idempotente: segunda corrida no agrega diff.
+- `go test ./...` verde **sin** DSN (los de base se saltean) y **con** ambos DSN.
+- `TestSessionRepository`: 7/7 subtests. `TestPasswordHasher*` y `TestAccessTokens*` verdes.
+
+**Prueba de mutación del guard cross-tenant.** No es ceremonia: es la única evidencia de que
+los tests muerden cuando no hubo RED. Se neutralizó el chequeo de visibilidad
+(`SessionUserVisible`) y el subtest falló exactamente como debía:
+`error = <nil>, want iam: not found: a foreign user must look like a missing one`. Sin el guard,
+la FK de `sessions.user_id` acepta un usuario de otro tenant y la sesión se crea. Esto confirma
+empíricamente la advertencia que dejó L10: el chequeo de FK **no** pasa por RLS. Restaurado y
+reverificado verde.
+
+Hallazgos que la unidad 2 necesita:
+
+- `Rotate` recibe la sesión previa **ya revocada** por el dominio (`Session.ReplaceWith`), e
+  inserta el sucesor antes de escribir `replaced_by` porque esa columna es FK.
+- Una actualización de cero filas se reporta como `iam.ErrInvalidTransition`, no `ErrNotFound`:
+  "gasto ya usado, posible replay" tiene que ser distinguible de "token que nunca existió".
+- `ByRefreshHash` devuelve filas revocadas a propósito. Filtrarlas convertiría "este token ya se
+  usó" en "este token no existe" y apagaría la detección de reuso.
+- `gofmt -l` reporta `Backend/internal/interfaces/http/tenant_handlers.go`, preexistente a esta
+  tarea y no tocado acá.
