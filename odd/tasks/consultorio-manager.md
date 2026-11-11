@@ -248,3 +248,47 @@ auditoría de solo-escritura, pero quien escriba el visor de auditoría tiene qu
 
 Pendiente de E1: T14 auth con argon2id, rotación de refresh y detección de reuso; T15 matriz de
 permisos e invitaciones; T16 tests de la capa HTTP.
+
+**L10 — T13 bajo verificación adversarial: veredicto y correcciones (commit `5a857c7`)**
+
+Se corrió un verificador independiente con el encargo explícito de romper el aislamiento, no de
+confirmarlo. Veredicto: **la garantía se sostiene** — ninguna ruta devuelve datos de otro tenant — pero
+el código que la rodea mentía sobre lo que pasaba. Un defecto real y varias advertencias.
+
+Corregido:
+
+1. **`scoped` dejó de caer al pool.** Antes, sin transacción de tenant, la respuesta la daba RLS: cero
+   filas, que el llamador veía como `ErrNotFound`. Un bug de scope quedaba indistinguible de un usuario
+   borrado. Ahora devuelve `ErrTenantScopeMissing` antes de tocar la base, en los seis métodos.
+2. **`42501` ya no se reporta como falta de scope.** El mapeo asumía que solo un `app.tenant_id` sin
+   setear produce ese código. Es falso: un `REVOKE INSERT` o un INSERT en tenant ajeno dan lo mismo, así
+   que una regresión de permisos mandaba a leer los logs buscando el problema equivocado. Ahora mapea a
+   `ErrInsufficientPrivilege`.
+3. **Los comentarios decían que UPDATE y DELETE "levantan 42501" fuera de scope. No lo hacen.** `USING`
+   filtra la fila, la sentencia afecta cero y sqlc reporta `ErrNoRows`; solo el INSERT es rechazado por
+   `WITH CHECK`. La asimetría quedó escrita y fijada por test, porque leer "cero filas" como veredicto de
+   permisos es exactamente cómo se malinterpreta una frontera.
+4. **`NewPool` se niega a arrancar** si el rol de conexión es superusuario o tiene `BYPASSRLS`. No es
+   teórico: el rol original del clúster local tenía ambos atributos y volvía decorativa toda la capa de
+   aislamiento mientras los tests seguían verdes. Verificado: con el rol dueño la API aborta con mensaje
+   explícito; con `aveniq_app` escucha normal.
+5. La aserción de compilación ahora nombra `port.UserRepository` en vez de repetir su conjunto de
+   métodos, así un rename en el port es un error de build acá y no una sorpresa en el composition root.
+
+Hallazgo nuevo del propio test: **una sentencia fallida aborta la transacción completa**. Por eso cada
+intento cross-tenant del test corre en su propia `WithTenant`, y por eso un caso de uso no puede intentar
+recuperarse dentro de la misma unidad de trabajo: si una sentencia falla, la unidad terminó.
+
+Advertencias **no** corregidas, preexistentes en `a65c581` o fuera del alcance de T13, asignadas a T14/T15:
+
+- Una fila de `sessions` en tenant A puede referenciar un `user_id` de tenant B si se conoce el UUID: el
+  chequeo de FK no pasa por RLS. **T14 no puede construir sesiones sobre un `user_id` sin validar.**
+- `audit_log` con `tenant_id NULL` no se puede leer ni **escribir** con el rol de aplicación (42501). L9
+  decía solo "no se puede leer"; el plan de auditoría de solo-escritura necesita una ruta propia.
+- `Create` en un tenant inexistente devuelve el `PgError` 23503 crudo, violando el contrato de `port.go`,
+  y es un oráculo de existencia de tenants una vez que T15 resuelva tenants desde el request.
+- `List(-1, -1)` devuelve `2201X` crudo: la paginación no se valida en el port.
+
+Evidencia: `go build`, `go vet` y `gofmt` limpios; `go test ./...` con ambos DSN verde, con
+`TestUserRepositoryRefusesToRunOutsideTenantScope` y `TestUserRepositoryRejectsCrossTenantAccess`
+(5 subtests) nuevos, y `TestIsolation` intacto.
