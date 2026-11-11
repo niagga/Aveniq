@@ -83,7 +83,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The pnpm version is not repeated here: the action reads `packageManager`
+      # from a package.json, and by default it looks for one at the repository
+      # root. This repository is a monorepo whose only package.json lives in
+      # Frontend/, so the path has to be given explicitly. Hardcoding `version`
+      # instead would let the workflow drift from the pinned toolchain.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: Frontend/package.json
 
       - uses: actions/setup-node@v4
         with:
