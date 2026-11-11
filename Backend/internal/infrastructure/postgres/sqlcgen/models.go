@@ -35,6 +35,27 @@ type Invitation struct {
 	CreatedAt  time.Time
 }
 
+type Patient struct {
+	ID                    pgtype.UUID
+	TenantID              pgtype.UUID
+	FullName              string
+	BirthDate             pgtype.Date
+	DocumentType          *string
+	DocumentNumber        *string
+	Phone                 *string
+	Email                 *string
+	EmergencyContactName  *string
+	EmergencyContactPhone *string
+	FiscalCondition       *string
+	Cuit                  *string
+	LegalName             *string
+	FiscalAddress         *string
+	AdministrativeNotes   *string
+	IsActive              bool
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
 // Platform-wide permission catalog. Codes are stable API surface.
 type Permission struct {
 	Code        string
