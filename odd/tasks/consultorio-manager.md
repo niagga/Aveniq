@@ -62,7 +62,7 @@ en cada transición de tarea.
 | T10 | S8 | E0 | `docker-compose` + Caddy para el camino con Docker | inline | — |
 | T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
 | T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | pendiente |
-| T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | pendiente |
+| T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | worker | pendiente |
 | T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | worker | pendiente |
@@ -197,3 +197,54 @@ El adaptador de Postgres necesita exponer el contexto de tenant **por transacci�
 `WithTenant(ctx, tenantID, func(tx) error)`), porque RLS lee `app.tenant_id`. Setearlo por conexión con
 `SET` filtaría tenants entre requests: el pool reutiliza conexiones entre consultorios distintos. Ese
 diseño se define antes de escribir el dominio.
+
+**L9 — E1/T13: dominio IAM y repositorio de usuarios (completado)**
+
+Cortes de review, en dos unidades sobre `feat/e1-t13-iam-domain`:
+
+| Commit | Unidad | Líneas |
+| --- | --- | --- |
+| `13bdc2d` | Dominio IAM puro (user, role, session, errors) + tests | ~960 |
+| `970221d` | Transactor, repositorio, queries, sqlcgen y tests de base | ~1040 |
+
+El corte no es cosmético: el segundo slice es el que toca aislamiento multi-tenant, así que la review
+nativa lo puede tomar solo, sin el dominio de por medio.
+
+Decisiones materializadas:
+
+- `NormalizeEmail` replica `users_email_canonical` (`lower(btrim(...))`) y `users_email_shape` exactamente,
+  incluida la rareza de que `btrim` recorta espacios pero no tabs. El caso `"\ta@b"` queda fijado por test.
+- `PasswordHash` es opaco y solo exige no-vacío. Hashear es T14: un dominio que sabe hashear pierde la
+  frontera que lo hace testeable sin stack de auth.
+- `RoleCode` es un conjunto cerrado de los 5 roles sembrados, y `TestRoleCatalogDrift` compara contra la
+  tabla `roles` en las dos direcciones (ningún constante huérfano, ningún rol sembrado ausente).
+- `Transactor.WithTenant` usa `set_config('app.tenant_id', $1, true)`, la forma parametrizada de
+  `SET LOCAL` — que no acepta bind parameters y obligaría a interpolar el identificador en el SQL. La
+  transacción viaja en el contexto bajo una clave no exportada, así que solo el paquete de postgres
+  puede ponerla o sacarla.
+- Las queries **no** llevan filtro por tenant a propósito: RLS lo deriva de `app.tenant_id`, y un
+  `WHERE tenant_id = $n` sugeriría que el filtro es lo que protege el dato. Fuera de una transacción de
+  tenant las políticas cierran por defecto (lecturas 0 filas, escrituras `SQLSTATE 42501`).
+
+Evidencia observada:
+
+- RED del dominio: `go test ./internal/domain/iam/` → `no non-test Go files` (build failed).
+- RED de infraestructura: `go vet` → `undefined: postgres.Transactor`, `undefined: postgres.NewUserRepository`.
+- `go build ./...` y `go vet ./...` limpios.
+- `sqlc generate` no modifica ningún archivo existente; solo agrega `sqlcgen/iam.sql.go` desde las queries nuevas.
+- `go test ./...` con ambos DSN: `TestUserRepository` 7/7 subtests, `TestRoleCatalogDrift`,
+  `TestIsolation` 6/6 (intacto), 10 subtests de validación de usuario, 8 de `NormalizeEmail`,
+  8 de transiciones, `TestNewSession` y `TestSessionRevocation`.
+- `go test ./...` sin DSN sigue verde: los tests de base se saltean limpiamente.
+
+Corrección sobre el trabajo del worker: `WithTenant` no tenía rollback diferido, así que un `panic`
+dentro de la unidad de trabajo dejaba tomada una conexión del pool por el resto de la vida del proceso.
+Se agregó `defer tx.Rollback` y se quitaron los dos rollbacks explícitos que quedaban redundantes.
+
+Hallazgo de esquema para T15+, sin acción en T13: `audit_log.tenant_id` es nullable y su política RLS
+compara contra esa columna, así que una fila de auditoría sin tenant (operador de soporte, tenant
+borrado) no se puede leer nunca a través de RLS, porque NULL no matchea. Parece intencional para
+auditoría de solo-escritura, pero quien escriba el visor de auditoría tiene que saberlo.
+
+Pendiente de E1: T14 auth con argon2id, rotación de refresh y detección de reuso; T15 matriz de
+permisos e invitaciones; T16 tests de la capa HTTP.
