@@ -81,7 +81,7 @@ en cada transición de tarea.
 | T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
 | T19 | S5, S11 | E2 | API: tenant desde el token y guard grueso por rol en las rutas de dominio | inline | `aa422af`, `51d4779` |
-| T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | — | — |
+| T20 | S1, S16 | E2 | Migración `0004`: pacientes con datos fiscales, unicidad de documento por tenant, RLS forzado | inline | `2cf9dd7` |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | — | — |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | — | — |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
@@ -673,3 +673,50 @@ reales —`bearerToken` con 9 casos y la ausencia de identidad sin middleware—
 entero con dobles de puertos sigue siendo T16, y ahora tiene un motivo más claro: el guard nuevo es
 justo lo que hay que fijar con tests. Riesgo aceptado y escrito desde L14: un `assistant` queda
 afuera del dominio aunque en la práctica pueda necesitar ver la agenda.
+
+**L18 — E2/T20: esquema de pacientes (commiteado)**
+
+Migración `0004` (commiteada en `2cf9dd7`), aplicada a la base local (`goose` → versión 4) y
+verificada con un test que corre **como el rol de aplicación**, no como el dueño.
+
+Decisiones de esquema que quedan fijadas:
+
+- **Documento opcional como par, no como dos campos.** Tipo sin número (o al revés) es una fila a
+  medio llenar que no se puede cruzar con nada: `patients_document_complete` lo prohíbe.
+- **Único por tenant, compartible entre tenants.** Índice único parcial sobre
+  `(tenant_id, document_type, document_number)`. La misma persona puede ser paciente de dos
+  consultorios; el mismo documento, una sola vez en cada uno.
+- **`full_name` es lo único obligatorio.** Exigir documento empujaría a registrar a alguien en las
+  notas administrativas, donde no se valida nada.
+- **Baja lógica, nunca `DELETE`.** `is_active` existe porque `0005` va a colgar notas clínicas de
+  esta fila: un borrado o se lleva la historia por cascada o falla en la FK. El índice de listado es
+  parcial (`WHERE is_active`).
+- **Condición fiscal como conjunto cerrado** de los cuatro valores que AFIP acepta, y **CUIT con
+  forma de 11 dígitos**: un typo tiene que fallar en el formulario y no en la plataforma de
+  facturación.
+- **`administrative_notes` no es clínica.** Está dicho en el comentario de la columna, porque es
+  exactamente donde la información clínica se filtra cuando no hay otro lugar.
+
+**Lo que L14 mandó verificar en vez de confiar, verificado.** La pregunta era si los
+`ALTER DEFAULT PRIVILEGES` de `0003` alcanzan a una tabla creada por una migración posterior.
+Respuesta: **sí**. La migración `0004` tiene **cero** sentencias `GRANT`, y el rol `aveniq_app`
+inserta, lee y filtra sin que nadie le otorgue nada.
+
+Evidencia (`TestPatientsSchemaPrivileges`, 5 subtests, todos verdes):
+
+| Caso | Resultado |
+| --- | --- |
+| `aveniq_app` inserta en `patients` sin GRANT explícito | OK |
+| tenant B cuenta pacientes de A | 0 |
+| tenant A se cuenta a sí mismo | > 0 |
+| sin `app.tenant_id` | 0 filas (cierra por defecto) |
+| insert con `tenant_id` ajeno | `SQLSTATE 42501` |
+| mismo documento dos veces en un tenant | `SQLSTATE 23505` |
+| mismo documento en otro tenant | permitido |
+
+`go test ./...` verde con y sin DSN; `gofmt` limpio; `sqlc generate` idempotente y agrega el modelo
+`Patient` (+ `CreatePatient`/queries vendrán en T21).
+
+Nota de higiene: el test de esquema reusa `newScratchDatabase`, `migrate` y `seedTenants` de la
+suite existente y agrega un helper local `withTenantSetting`, porque `set_config` transaccional es
+la única forma que RLS lee y no estaba expuesto como utilidad de test.
