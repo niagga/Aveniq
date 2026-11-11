@@ -85,8 +85,8 @@ func New(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, error)
 		return Patient{}, err
 	}
 	subject.IsActive = true
-	subject.CreatedAt = now.UTC()
-	subject.UpdatedAt = now.UTC()
+	subject.CreatedAt = stored(now)
+	subject.UpdatedAt = stored(now)
 	return subject, nil
 }
 
@@ -223,7 +223,7 @@ func (p Patient) ChangeProfile(draft Draft, now time.Time) (Patient, error) {
 
 	updated.IsActive = p.IsActive
 	updated.CreatedAt = p.CreatedAt
-	updated.UpdatedAt = now.UTC()
+	updated.UpdatedAt = stored(now)
 	return updated, nil
 }
 
@@ -234,7 +234,7 @@ func (p Patient) Deactivate(now time.Time) (Patient, error) {
 		return Patient{}, fmt.Errorf("%w: the patient is already inactive", ErrInvalidTransition)
 	}
 	p.IsActive = false
-	p.UpdatedAt = now.UTC()
+	p.UpdatedAt = stored(now)
 	return p, nil
 }
 
@@ -244,7 +244,7 @@ func (p Patient) Activate(now time.Time) (Patient, error) {
 		return Patient{}, fmt.Errorf("%w: the patient is already active", ErrInvalidTransition)
 	}
 	p.IsActive = true
-	p.UpdatedAt = now.UTC()
+	p.UpdatedAt = stored(now)
 	return p, nil
 }
 
@@ -269,4 +269,14 @@ func sanitizeEmail(value *string) *string {
 	}
 	lowered := strings.ToLower(*cleaned)
 	return &lowered
+}
+
+// stored truncates a timestamp to the resolution Postgres keeps.
+//
+// The schema stores microseconds, so a nanosecond time comes back different from
+// the one that was written. Truncating in the aggregate is what keeps "the time the
+// domain says" and "the time storage returns" the same value instead of leaving a
+// comparison that silently depends on where it runs.
+func stored(at time.Time) time.Time {
+	return at.UTC().Truncate(time.Microsecond)
 }
