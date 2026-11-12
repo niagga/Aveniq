@@ -87,7 +87,7 @@ en cada transición de tarea.
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | worker + inline | `5182547`, `5d467fb` |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | inline | `13c7d72` |
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | inline | `4d54a24` |
-| T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
+| T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | inline | `bc4163a` |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
 | T28 | S15, S5 | E2 | Migración `0008`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
@@ -1079,11 +1079,53 @@ idempotent (adds the two models).
 T25 (clinical domain and repository), T26 (HTTP, which starts by giving `audit_log` a write path),
 T27 (frontend), then the schedule in T28–T31 and T32 for the end-to-end pass.
 
+**L25 — E2/T25: clinical domain and persistence (committed)**
+
+`internal/domain/clinical` (record, note, errors), the `ClinicalRepository` port, the queries, the
+adapter and its tests. `sqlc generate` adds `clinical.sql.go`.
+
+### Where the invariants live, and why that split
+
+| Invariant | Enforced by | Why not the other side |
+| --- | --- | --- |
+| One record per patient | the schema (`UNIQUE (tenant_id, patient_id)`) | it is a storage fact, and the adapter uses it as an upsert key |
+| The patient and the author are in this tenant | the schema (composite FKs, 0007) | a foreign key cannot consult RLS, so the guard belongs in the key |
+| Content not blank | both | the schema refuses it and the domain names the field |
+| Author present | the domain | the token decides it; the column is NOT NULL, but "which claim" is not a schema question |
+| **The encounter is not in the future** | **only the domain** | `now()` is not immutable, so a `CHECK` cannot express it. The schema comment says so, to stop the next reader from trying |
+| Notes are never revised | the domain (no method) and the comment on the table | a delete would cascade clinical history away; an in-place edit erases who changed what |
+
+### Two aggregates, one port
+
+`ClinicalRepository` covers both, because the screen reads them as a unit and the writes share a
+tenant transaction. Splitting it would create two seams that always move together — the kind of
+abstraction that costs a decision every time it is touched and never pays for it.
+
+### Verified
+
+- Domain: 13 tests/subtests. **Mutation-checked**: removing the future-date check makes
+  `TestNewNoteValidation/future_encounter` fail with `error = <nil>, want a ValidationError`. That is
+  the one invariant no constraint can back up, so it is the one worth proving a test holds.
+- Repository: 7 subtests — upsert creates once and updates after, notes append and list newest first
+  with their author, a note cannot hang off another practice's patient (`ErrPatientNotVisible`), the
+  rows are invisible across tenants, a missing record is `ErrNotFound`, everything is refused outside
+  a tenant transaction, and a malformed id is a `ValidationError` naming the field rather than a
+  driver error.
+- Schema tests from T24 still green (7 subtests). Full suite with and without DSNs; `gofmt` clean;
+  `sqlc` idempotent.
+
+### Next
+
+T26 (HTTP). It starts with the decision recorded in L10 and repeated in L24: `audit_log` cannot be
+written by the application role when the row has no tenant (`42501`). Reading clinical data without a
+trail is a compliance problem, and two routes are on the table — widen the policy, or a narrow
+`SECURITY DEFINER` writer. The choice belongs to the owner, with the code in front of them.
+
 **L26 — Audit log: correcting an overstated blocker, and a seeded development practice**
 
 ### The correction
 
-L10 and L24 both implied that `audit_log` "cannot be written by the application role". That is
+L10, L24 and L25 all implied that `audit_log` "cannot be written by the application role". That is
 imprecise, and the imprecision mattered: it made T26 look blocked behind a `SECURITY DEFINER`
 function that nothing needs.
 
