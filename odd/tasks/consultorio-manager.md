@@ -1078,3 +1078,59 @@ idempotent (adds the two models).
 
 T25 (clinical domain and repository), T26 (HTTP, which starts by giving `audit_log` a write path),
 T27 (frontend), then the schedule in T28–T31 and T32 for the end-to-end pass.
+
+**L26 — Audit log: correcting an overstated blocker, and a seeded development practice**
+
+### The correction
+
+L10 and L24 both implied that `audit_log` "cannot be written by the application role". That is
+imprecise, and the imprecision mattered: it made T26 look blocked behind a `SECURITY DEFINER`
+function that nothing needs.
+
+What the schema actually says (`0002`):
+
+```sql
+CREATE POLICY audit_log_tenant_isolation ON audit_log
+    FOR ALL
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+- An INSERT whose `tenant_id` equals the tenant set for the transaction **passes**.
+- An INSERT with `tenant_id IS NULL` **fails** with `42501`, because `NULL = <uuid>` is not true.
+
+A clinical access event always has a tenant: the record belongs to a practice and the reader belongs
+to that practice. So it writes today, inside the same `WithTenant` as the read. No policy widening, no
+`SECURITY DEFINER`.
+
+The NULL case existed for platform events — the schema even documents it: `actors` "may be a support
+operator outside the tenant", and the foreign key is `ON DELETE SET NULL`. E2 has no platform events.
+
+**One real consequence worth recording.** `ON DELETE SET NULL` means that deleting a practice turns
+its audit rows into NULL-tenant rows, which then match no policy and become unreadable by anyone. The
+trail of a deleted practice is lost. When deletion becomes a feature (E3 or later), it has to become a
+soft delete on `tenants` or a dedicated archival path — not a cascade.
+
+What T26 still needs, and it is smaller than advertised:
+
+1. Write the audit row inside the same transaction as the clinical read, so an unaudited read cannot
+   commit.
+2. Decide failure semantics. Recommendation: fail closed — if the audit insert fails, the read fails.
+   It runs on the same engine in the same transaction, so a failure there means the database is
+   already broken.
+3. Make `audit_log` append-only for the application role: `REVOKE UPDATE, DELETE`. Today the `FOR ALL`
+   policy lets an application bug delete the trail it is supposed to leave.
+
+### The seeded practice
+
+`scripts/local-seed.ps1` creates the practice `demo` and an owner `demo@aveniq.local`, idempotently,
+with a development password printed on screen. Not a migration: a seeded practice with a known
+password must never ship to production, and migrations run wherever the schema runs.
+
+The argon2id hash is embedded because PowerShell cannot compute it; it was minted with the production
+parameters, so the seeded login exercises the real verification path. Verified end to end: login 200
+with `role: owner`, wrong password 401, and the patients endpoint answers an empty roster for the new
+practice.
+
+The script is written as UTF-8 **with BOM**: PowerShell 5.1 reads a BOM-less file as ANSI and mangles
+accents, which would have silently corrupted a practice name the day somebody types one with a tilde.
