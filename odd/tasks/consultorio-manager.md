@@ -88,7 +88,7 @@ en cada transición de tarea.
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | inline | `13c7d72` |
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | inline | `4d54a24` |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | inline | `bc4163a` |
-| T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
+| T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | inline | `771c80f`, `fbbc46b` |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
 | T28 | S15, S5 | E2 | Migración `0008`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
 | T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
@@ -1176,3 +1176,77 @@ practice.
 
 The script is written as UTF-8 **with BOM**: PowerShell 5.1 reads a BOM-less file as ANSI and mangles
 accents, which would have silently corrupted a practice name the day somebody types one with a tilde.
+
+**L27 — E2/T26: clinical HTTP, and the audit trail that makes reading it accountable (committed)**
+
+Two slices: the audit path (`771c80f`) and the clinical endpoints (`fbbc46b`).
+
+### The audit trail, finished
+
+`0008` revokes UPDATE and DELETE on `audit_log` from the application role. SELECT and INSERT stay. The
+policy was `FOR ALL`, which meant an application bug could rewrite or erase the trail it is supposed to
+leave; privileges are what make "append-only" true rather than intended.
+
+**Mutation-checked**: removing the revoke makes the schema test report
+`updating the audit log: error = <nil>, want SQLSTATE 42501` for both UPDATE and DELETE.
+
+The adapter writes through the tenant transaction in the context, never through the pool. If the audit
+insert had its own connection, a read could commit while its trail did not — and a read without a trail
+is the exact thing the table exists to prevent. Fail closed is nearly free here: same engine, same
+transaction, so a failure means the database is already broken.
+
+### The endpoints
+
+Four routes under the patient they belong to, because that is how the data is read and how the E3 matrix
+will reason: access is decided per patient, not per table.
+
+| Route | |
+| --- | --- |
+| `GET /patients/{id}/clinical-record` | the frame, audited as `clinical.read` |
+| `PUT /patients/{id}/clinical-record` | upsert of the frame, audited as `clinical.write` |
+| `GET /patients/{id}/clinical-notes` | one page, newest encounter first, audited as `clinical.read` |
+| `POST /patients/{id}/clinical-notes` | append, audited as `clinical.write` |
+
+**The author is not a body field.** It comes from the verified token; a body field with that name would
+let a client sign a clinical note as somebody else. The request type simply has no such field, which is
+a stronger statement than validating one.
+
+### Evidence
+
+End to end, against the real API on the seeded `demo` practice:
+
+| Step | Result |
+| --- | --- |
+| create patient | 201 |
+| `PUT` record | 200 |
+| `GET` record | 200, `chiefComplaint=Insomnio` |
+| `POST` note | 201, `authorId` equals the logged user |
+| `GET` notes | 200, 1 item |
+| note dated in the future | 422 `clinical: invalid encountered_at: must not be in the future` |
+| no token | 401 |
+| another practice | 404 |
+
+And the trail, read straight from the table:
+
+```
+clinical.write clinical_record por 5ad0f7fc
+clinical.read  clinical_record por 5ad0f7fc
+clinical.write clinical_note   por 5ad0f7fc
+clinical.read  clinical_note   por 5ad0f7fc
+```
+
+Every entry attributed to the caller, in the order the operations happened.
+
+Tests: `internal/application/clinical` has four (read is audited once and shares the transaction; a
+broken audit fails the read; the note author is the caller; pagination is validated here), plus
+`TestAuditLogAppendOnly` with four subtests against the real database. Full suite with DSNs green,
+`gofmt` clean, `sqlc` idempotent.
+
+### What this still does not do, deliberately
+
+- **No per-role authorization.** Any owner, admin or professional of a practice can read every patient's
+  clinical record of that practice. The permission matrix (T15, E3) is what will say "a professional
+  sees their own patients"; until then the guarantee is "within the practice", not "within the
+  treatment".
+- Reading is audited; *which fields* were shown is not. The event records the entity and its id, not a
+  summary of the content. That is enough to answer "who looked", which is what the trail is for.
