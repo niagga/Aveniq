@@ -86,7 +86,7 @@ en cada transición de tarea.
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | inline | `50cb193`, `db2f998`, `b36a756` |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | worker + inline | `5182547`, `5d467fb` |
 | T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | inline | `13c7d72` |
-| T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
+| T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | inline | `4d54a24` |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
@@ -1019,3 +1019,62 @@ Two environment notes from this session: the owner's dev server on port 3000 (PI
 previous day) accepted the connection but never answered a request, and Next 16 refuses to start a
 second dev server in the same directory, so the check ran against `next start` on 3001 instead. Worth
 restarting that server before using the screen by hand.
+
+**L24 — E2/T24: the clinical schema, and closing the foreign-key hole for good (committed)**
+
+Migration `0007`. Two tables: `clinical_records` (1:1 with a patient: chief complaint, background,
+objectives) and `clinical_notes` (one per encounter, with author and `encountered_at`). The split is
+not cosmetic — mixing the stable frame with the running story is what makes a permission matrix
+unable to say "the frame is administrative, the notes are clinical".
+
+### The decision worth keeping
+
+**The tenant travels inside the foreign keys.** A foreign key does not consult row-level security, so
+`references patients (id)` would let a note hang off another practice's patient if someone knew the
+UUID. That is the hole L10 recorded for sessions, and T14 had to close in Go with an explicit
+visibility query.
+
+For clinical data the guard belongs in the schema: `(tenant_id, patient_id) -> patients (tenant_id, id)`,
+and the same for the author. It needed two unique indexes on the parents (`patients`, `users` on
+`(tenant_id, id)`), added here.
+
+This is the difference between a guarantee and a habit: the adapter can forget a visibility check; a
+constraint cannot.
+
+### Verified, including the mutation
+
+`TestClinicalSchema`, 7 subtests, all green:
+
+| Case | Result |
+| --- | --- |
+| application role writes both tables with zero GRANT statements | OK |
+| a second record for the same patient | `23505` |
+| a note pointing at another practice's patient | `23503`, and nothing written |
+| a note signed by a user of another practice | `23503` |
+| blank content | `23514` |
+| tenant B sees A's clinical rows | 0 |
+| no `app.tenant_id` | 0 rows on both tables |
+
+**The mutation matters, and the first attempt was invalid.** Replacing the composite key with a
+syntax error made the test fail for the wrong reason — the migration did not apply at all — which
+proves nothing. The valid mutation, dropping the tenant from the key, produced exactly the failure the
+test exists for:
+
+```
+clinical_schema_test.go:87: note pointing at a foreign patient: error = <nil>, want SQLSTATE 23503
+--- FAIL: TestClinicalSchema/a_note_cannot_hang_off_another_practice's_patient
+```
+
+`error = <nil>` is the vulnerability itself: without the composite key the insert succeeds.
+
+Also recorded in the schema, as comments, for the next reader: notes are never deleted (a correction
+is a new note), and `encountered_at` is not constrained to the past because `now()` is not immutable
+and a `CHECK` cannot express it — the domain validates that, not the database.
+
+`goose up` / `down` / `up` verified on the local database; full suite with DSNs green; `sqlc generate`
+idempotent (adds the two models).
+
+### Next
+
+T25 (clinical domain and repository), T26 (HTTP, which starts by giving `audit_log` a write path),
+T27 (frontend), then the schedule in T28–T31 and T32 for the end-to-end pass.

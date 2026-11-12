@@ -23,6 +23,30 @@ type AuditLog struct {
 	CreatedAt time.Time
 }
 
+// One row per encounter. Notes are never deleted: a correction is a new note, because deleting clinical history is a legal problem, not a UI decision.
+type ClinicalNote struct {
+	ID           pgtype.UUID
+	TenantID     pgtype.UUID
+	PatientID    pgtype.UUID
+	AuthorUserID pgtype.UUID
+	// When the session happened. Not constrained to the past: now() is not immutable and a CHECK cannot express it, so the domain validates it.
+	EncounteredAt time.Time
+	Content       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type ClinicalRecord struct {
+	ID             pgtype.UUID
+	TenantID       pgtype.UUID
+	PatientID      pgtype.UUID
+	ChiefComplaint *string
+	Background     *string
+	Objectives     *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type Country struct {
 	Code string
 	Name string
