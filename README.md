@@ -88,13 +88,20 @@ powershell -ExecutionPolicy Bypass -File scripts/local-up.ps1
 cd Backend
 goose -dir migrations postgres "postgres://aveniq:aveniq_dev@127.0.0.1:5433/aveniq?sslmode=disable" up
 
-# 4. API (terminal 1)
+# 4. a practice and an owner to sign in with (idempotent, development only)
+powershell -ExecutionPolicy Bypass -File ../scripts/local-seed.ps1
+
+# 5. API (terminal 1)
 go run ./cmd/api
 
-# 5. web (terminal 2)
+# 6. web (terminal 2)
 cd ../Frontend
 corepack pnpm dev
 ```
+
+Step 4 prints the development credentials it created (`demo` / `demo@aveniq.local`). It is a
+script and not a migration on purpose: a seeded practice with a known password must never ship
+to production, and migrations run wherever the schema runs.
 
 Then open <http://localhost:3000>. The API document is at
 <http://127.0.0.1:8080/docs> and the raw spec at `/openapi.json`.
