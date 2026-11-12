@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Append-only for the application role (0008 revokes UPDATE and DELETE). Clinical access is recorded here in the same transaction as the read, so an unaudited read cannot commit.
 type AuditLog struct {
 	ID        int64
 	TenantID  pgtype.UUID
