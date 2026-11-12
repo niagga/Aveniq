@@ -85,7 +85,7 @@ en cada transición de tarea.
 | T20b | S16, S5 | E2 | Migración `0005`: países, catálogo de documentos y datos fiscales por país, con seed AR/ES/PT/BR | inline | `b1daf13` |
 | T21 | S1, S11 | E2 | Dominio `patient` + repositorio sqlc + tests de aislamiento | inline | `50cb193`, `db2f998`, `b36a756` |
 | T22 | S1, S11 | E2 | HTTP de pacientes (alta, listado con búsqueda, detalle, edición, baja lógica) | worker + inline | `5182547`, `5d467fb` |
-| T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | — | — |
+| T23 | S1, S12 | E2 | Frontend: pacientes (listado, alta, detalle, datos fiscales) | inline | `13c7d72` |
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | — | — |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | — | — |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | — | — |
@@ -981,3 +981,41 @@ E1 is now complete except T15 (permission matrix, invitations, trial sign-up), w
 E2 has the whole patient slice: schema (T20, T20b), domain and persistence (T21), application and HTTP
 (T22), and the HTTP layer under test (T16). Remaining in E2: T23 (patient frontend), T24–T27 (clinical
 record), T28–T31 (agenda), T32 (end-to-end verification).
+
+**L23 — E2/T23: the patient screen (committed)**
+
+`entities/patient` (types and labels), `features/patients` (table, form, detail) and
+`app/patients` (the page), plus a link from the dashboard. `schema.d.ts` regenerated: it now carries
+the six patient operations, which is what makes the screen type-check against the API instead of
+against a hand-written copy of it.
+
+### Product decisions the spec did not settle
+
+- **The document kind select is filtered by the chosen country**, and changing the country drops a
+  kind the new one does not have. The API would answer 422 anyway, but an offer that cannot be
+  fulfilled is a bug in the offer, not in the server.
+- **The document and the tax id are validated as pairs in the form** before the request. The server
+  refuses a kind without a number; a receptionist should read that in the form, not as a failed
+  request.
+- **Deactivation lives in the detail panel**, not as a button per row: it is a deliberate act on a
+  person's record, and a per-row button is one somebody clicks while scrolling.
+- **Unknown document kinds render as the raw code.** The catalog grows by migration; a screen that
+  hides what it does not recognise would show a patient with no document at all.
+- The selected patient is re-read from the list after every change, so the detail panel cannot show
+  stale data after an edit or a deactivation.
+
+### Evidence and its limits
+
+- `pnpm typecheck` clean after `pnpm build` regenerated the typed routes. Two errors were fixed on
+  the way: `Link href="/patients"` needed the route map (same trap as T18), and `Notice` has no
+  `neutral` tone.
+- `pnpm build` clean; the route table now lists `/`, `/login` and `/patients`, all static.
+- `GET /patients` served by `next start` → 200, and the HTML contains the session gate. That is the
+  honest limit: without a browser the interactive flow — login, create, edit, deactivate — is not
+  exercised. It is verified at the API level from L21 and by types at the client, not end to end
+  through the UI.
+
+Two environment notes from this session: the owner's dev server on port 3000 (PID 1272, started the
+previous day) accepted the connection but never answered a request, and Next 16 refuses to start a
+second dev server in the same directory, so the check ran against `next start` on 3001 instead. Worth
+restarting that server before using the screen by hand.

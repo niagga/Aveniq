@@ -84,6 +84,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List patients
+         * @description Returns one page of patients ordered by name. The search matches a fragment of the name or the exact normalized document.
+         */
+        get: operations["list-patients"];
+        put?: never;
+        /**
+         * Register a patient
+         * @description Creates a patient. The document and fiscal data are validated against the rules of the patient's country; the country defaults to the practice's.
+         */
+        post: operations["create-patient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a patient */
+        get: operations["get-patient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a patient
+         * @description Replaces the editable fields of a patient. Identity, creation time and the active flag are not editable here.
+         */
+        patch: operations["update-patient"];
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate a patient */
+        post: operations["activate-patient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate a patient
+         * @description Stops the patient from appearing in new appointments without losing the row or its clinical record.
+         */
+        post: operations["deactivate-patient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants": {
         parameters: {
             query?: never;
@@ -92,14 +174,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List tenants
-         * @description Returns one page of tenants, newest first.
+         * Describe the current practice
+         * @description Returns the practice the session belongs to. It is a list for compatibility with the client, but a session can only ever see one: the platform-wide view belongs to an operator surface that does not exist yet.
          */
         get: operations["list-tenants"];
         put?: never;
         /**
          * Register a tenant
-         * @description Creates a tenant in trial state. Slugs are unique platform-wide.
+         * @description Creates a tenant in trial state. Slugs are unique platform-wide. This is the public onboarding door until E3 turns it into a verified signup.
          */
         post: operations["create-tenant"];
         delete?: never;
@@ -116,8 +198,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a tenant by slug
-         * @description Resolves the tenant that a subdomain points at.
+         * Get the current practice by slug
+         * @description Resolves the practice the session belongs to. Any other slug answers 404, not 403: confirming that another practice exists is itself information.
          */
         get: operations["get-tenant"];
         put?: never;
@@ -197,6 +279,15 @@ export interface components {
              */
             type: string;
         };
+        ListPatientsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListPatientsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["PatientBody"][] | null;
+        };
         ListTenantsOutputBody: {
             /**
              * Format: uri
@@ -225,6 +316,89 @@ export interface components {
              * @example consultorio-sur
              */
             tenantSlug: string;
+        };
+        PatientBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PatientBody.json
+             */
+            readonly $schema?: string;
+            administrativeNotes?: string;
+            /** @description Date of birth, YYYY-MM-DD. */
+            birthDate?: string;
+            /** @description Country whose rules validate the document and fiscal data. */
+            country: string;
+            /** Format: date-time */
+            createdAt: string;
+            document?: components["schemas"]["PatientDocumentBody"];
+            email?: string;
+            emergencyContactName?: string;
+            emergencyContactPhone?: string;
+            fiscalAddress?: string;
+            fiscalCondition?: string;
+            /** @description Name as the practice registered it. */
+            fullName: string;
+            /**
+             * Format: uuid
+             * @description Patient identifier.
+             */
+            id: string;
+            /** @description False after a deactivation. Patients are never deleted. */
+            isActive: boolean;
+            phone?: string;
+            taxId?: components["schemas"]["PatientTaxIDBody"];
+            /**
+             * Format: uuid
+             * @description Practice the patient belongs to.
+             */
+            tenantId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PatientDocumentBody: {
+            /** @description ISO 3166-1 alpha-2 country the document belongs to. */
+            country: string;
+            /** @description Document kind code for that country, for example dni or nie. */
+            kind: string;
+            /** @description Document number as it appears on the card; separators are accepted. */
+            number: string;
+        };
+        PatientProfileBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PatientProfileBody.json
+             */
+            readonly $schema?: string;
+            administrativeNotes?: string;
+            /**
+             * Format: date
+             * @description Optional date of birth, YYYY-MM-DD.
+             */
+            birthDate?: string;
+            /** @description Optional ISO country. Defaults to the practice's. */
+            country?: string;
+            /** @description Document kind for the country, for example dni or nie. */
+            documentKind?: string;
+            /** @description Document number as typed. Separators are accepted and normalized. */
+            documentNumber?: string;
+            email?: string;
+            emergencyContactName?: string;
+            emergencyContactPhone?: string;
+            fiscalAddress?: string;
+            fiscalCondition?: string;
+            /** @description Name of the patient. */
+            fullName: string;
+            phone?: string;
+            taxIdKind?: string;
+            taxIdNumber?: string;
+        };
+        PatientTaxIDBody: {
+            /** @description Tax id kind code for the country, for example cuit or nif. */
+            kind: string;
+            /** @description Tax id number as typed. */
+            number: string;
         };
         RefreshBody: {
             /**
@@ -453,14 +627,212 @@ export interface operations {
             };
         };
     };
-    "list-tenants": {
+    "list-patients": {
         parameters: {
             query?: {
+                /** @description Name fragment or exact document number. */
+                search?: string;
+                /** @description Exclude deactivated patients. */
+                activeOnly?: boolean;
                 /** @description Page size. */
                 limit?: number;
                 /** @description Rows to skip. */
                 offset?: number;
             };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPatientsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientProfileBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientProfileBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "activate-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "deactivate-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-tenants": {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
