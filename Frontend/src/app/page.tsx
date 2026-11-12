@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
@@ -62,7 +63,15 @@ function Dashboard() {
             Gestión de consultorios: pacientes, agenda y facturación.
           </p>
         </div>
-        <LogoutButton />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/patients"
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+          >
+            Pacientes
+          </Link>
+          <LogoutButton />
+        </div>
       </header>
 
       {failedStatus !== null ? (
