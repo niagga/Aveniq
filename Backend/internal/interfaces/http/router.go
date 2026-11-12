@@ -16,8 +16,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/platform/authn"
@@ -45,22 +47,26 @@ type ReadyCheck struct {
 // Deps holds everything the router needs. The composition root builds and
 // injects them, which keeps this package free of wiring decisions.
 type Deps struct {
-	Logger            *slog.Logger
-	ServiceVersion    string
-	CreateTenant      *tenantapp.CreateUseCase
-	GetTenantByID     *tenantapp.GetByIDUseCase
-	Login             *authapp.LoginUseCase
-	Refresh           *authapp.RefreshUseCase
-	Logout            *authapp.LogoutUseCase
-	CreatePatient     *patientapp.CreateUseCase
-	UpdatePatient     *patientapp.UpdateUseCase
-	DeactivatePatient *patientapp.DeactivateUseCase
-	ActivatePatient   *patientapp.ActivateUseCase
-	GetPatient        *patientapp.GetUseCase
-	ListPatients      *patientapp.ListUseCase
-	AccessTokens      *authn.AccessTokens
-	RefreshCookie     RefreshCookieConfig
-	ReadyChecks       []ReadyCheck
+	Logger             *slog.Logger
+	ServiceVersion     string
+	CreateTenant       *tenantapp.CreateUseCase
+	GetTenantByID      *tenantapp.GetByIDUseCase
+	Login              *authapp.LoginUseCase
+	Refresh            *authapp.RefreshUseCase
+	Logout             *authapp.LogoutUseCase
+	CreatePatient      *patientapp.CreateUseCase
+	UpdatePatient      *patientapp.UpdateUseCase
+	DeactivatePatient  *patientapp.DeactivateUseCase
+	ActivatePatient    *patientapp.ActivateUseCase
+	GetPatient         *patientapp.GetUseCase
+	GetClinicalRecord  *clinicalapp.GetRecordUseCase
+	SaveClinicalRecord *clinicalapp.SaveRecordUseCase
+	ListClinicalNotes  *clinicalapp.ListNotesUseCase
+	AddClinicalNote    *clinicalapp.AddNoteUseCase
+	ListPatients       *patientapp.ListUseCase
+	AccessTokens       *authn.AccessTokens
+	RefreshCookie      RefreshCookieConfig
+	ReadyChecks        []ReadyCheck
 }
 
 // NewRouter builds the HTTP handler: operational endpoints, then the versioned
@@ -87,6 +93,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerTenantRoutes(api, deps)
 	registerAuthRoutes(api, deps)
 	registerPatientRoutes(api, deps)
+	registerClinicalRoutes(api, deps)
 
 	return router
 }
@@ -211,6 +218,7 @@ func bodyLimit(next http.Handler) http.Handler {
 func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var validationErr *tenant.ValidationError
 	var patientValidationErr *patient.ValidationError
+	var clinicalValidationErr *clinical.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -226,6 +234,14 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	case errors.Is(err, patient.ErrDocumentTaken):
 		return huma.Error409Conflict("A patient with that document already exists in this practice")
 	case errors.Is(err, patient.ErrNotFound):
+		return huma.Error404NotFound("The requested patient does not exist")
+	case errors.As(err, &clinicalValidationErr):
+		return huma.Error422UnprocessableEntity(clinicalValidationErr.Error())
+	case errors.Is(err, clinical.ErrNotFound):
+		// A patient or record of another practice answers the same thing as one that
+		// does not exist: confirming it exists is itself information.
+		return huma.Error404NotFound("The requested clinical record does not exist")
+	case errors.Is(err, clinical.ErrPatientNotVisible):
 		return huma.Error404NotFound("The requested patient does not exist")
 	case errors.Is(err, patient.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
