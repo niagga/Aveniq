@@ -144,3 +144,28 @@ type SessionRepository interface {
 	Revoke(ctx context.Context, id iam.SessionID, at time.Time) error
 	RevokeChain(ctx context.Context, id iam.SessionID, at time.Time) (int64, error)
 }
+
+// AuditEvent is one entry in the append-only trail.
+//
+// TenantID is always set for a clinical event: the record belongs to a practice and
+// the reader belongs to that practice. The nullable tenant the schema allows exists
+// for platform events, which E2 does not have (L26).
+type AuditEvent struct {
+	TenantID string
+	ActorID  string
+	// Action is a verb the log can be filtered by, for example "clinical.read".
+	Action string
+	// Entity and EntityID name what was touched.
+	Entity   string
+	EntityID string
+	Metadata map[string]any
+}
+
+// AuditLog records what happened, inside the transaction of the thing that happened.
+//
+// The transaction is the whole point: an implementation that writes on its own
+// connection would let a clinical read commit while its trail did not, and a read
+// without a trail is what this port exists to prevent.
+type AuditLog interface {
+	Record(ctx context.Context, event AuditEvent) error
+}

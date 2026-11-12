@@ -17,6 +17,7 @@ import (
 	"time"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
@@ -84,6 +85,8 @@ func run() error {
 	sessionRepository := postgres.NewSessionRepository(pool)
 	patientRepository := postgres.NewPatientRepository(pool)
 	patientCatalog := postgres.NewPatientCatalog(pool)
+	clinicalRepository := postgres.NewClinicalRepository(pool)
+	auditLog := postgres.NewAuditRepository(pool)
 	transactor := postgres.NewTransactor(pool)
 
 	// ─── Authentication primitives ───
@@ -121,17 +124,21 @@ func run() error {
 
 	// ─── Ports → use cases ───
 	deps := httpiface.Deps{
-		Logger:            logger,
-		ServiceVersion:    version,
-		CreateTenant:      tenantapp.NewCreateUseCase(tenantRepository, clock.New(), idgen.UUIDGenerator{}),
-		GetTenantByID:     tenantapp.NewGetByIDUseCase(tenantRepository),
-		Login:             loginUseCase,
-		CreatePatient:     patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
-		UpdatePatient:     patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New()),
-		DeactivatePatient: patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New()),
-		ActivatePatient:   patientapp.NewActivateUseCase(patientRepository, transactor, clock.New()),
-		GetPatient:        patientapp.NewGetUseCase(patientRepository, transactor),
-		ListPatients:      patientapp.NewListUseCase(patientRepository, transactor),
+		Logger:             logger,
+		ServiceVersion:     version,
+		CreateTenant:       tenantapp.NewCreateUseCase(tenantRepository, clock.New(), idgen.UUIDGenerator{}),
+		GetTenantByID:      tenantapp.NewGetByIDUseCase(tenantRepository),
+		Login:              loginUseCase,
+		CreatePatient:      patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdatePatient:      patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New()),
+		DeactivatePatient:  patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New()),
+		ActivatePatient:    patientapp.NewActivateUseCase(patientRepository, transactor, clock.New()),
+		GetPatient:         patientapp.NewGetUseCase(patientRepository, transactor),
+		ListPatients:       patientapp.NewListUseCase(patientRepository, transactor),
+		GetClinicalRecord:  clinicalapp.NewGetRecordUseCase(clinicalRepository, transactor, auditLog),
+		SaveClinicalRecord: clinicalapp.NewSaveRecordUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
+		ListClinicalNotes:  clinicalapp.NewListNotesUseCase(clinicalRepository, transactor, auditLog),
+		AddClinicalNote:    clinicalapp.NewAddNoteUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
 			Users:    userRepository,
 			Sessions: sessionRepository,
