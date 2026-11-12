@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -107,6 +108,27 @@ type DocumentCatalog interface {
 // IDGenerator abstracts identity generation for the same reason.
 type IDGenerator interface {
 	NewID() string
+}
+
+// ClinicalRepository persists the clinical record and its notes.
+//
+// One port for both aggregates because the screen reads them as a unit and the writes
+// share a tenant transaction; splitting them would create two seams that always move
+// together.
+//
+// Implementations must map their failures onto the clinical sentinels
+// (clinical.ErrNotFound, clinical.ErrPatientNotVisible) so the application layer never
+// sees a driver code. Every call runs inside a tenant scope: see TenantScope.
+type ClinicalRepository interface {
+	// UpsertRecord writes the frame of a treatment, creating it on first save: the
+	// record is one per patient, so an edit is an update, never a second row.
+	UpsertRecord(ctx context.Context, record clinical.Record) (clinical.Record, error)
+	RecordByPatient(ctx context.Context, patientID string) (clinical.Record, error)
+	// AddNote appends one encounter. There is no update and no delete: a correction is
+	// a new note, because deleting clinical history is a legal problem rather than a
+	// UI decision.
+	AddNote(ctx context.Context, note clinical.Note) error
+	NotesByPatient(ctx context.Context, patientID string, limit, offset int32) ([]clinical.Note, error)
 }
 
 // SessionRepository persists the refresh sessions of the IAM aggregate.
