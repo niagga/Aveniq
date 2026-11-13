@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Appointment struct {
+	ID                 pgtype.UUID
+	TenantID           pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	PatientID          pgtype.UUID
+	SeriesID           pgtype.UUID
+	StartsAt           time.Time
+	EndsAt             time.Time
+	Status             string
+	Notes              *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type AppointmentSeries struct {
+	ID                 pgtype.UUID
+	TenantID           pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	PatientID          pgtype.UUID
+	Weekday            int16
+	LocalStartMinute   int32
+	DurationMinutes    int32
+	StartsOn           pgtype.Date
+	UntilOn            pgtype.Date
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 // Append-only for the application role (0008 revokes UPDATE and DELETE). Clinical access is recorded here in the same transaction as the read, so an unaudited read cannot commit.
 type AuditLog struct {
 	ID        int64
@@ -155,6 +183,8 @@ type Tenant struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Country   string
+	// IANA name used to expand recurring series. Instants on appointments stay in UTC.
+	Timezone string
 }
 
 type User struct {

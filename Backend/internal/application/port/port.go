@@ -14,6 +14,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
+	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
@@ -143,6 +144,30 @@ type SessionRepository interface {
 	Rotate(ctx context.Context, previous, successor iam.Session) error
 	Revoke(ctx context.Context, id iam.SessionID, at time.Time) error
 	RevokeChain(ctx context.Context, id iam.SessionID, at time.Time) (int64, error)
+}
+
+// ScheduleRepository persists appointments and weekly series.
+//
+// Implementations must map overlap onto schedule.ErrOverlap: two concurrent
+// requests must lose against the exclusion constraint, not against a Go check.
+type ScheduleRepository interface {
+	CreateAppointment(ctx context.Context, slot schedule.Appointment) error
+	AppointmentByID(ctx context.Context, id schedule.AppointmentID) (schedule.Appointment, error)
+	ListAppointments(ctx context.Context, filter AppointmentFilter) ([]schedule.Appointment, error)
+	SaveAppointment(ctx context.Context, slot schedule.Appointment) error
+
+	CreateSeries(ctx context.Context, series schedule.Series) error
+	SeriesByID(ctx context.Context, id schedule.SeriesID) (schedule.Series, error)
+	SaveSeries(ctx context.Context, series schedule.Series) error
+	DeleteScheduledFrom(ctx context.Context, seriesID schedule.SeriesID, from time.Time) error
+	CancelScheduled(ctx context.Context, seriesID schedule.SeriesID, at time.Time) error
+}
+
+// AppointmentFilter is the window the weekly screen asks for.
+type AppointmentFilter struct {
+	From           time.Time
+	To             time.Time
+	ProfessionalID string // empty means every professional of the practice
 }
 
 // AuditEvent is one entry in the append-only trail.

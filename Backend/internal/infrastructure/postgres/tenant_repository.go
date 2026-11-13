@@ -115,6 +115,7 @@ func toDomain(row sqlcgen.Tenant) (tenant.Tenant, error) {
 		row.Slug,
 		row.Name,
 		tenant.Status(row.Status),
+		row.Timezone,
 		row.CreatedAt,
 	)
 	if err != nil {

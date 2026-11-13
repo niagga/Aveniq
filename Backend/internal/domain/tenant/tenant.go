@@ -36,6 +36,9 @@ const (
 	minSlugLength = 3
 	maxSlugLength = 63
 	maxNameLength = 120
+
+	// DefaultTimezone is the civil zone of the product's first practices.
+	DefaultTimezone = "America/Argentina/Buenos_Aires"
 )
 
 // slugPattern enforces lowercase letters and digits separated by single inner
@@ -69,6 +72,7 @@ type Tenant struct {
 	Slug      string
 	Name      string
 	Status    Status
+	Timezone  string
 	CreatedAt time.Time
 }
 
@@ -100,6 +104,7 @@ func New(id ID, slug, name string, now time.Time) (Tenant, error) {
 		Slug:      normalizedSlug,
 		Name:      normalizedName,
 		Status:    StatusTrial,
+		Timezone:  DefaultTimezone,
 		CreatedAt: now.UTC(),
 	}, nil
 }
@@ -107,7 +112,7 @@ func New(id ID, slug, name string, now time.Time) (Tenant, error) {
 // Reconstitute rebuilds a tenant from persisted state. Persistence adapters must
 // use this instead of the zero value or a struct literal: it keeps a single gate
 // for the invariants that must hold for stored data too.
-func Reconstitute(id ID, slug, name string, status Status, createdAt time.Time) (Tenant, error) {
+func Reconstitute(id ID, slug, name string, status Status, timezone string, createdAt time.Time) (Tenant, error) {
 	if id == "" {
 		return Tenant{}, &ValidationError{Field: "id", Message: "must not be empty"}
 	}
@@ -120,12 +125,19 @@ func Reconstitute(id ID, slug, name string, status Status, createdAt time.Time) 
 	if slug == "" || !slugPattern.MatchString(slug) {
 		return Tenant{}, &ValidationError{Field: "slug", Message: "stored slug is not canonical"}
 	}
+	if timezone == "" {
+		timezone = DefaultTimezone
+	}
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return Tenant{}, &ValidationError{Field: "timezone", Message: "must be a valid IANA name"}
+	}
 
 	return Tenant{
 		ID:        id,
 		Slug:      slug,
 		Name:      name,
 		Status:    status,
+		Timezone:  timezone,
 		CreatedAt: createdAt.UTC(),
 	}, nil
 }

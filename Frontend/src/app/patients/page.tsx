@@ -81,6 +81,10 @@ function PatientsScreen() {
           <Link href="/" className="text-xs text-ink-muted underline">
             ← Volver al consultorio
           </Link>
+          {" · "}
+          <Link href="/agenda" className="text-xs text-ink-muted underline">
+            Agenda
+          </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pacientes</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Ficha del paciente con sus datos fiscales y la historia clínica.

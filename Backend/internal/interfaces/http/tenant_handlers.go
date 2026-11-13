@@ -21,6 +21,7 @@ type tenantBody struct {
 	Slug      string `json:"slug" doc:"DNS label that resolves this tenant as a subdomain."`
 	Name      string `json:"name" doc:"Display name of the practice."`
 	Status    string `json:"status" enum:"trial,active,suspended" doc:"Lifecycle state."`
+	Timezone  string `json:"timezone" doc:"IANA timezone used to expand recurring appointments."`
 	CreatedAt string `json:"createdAt" format:"date-time" doc:"Creation timestamp, RFC 3339 in UTC."`
 }
 
@@ -30,6 +31,7 @@ func toTenantBody(view tenantapp.TenantView) tenantBody {
 		Slug:      view.Slug,
 		Name:      view.Name,
 		Status:    view.Status,
+		Timezone:  view.Timezone,
 		CreatedAt: view.CreatedAt,
 	}
 }

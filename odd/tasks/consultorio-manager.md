@@ -90,10 +90,10 @@ en cada transición de tarea.
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | inline | `bc4163a` |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | inline | `771c80f`, `fbbc46b` |
 | T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | inline | — |
-| T28 | S15, S5 | E2 | Migración `0008`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
-| T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
-| T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | — | — |
-| T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | — | — |
+| T28 | S15, S5 | E2 | Migración `0009`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | inline | — |
+| T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | inline | — |
+| T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
+| T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | — | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
@@ -1278,3 +1278,26 @@ type-checks against the four clinical operations, not a hand-written copy.
   browser against the local stack.
 
 Pendiente de E2: T28–T31 (agenda), T32 (E2E). T15 sigue en E3.
+
+**L29 — E2/T28–T31: agenda (uncommitted)**
+
+The schedule is migration `0009` because `0008` already made `audit_log` append-only. `tenants.timezone`
+defaults to `America/Argentina/Buenos_Aires`. Occurrences are rows; overlap is
+`EXCLUDE USING gist` on live (non-cancelled) slots of the same professional. Series expansion
+runs in the practice timezone so "every Tuesday at 18:00" does not slide on DST.
+
+HTTP: `GET/POST /appointments`, attend/cancel, `POST/PATCH /appointment-series` and cancel remaining
+scheduled occurrences. A series edit deletes future *scheduled* rows and rematerializes; attended
+slots stay (L14).
+
+Frontend: `/agenda`, week grid for the signed-in professional, one-off booking and weekly series.
+`schema.d.ts` regenerated from the new OpenAPI.
+
+### Evidence
+
+- `go test` of domain, application, HTTP layer, and postgres schema tests (with DSNs) green.
+- `pnpm typecheck` clean.
+- Local `goose up` applied `0009` on the hermetic stack.
+
+Pendiente de E2: T32 (E2E). T15 sigue en E3. The API process on :8080 must be restarted to serve
+the new routes.

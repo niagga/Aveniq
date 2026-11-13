@@ -70,6 +70,12 @@ function Dashboard() {
           >
             Pacientes
           </Link>
+          <Link
+            href="/agenda"
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+          >
+            Agenda
+          </Link>
           <LogoutButton />
         </div>
       </header>

@@ -10,6 +10,7 @@ type TenantView struct {
 	Slug      string
 	Name      string
 	Status    string
+	Timezone  string
 	CreatedAt string // RFC 3339, always UTC
 }
 
@@ -19,6 +20,7 @@ func toView(subject tenant.Tenant) TenantView {
 		Slug:      subject.Slug,
 		Name:      subject.Name,
 		Status:    string(subject.Status),
+		Timezone:  subject.Timezone,
 		CreatedAt: subject.CreatedAt.UTC().Format(createdAtLayout),
 	}
 }

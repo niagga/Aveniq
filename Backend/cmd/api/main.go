@@ -19,6 +19,7 @@ import (
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
+	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/redisx"
@@ -86,6 +87,7 @@ func run() error {
 	patientRepository := postgres.NewPatientRepository(pool)
 	patientCatalog := postgres.NewPatientCatalog(pool)
 	clinicalRepository := postgres.NewClinicalRepository(pool)
+	scheduleRepository := postgres.NewScheduleRepository(pool)
 	auditLog := postgres.NewAuditRepository(pool)
 	transactor := postgres.NewTransactor(pool)
 
@@ -139,6 +141,13 @@ func run() error {
 		SaveClinicalRecord: clinicalapp.NewSaveRecordUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		ListClinicalNotes:  clinicalapp.NewListNotesUseCase(clinicalRepository, transactor, auditLog),
 		AddClinicalNote:    clinicalapp.NewAddNoteUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
+		CreateAppointment:  scheduleapp.NewCreateAppointmentUseCase(scheduleRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		ListAppointments:   scheduleapp.NewListAppointmentsUseCase(scheduleRepository, transactor),
+		AttendAppointment:  scheduleapp.NewAttendAppointmentUseCase(scheduleRepository, transactor, clock.New()),
+		CancelAppointment:  scheduleapp.NewCancelAppointmentUseCase(scheduleRepository, transactor, clock.New()),
+		CreateSeries:       scheduleapp.NewCreateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdateSeries:       scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		CancelSeries:       scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
 			Users:    userRepository,
 			Sessions: sessionRepository,

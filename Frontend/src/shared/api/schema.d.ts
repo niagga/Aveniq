@@ -4,6 +4,115 @@
  */
 
 export interface paths {
+    "/api/v1/appointment-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a weekly series
+         * @description Materializes concrete appointments in the practice timezone. Editing later does not rewrite attended slots.
+         */
+        post: operations["create-appointment-series"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointment-series/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rewrite future occurrences of a series */
+        patch: operations["update-appointment-series"];
+        trace?: never;
+    };
+    "/api/v1/appointment-series/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel remaining scheduled occurrences */
+        post: operations["cancel-appointment-series"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List appointments in a window
+         * @description Returns slots that overlap [from, to). Filter by professional when the weekly view is showing one person.
+         */
+        get: operations["list-appointments"];
+        put?: never;
+        /** Book a one-off appointment */
+        post: operations["create-appointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/attend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an appointment as attended */
+        post: operations["attend-appointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an appointment */
+        post: operations["cancel-appointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -262,6 +371,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AppointmentBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AppointmentBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: uuid */
+            id?: string;
+            notes?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            professionalUserId?: string;
+            /** Format: uuid */
+            seriesId?: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** @enum {string} */
+            status?: "scheduled" | "attended" | "cancelled";
+        };
         ClinicalNoteBody: {
             /**
              * Format: uri
@@ -368,6 +500,15 @@ export interface components {
              * @example https://example.com/errors/example
              */
             type: string;
+        };
+        ListAppointmentsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListAppointmentsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["AppointmentBody"][] | null;
         };
         ListClinicalNotesOutputBody: {
             /**
@@ -509,6 +650,37 @@ export interface components {
             /** @description Opaque refresh token. Optional when the cookie is sent instead. */
             refreshToken?: string;
         };
+        SeriesBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SeriesBody.json
+             */
+            readonly $schema?: string;
+            appointments?: components["schemas"]["AppointmentBody"][] | null;
+            /** Format: int64 */
+            durationMinutes: number;
+            /** Format: uuid */
+            id?: string;
+            /**
+             * Format: int64
+             * @description Minutes from local midnight in the practice timezone.
+             */
+            localStartMinute: number;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            professionalUserId?: string;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            untilOn: string;
+            /**
+             * Format: int64
+             * @description 0 is Sunday, matching Go and PostgreSQL.
+             */
+            weekday: number;
+        };
         SessionBody: {
             /**
              * Format: uri
@@ -581,6 +753,8 @@ export interface components {
              * @enum {string}
              */
             status: "trial" | "active" | "suspended";
+            /** @description IANA timezone used to expand recurring appointments. */
+            timezone: string;
         };
     };
     responses: never;
@@ -591,6 +765,233 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "create-appointment-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-appointment-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "cancel-appointment-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-appointments": {
+        parameters: {
+            query: {
+                /** @description Window start, RFC 3339. */
+                from: string;
+                /** @description Window end, RFC 3339. */
+                to: string;
+                professionalId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAppointmentsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppointmentBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "attend-appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "cancel-appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
