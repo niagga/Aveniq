@@ -58,6 +58,24 @@ en cada transición de tarea.
 **S17 — E2 no incluye la gestión de usuarios del sistema; users CRUD e invitaciones van en E3**
 > "No incluir users CRUD"
 
+**S18 — Un professional ve solo sus propios pacientes y turnos (E3)**
+> Decisión en AskQuestion: "Solo sus pacientes y turnos (Recomendado)"
+
+**S19 — Papel `assistant` (recepción): agenda y cadastro, sin historia clínica (E3)**
+> Decisión en AskQuestion: "Sí, agenda y cadastro sin historia clínica (Recomendado)"
+
+**S20 — Invitación por enlace generado por el owner, sin email automático (E3)**
+> Decisión en AskQuestion: "Link generado por el owner y copiado en la pantalla, sin email (Recomendado)"
+
+**S21 — La ficha de identificación es compartida; la historia clínica solo con autorización (E3)**
+> "La ficha de información de paciente (nombre, ID, DNI, CUIT) es compartida, la HC solo es compartida si existe una autorización"
+
+**S22 — El papel `accountant` ve solo facturación (E3)**
+> "Solo facturación"
+
+**S23 — Autorización de HC: la concede el profesional tratante, por defecto la ve el tratante, revocable sin plazo (E3)**
+> Decisiones en AskQuestion: "Lo concede el profesional tratante, para otros profesionales del consultorio"; "Sí, el tratante siempre ve la HC de sus pacientes (Recomendado)"; "Revocable a cualquier momento, sin validez fija (Recomendado)"
+
 ## Tasks
 
 | ID | Spec | Etapa | Descripción | Ruta | Commit |
@@ -95,6 +113,12 @@ en cada transición de tarea.
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
+| T33 | S3, S18, S19, S21, S22 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | pendiente |
+| T34 | S3, S19 | E3 | Dominio y HTTP de usuarios del consultorio: alta, cambio de papel, desactivación; el nombre de autor sale de acá | inline | pendiente |
+| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner, aceptación con contraseña | inline | pendiente |
+| T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
+| T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
+| T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | pendiente |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -1324,3 +1348,51 @@ The hook `__aveniqEnsureSession` is assigned only when `NODE_ENV !== "production
 
 E2 (T17–T32) is closed on this machine. T15 remains in E3. Not on CI: the journeys need
 Postgres, Redis, the API, the seed, and a browser.
+
+**L31 — Decisiones de E3 (antes de codar)**
+
+Tres decisiones tomadas en AskQuestion, registradas como S18–S20:
+
+- Un professional ve **solo sus pacientes y sus turnos** (S18). Esto cambia el alcance de la historia
+  clínica: deja de ser "dentro del consultorio" y pasa a ser "dentro de la relación del profesional con
+  el paciente". Hay que definir qué pasa con un paciente que atienden dos profesionales.
+- Existe el papel `assistant` con agenda y cadastro, **sin historia clínica** (S19).
+- Los convites son **por enlace** y no hay email automático (S20). Por eso la verificación de la alta
+  en trial (T36) queda abierta: no hay proveedor de correo.
+
+Tareas T33–T38 en la tabla. T33 (matriz) va primero: T34–T38 dependen de los permisos que defina.
+
+**L32 — Respuestas de E3: ficha compartida, HC con autorización, accountant solo facturación**
+
+Dos decisiones más, verbatim en S21 y S22:
+
+- **Ficha de identificación compartida** (nombre, ID, DNI, CUIT) dentro del consultorio. Es lo que
+  cualquiera con acceso a pacientes puede ver, incluido el `assistant`.
+- **Historia clínica solo con autorización** (S21). Esto desdobla el permiso de paciente: ver que
+  existe y cómo se llama no es lo mismo que leer sus evoluciones. Un `assistant` ve la ficha de
+  identificación y no la HC, en línea con S19.
+- **`accountant` ve solo facturación** (S22). No ve agenda ni HC. Esto se suma a lo que T33 tiene que
+  cerrar: la facturación (S2) todavía no existe, así que el papel queda con permisos vacíos hasta que
+  exista ese dominio.
+
+La autorización de HC queda definida en S23 (ver L33). Antes de T33 solo falta decidir si el paciente
+también tiene que consentir (la respuesta del usuario apunta al profesional tratante como único
+concedente, así que no hay paso del paciente en E3).
+
+**L33 — Autorización de HC (S23)**
+
+- La concede el **profesional tratante** a otro profesional del consultorio. El paciente no aparece en
+  el flujo de E3.
+- El **tratante ve la HC de sus pacientes por defecto**. La autorización es para terceros, no para él.
+- Es **revocable sin plazo**. No hay fecha de vencimiento.
+
+Consecuencias para el modelo de datos (T33–T34):
+
+- Una tabla de concesiones `(tenant, paciente, profesional concedido, concedida por, revocada_at)`,
+  con RLS forzado como toda tabla nueva (L14, regla 1).
+- Ver la HC = el profesional es tratante del paciente **o** tiene una concesión activa para ese paciente.
+- `assistant` y `accountant` nunca leen HC, con o sin concesión (S19, S22).
+- La revocación no borra nada: se marca `revocada_at`, para mantener el rastro en la auditoría.
+
+Snyk: el usuario indicó que no se usa en este proyecto. No se corre `snyk_code_scan` ni `snyk_auth`
+en Aveniq.
