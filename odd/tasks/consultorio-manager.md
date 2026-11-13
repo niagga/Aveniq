@@ -113,7 +113,7 @@ en cada transición de tarea.
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
-| T33 | S3, S18, S19, S21, S22 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | pendiente |
+| T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | — |
 | T34 | S3, S19 | E3 | Dominio y HTTP de usuarios del consultorio: alta, cambio de papel, desactivación; el nombre de autor sale de acá | inline | pendiente |
 | T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner, aceptación con contraseña | inline | pendiente |
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
@@ -1396,3 +1396,34 @@ Consecuencias para el modelo de datos (T33–T34):
 
 Snyk: el usuario indicó que no se usa en este proyecto. No se corre `snyk_code_scan` ni `snyk_auth`
 en Aveniq.
+
+**L34 — E3/T33: the permission matrix replaces the coarse role guard (uncommitted)**
+
+`requireRoles(owner, admin, professional)` is gone. Domain routes ask `iam.Allows` /
+`iam.AllowsAny` through `requirePermission`. The identity still comes from the token;
+the matrix only answers "does this role have this verb".
+
+Migration `0010` adds `schedule:read/write`, `tenant:read` and `clinical:grant`, and
+drops `billing:read` from professional and assistant (S19, S22). Admin still has no
+`clinical:*`. Owner still holds every catalog row.
+
+| Role | Identification | HC | Agenda | Billing | Practice |
+| --- | --- | --- | --- | --- | --- |
+| owner | read/write | any + grant | read/write | all | read + settings |
+| admin | read/write | — | read/write | read | read + settings |
+| professional | read/write | own + grant | read/write | — | read |
+| assistant | read/write | — | read/write | — | read |
+| accountant | — | — | — | all | — |
+
+Instance-level (which patient is "own", the grant table) is T38. `clinical:grant` is
+seeded so that cut does not need another catalog change.
+
+### Evidence
+
+- `go test ./internal/domain/iam/` and `./internal/interfaces/http/` green.
+- `TestPermissionMatrixDrift` green against a scratch database with the real migrations.
+- HTTP: assistant lists patients (200) and is refused on HC (403); admin is refused on
+  HC; accountant is refused on patients, tenants, clinical and appointments.
+
+Pendiente de E3: T34 (users), T35 (invites), T36 (trial signup), T37 (frontend), T38
+(instance-level + E2E). The running API process must be restarted to pick up the guard.

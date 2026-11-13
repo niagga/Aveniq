@@ -379,3 +379,100 @@ func TestRoleCatalogDrift(t *testing.T) {
 		}
 	}
 }
+
+// TestPermissionMatrixDrift proves the domain catalog and Grants match the
+// seeded tables after 0010. Either direction of drift would let the HTTP guard
+// allow a verb the database does not know, or refuse one that a real role has.
+func TestPermissionMatrixDrift(t *testing.T) {
+	ownerDSN := os.Getenv("TEST_DATABASE_URL")
+	appDSN := os.Getenv("TEST_APP_DATABASE_URL")
+	if ownerDSN == "" || appDSN == "" {
+		t.Skip("set TEST_DATABASE_URL (migrator) and TEST_APP_DATABASE_URL (application role) to run the permission matrix drift test")
+	}
+
+	ctx := context.Background()
+	tempOwnerDSN, _ := newScratchDatabase(t, ctx, ownerDSN, appDSN)
+	migrate(t, tempOwnerDSN)
+
+	conn, err := pgx.Connect(ctx, tempOwnerDSN)
+	if err != nil {
+		t.Fatalf("cannot connect to the scratch database: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	permRows, err := conn.Query(ctx, "SELECT code FROM permissions ORDER BY code")
+	if err != nil {
+		t.Fatalf("cannot read the permission catalog: %v", err)
+	}
+	seededPerms := map[iam.PermissionCode]bool{}
+	for permRows.Next() {
+		var code iam.PermissionCode
+		if err := permRows.Scan(&code); err != nil {
+			t.Fatalf("cannot scan a permission code: %v", err)
+		}
+		seededPerms[code] = true
+	}
+	permRows.Close()
+	if err := permRows.Err(); err != nil {
+		t.Fatalf("cannot read the permission catalog: %v", err)
+	}
+
+	for _, code := range iam.Catalog() {
+		if !seededPerms[code] {
+			t.Errorf("domain permission %q does not exist in the permissions table", code)
+		}
+	}
+	for code := range seededPerms {
+		if !code.Valid() {
+			t.Errorf("seeded permission %q is unknown to the domain", code)
+		}
+	}
+
+	grantRows, err := conn.Query(ctx, "SELECT role_code, permission_code FROM role_permissions")
+	if err != nil {
+		t.Fatalf("cannot read role_permissions: %v", err)
+	}
+	seededGrants := map[iam.RoleCode]map[iam.PermissionCode]bool{}
+	for grantRows.Next() {
+		var role iam.RoleCode
+		var perm iam.PermissionCode
+		if err := grantRows.Scan(&role, &perm); err != nil {
+			t.Fatalf("cannot scan a grant: %v", err)
+		}
+		if seededGrants[role] == nil {
+			seededGrants[role] = map[iam.PermissionCode]bool{}
+		}
+		seededGrants[role][perm] = true
+	}
+	grantRows.Close()
+	if err := grantRows.Err(); err != nil {
+		t.Fatalf("cannot read role_permissions: %v", err)
+	}
+
+	ownerGrants := seededGrants[iam.RoleOwner]
+	if len(ownerGrants) != len(seededPerms) {
+		t.Errorf("owner has %d grants, want %d (every permission)", len(ownerGrants), len(seededPerms))
+	}
+	for code := range seededPerms {
+		if !ownerGrants[code] {
+			t.Errorf("owner is missing permission %q", code)
+		}
+	}
+
+	for role, perms := range iam.Grants {
+		seeded := seededGrants[role]
+		if len(seeded) != len(perms) {
+			t.Errorf("role %q has %d seeded grants, want %d", role, len(seeded), len(perms))
+		}
+		for _, perm := range perms {
+			if !seeded[perm] {
+				t.Errorf("role %q is missing seeded grant %q", role, perm)
+			}
+		}
+		for perm := range seeded {
+			if !iam.Allows(role, perm) {
+				t.Errorf("role %q is seeded %q but Allows is false", role, perm)
+			}
+		}
+	}
+}

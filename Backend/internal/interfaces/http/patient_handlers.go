@@ -147,8 +147,9 @@ type patientHandlers struct {
 // registerPatientRoutes declares the patient endpoints.
 //
 // Every route is authenticated and scoped: the practice comes from the signed
-// token (T19), never from the body or the URL, and the role guard is the same
-// coarse one the tenant routes use until E3 owns the matrix.
+// token (T19), never from the body or the URL. Identification (patients:read /
+// patients:write) is shared inside the practice; the clinical record is a
+// different permission (T33).
 //
 // There is no DELETE. Deactivating keeps the roster row readable, which is what
 // the clinical record will reference.
@@ -163,9 +164,8 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		logger:     deps.Logger,
 	}
 
-	guard := huma.Middlewares{
-		requireRoles(api, deps.AccessTokens, iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional),
-	}
+	readGuard := permissionGuard(api, deps.AccessTokens, iam.PermPatientsRead)
+	writeGuard := permissionGuard(api, deps.AccessTokens, iam.PermPatientsWrite)
 	secured := []map[string][]string{{securitySchemeBearer: {}}}
 
 	huma.Register(api, huma.Operation{
@@ -177,7 +177,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.createPatient)
 
 	huma.Register(api, huma.Operation{
@@ -189,7 +189,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   readGuard,
 	}, handlers.listPatients)
 
 	huma.Register(api, huma.Operation{
@@ -200,7 +200,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   readGuard,
 	}, handlers.getPatient)
 
 	huma.Register(api, huma.Operation{
@@ -212,7 +212,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.updatePatient)
 
 	huma.Register(api, huma.Operation{
@@ -224,7 +224,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.deactivatePatient)
 
 	huma.Register(api, huma.Operation{
@@ -235,7 +235,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.activatePatient)
 }
 

@@ -56,11 +56,7 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		logger:  deps.Logger,
 	}
 
-	// Coarse on purpose: the per-domain permission matrix is E3, and this guard
-	// exists to be replaced by it, not to imitate it.
-	domainGuard := huma.Middlewares{
-		requireRoles(api, deps.AccessTokens, iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional),
-	}
+	readGuard := permissionGuard(api, deps.AccessTokens, iam.PermTenantRead)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "list-tenants",
@@ -71,7 +67,7 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"tenants"},
 		DefaultStatus: http.StatusOK,
 		Security:      []map[string][]string{{securitySchemeBearer: {}}},
-		Middlewares:   domainGuard,
+		Middlewares:   readGuard,
 	}, handlers.listTenants)
 
 	huma.Register(api, huma.Operation{
@@ -93,7 +89,7 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"tenants"},
 		DefaultStatus: http.StatusOK,
 		Security:      []map[string][]string{{securitySchemeBearer: {}}},
-		Middlewares:   domainGuard,
+		Middlewares:   readGuard,
 	}, handlers.getTenant)
 }
 

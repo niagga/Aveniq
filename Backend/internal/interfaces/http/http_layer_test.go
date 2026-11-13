@@ -332,12 +332,13 @@ func TestPatientRoutesRequireAuthentication(t *testing.T) {
 	})
 }
 
-func TestDomainRoutesAreGuardedByRole(t *testing.T) {
+func TestDomainRoutesAreGuardedByPermission(t *testing.T) {
 	h := newHarness(t)
 	tenantA := h.tenantID(t, "practica-a")
+	clinicalPath := "/api/v1/patients/" + uuid.NewString() + "/clinical-record"
 
 	accountant := h.token(t, tenantA, iam.RoleAccountant)
-	for _, path := range []string{"/api/v1/patients", "/api/v1/tenants"} {
+	for _, path := range []string{"/api/v1/patients", "/api/v1/tenants", clinicalPath, "/api/v1/appointments"} {
 		status, body := h.do(t, http.MethodGet, path, accountant, nil)
 		if status != http.StatusForbidden {
 			t.Fatalf("%s with accountant = %d, want 403", path, status)
@@ -345,6 +346,24 @@ func TestDomainRoutesAreGuardedByRole(t *testing.T) {
 		if _, leaked := body["items"]; leaked {
 			t.Fatalf("%s answered a body to a forbidden role: %v", path, body)
 		}
+	}
+
+	assistant := h.token(t, tenantA, iam.RoleAssistant)
+	if status, _ := h.do(t, http.MethodGet, "/api/v1/patients", assistant, nil); status != http.StatusOK {
+		t.Fatalf("assistant on patients = %d, want 200: identification is shared", status)
+	}
+	if status, body := h.do(t, http.MethodGet, clinicalPath, assistant, nil); status != http.StatusForbidden {
+		t.Fatalf("assistant on clinical = %d, want 403: the assistant must not read HC", status)
+	} else if _, leaked := body["chiefComplaint"]; leaked {
+		t.Fatalf("assistant received a clinical body: %v", body)
+	}
+
+	admin := h.token(t, tenantA, iam.RoleAdmin)
+	if status, _ := h.do(t, http.MethodGet, "/api/v1/patients", admin, nil); status != http.StatusOK {
+		t.Fatalf("admin on patients = %d, want 200", status)
+	}
+	if status, _ := h.do(t, http.MethodGet, clinicalPath, admin, nil); status != http.StatusForbidden {
+		t.Fatalf("admin on clinical = %d, want 403: admin has no clinical:* permission", status)
 	}
 
 	owner := h.token(t, tenantA, iam.RoleOwner)

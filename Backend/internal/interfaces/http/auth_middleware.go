@@ -13,8 +13,8 @@ import (
 // Identity is the authenticated caller, resolved from the access token.
 //
 // It is what the middleware puts in the context, and the only thing later layers
-// may trust about "who is calling". Authorization is a separate question: T15 owns
-// the permission matrix, so nothing here decides what the identity may do.
+// may trust about "who is calling". What the identity may do is iam.Allows,
+// asked by requirePermission.
 type Identity struct {
 	UserID   string
 	TenantID string
@@ -44,27 +44,21 @@ func authenticate(api huma.API, tokens *authn.AccessTokens) func(huma.Context, f
 	}
 }
 
-// requireRoles authenticates and then refuses an identity whose role is not in the
-// allowed set.
+// requirePermission authenticates and then refuses an identity that has none of
+// the listed permissions. Several codes are OR: a clinical read accepts
+// clinical:read:own or clinical:read:any.
 //
-// The set is deliberately coarse (owner, admin, professional for clinical work)
-// and it exists to be replaced: the per-domain permission matrix is E3, and a
-// guard that pretends to be that matrix would be worse than an honest one. It
-// runs on domain routes only — the tenant comes from the token, so this is also
-// what makes `app.tenant_id` unforgeable.
-func requireRoles(api huma.API, tokens *authn.AccessTokens, roles ...iam.RoleCode) func(huma.Context, func(huma.Context)) {
-	allowed := make(map[string]struct{}, len(roles))
-	for _, role := range roles {
-		allowed[string(role)] = struct{}{}
-	}
-
+// The tenant still comes from the token, so this is also what makes
+// `app.tenant_id` unforgeable. Instance-level rules (which patient, which grant)
+// are not decided here.
+func requirePermission(api huma.API, tokens *authn.AccessTokens, permissions ...iam.PermissionCode) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		identity, ok := resolveIdentity(api, ctx, tokens)
 		if !ok {
 			return
 		}
 
-		if _, permitted := allowed[identity.Role]; !permitted {
+		if !iam.AllowsAny(iam.RoleCode(identity.Role), permissions...) {
 			// 403 and not 404: the caller is authenticated, so hiding the route would
 			// only cost whoever debugs it. What the role cannot do is the useful answer.
 			_ = huma.WriteErr(api, ctx, 403, "This role is not allowed to use this resource")
@@ -73,6 +67,10 @@ func requireRoles(api huma.API, tokens *authn.AccessTokens, roles ...iam.RoleCod
 
 		next(withIdentity(ctx, identity))
 	}
+}
+
+func permissionGuard(api huma.API, tokens *authn.AccessTokens, permissions ...iam.PermissionCode) huma.Middlewares {
+	return huma.Middlewares{requirePermission(api, tokens, permissions...)}
 }
 
 // resolveIdentity turns the Authorization header into an Identity, writing the

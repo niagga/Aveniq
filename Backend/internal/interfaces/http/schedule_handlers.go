@@ -89,9 +89,8 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		logger:       deps.Logger,
 	}
 
-	guard := huma.Middlewares{
-		requireRoles(api, deps.AccessTokens, iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional),
-	}
+	readGuard := permissionGuard(api, deps.AccessTokens, iam.PermScheduleRead)
+	writeGuard := permissionGuard(api, deps.AccessTokens, iam.PermScheduleWrite)
 	secured := []map[string][]string{{securitySchemeBearer: {}}}
 
 	huma.Register(api, huma.Operation{
@@ -103,7 +102,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   readGuard,
 	}, handlers.listHandler)
 
 	huma.Register(api, huma.Operation{
@@ -114,7 +113,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.createHandler)
 
 	huma.Register(api, huma.Operation{
@@ -125,7 +124,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.attendHandler)
 
 	huma.Register(api, huma.Operation{
@@ -136,7 +135,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.cancelHandler)
 
 	huma.Register(api, huma.Operation{
@@ -148,7 +147,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.createSeriesHandler)
 
 	huma.Register(api, huma.Operation{
@@ -159,7 +158,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.updateSeriesHandler)
 
 	huma.Register(api, huma.Operation{
@@ -170,7 +169,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"schedule"},
 		DefaultStatus: http.StatusNoContent,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.cancelSeriesHandler)
 }
 

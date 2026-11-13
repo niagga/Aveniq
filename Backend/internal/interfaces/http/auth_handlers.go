@@ -92,8 +92,7 @@ type authHandlers struct {
 }
 
 // registerAuthRoutes declares the authentication endpoints. Only `me` is
-// authenticated here; which tenant operations require an identity is T15's
-// decision, and wiring it early would guess at a policy that does not exist yet.
+// authenticated here; domain routes use requirePermission (T33).
 func registerAuthRoutes(api huma.API, deps Deps) {
 	handlers := &authHandlers{
 		login:   deps.Login,

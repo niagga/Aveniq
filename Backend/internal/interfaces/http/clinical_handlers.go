@@ -51,9 +51,8 @@ type clinicalHandlers struct {
 
 // registerClinicalRoutes declares the clinical endpoints.
 //
-// They live under the patient they belong to, because that is how the data is read
-// and how the permission matrix will reason about it in E3: access is decided per
-// patient, not per table.
+// They live under the patient they belong to. The HTTP guard is the clinical
+// permission (own or any). Which patient a professional may treat is T38.
 func registerClinicalRoutes(api huma.API, deps Deps) {
 	handlers := &clinicalHandlers{
 		getRecord:  deps.GetClinicalRecord,
@@ -63,9 +62,8 @@ func registerClinicalRoutes(api huma.API, deps Deps) {
 		logger:     deps.Logger,
 	}
 
-	guard := huma.Middlewares{
-		requireRoles(api, deps.AccessTokens, iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional),
-	}
+	readGuard := permissionGuard(api, deps.AccessTokens, iam.PermClinicalReadOwn, iam.PermClinicalReadAny)
+	writeGuard := permissionGuard(api, deps.AccessTokens, iam.PermClinicalWriteOwn)
 	secured := []map[string][]string{{securitySchemeBearer: {}}}
 
 	huma.Register(api, huma.Operation{
@@ -77,7 +75,7 @@ func registerClinicalRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"clinical"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   readGuard,
 	}, handlers.getRecordHandler)
 
 	huma.Register(api, huma.Operation{
@@ -89,7 +87,7 @@ func registerClinicalRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"clinical"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.saveRecordHandler)
 
 	huma.Register(api, huma.Operation{
@@ -101,7 +99,7 @@ func registerClinicalRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"clinical"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   readGuard,
 	}, handlers.listNotesHandler)
 
 	huma.Register(api, huma.Operation{
@@ -113,7 +111,7 @@ func registerClinicalRoutes(api huma.API, deps Deps) {
 		Tags:          []string{"clinical"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
-		Middlewares:   guard,
+		Middlewares:   writeGuard,
 	}, handlers.addNoteHandler)
 }
 
