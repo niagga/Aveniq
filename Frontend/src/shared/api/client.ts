@@ -32,6 +32,10 @@ browserApi.use({
   },
 });
 
+/** Shown when the request never reached the API at all. */
+export const CONNECTION_ERROR_MESSAGE =
+  "No pudimos contactar al servidor. Revisá que la API esté corriendo.";
+
 /**
  * Extracts a human-readable message from an API error.
  *

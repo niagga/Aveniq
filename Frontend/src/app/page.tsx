@@ -5,8 +5,10 @@ import Link from "next/link";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
+import { canManageAccounts } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
+import { getSessionUser } from "@/shared/auth/session";
 import { SessionGate } from "@/shared/auth/session-gate";
 import { Notice } from "@/shared/ui/notice";
 
@@ -76,6 +78,14 @@ function Dashboard() {
           >
             Agenda
           </Link>
+          {canManageAccounts(getSessionUser()?.role) ? (
+            <Link
+              href="/usuarios"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Usuarios
+            </Link>
+          ) : null}
           <LogoutButton />
         </div>
       </header>

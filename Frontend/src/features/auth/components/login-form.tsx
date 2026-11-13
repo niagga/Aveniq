@@ -12,9 +12,9 @@ import { login } from "@/shared/auth/session";
  * unique per practice, not platform-wide, so the API cannot resolve who is signing
  * in without being told which practice to look in.
  */
-export function LoginForm() {
+export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: string }) {
   const router = useRouter();
-  const [tenantSlug, setTenantSlug] = useState("");
+  const [tenantSlug, setTenantSlug] = useState(initialTenantSlug);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

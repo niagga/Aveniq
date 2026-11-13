@@ -193,6 +193,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending invitations
+         * @description Invitations not yet accepted and not expired, newest first. Accepted and expired ones are not listed.
+         */
+        get: operations["list-pending-invitations"];
+        put?: never;
+        /**
+         * Offer an account in the practice
+         * @description Creates a single-use link valid for seven days. The token in the answer is the only copy: the screen shows it to the inviter once. Only an owner offers the owner role. Answers 409 when the email already has an account in the practice.
+         */
+        post: operations["create-invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an invitation and create the account
+         * @description Public. Creates the account with the email and role of the invitation and the password the invitee chooses, then marks the link used. Answers 410 for an unusable link and 422 for a password shorter than 12 characters.
+         */
+        post: operations["accept-invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an invitation from its link
+         * @description Public. Answers 410 for any link that does not open an account: malformed, unknown, accepted or expired. The same answer for all four, on purpose.
+         */
+        get: operations["preview-invitation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a pending invitation
+         * @description The link stops working at once. An accepted invitation cannot be revoked (409).
+         */
+        delete: operations["revoke-invitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients": {
         parameters: {
             query?: never;
@@ -323,6 +407,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a practice in trial
+         * @description Public. Creates the practice in trial for 14 days and its first account, the owner, with the password chosen. Email verification is not available yet, so the owner is returned with emailVerified false. Answers 409 when the slug is taken, 422 for an invalid field or a password under 12 characters, and 429 after five attempts an hour from one client.
+         */
+        post: operations["register-practice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants": {
         parameters: {
             query?: never;
@@ -336,11 +440,7 @@ export interface paths {
          */
         get: operations["list-tenants"];
         put?: never;
-        /**
-         * Register a tenant
-         * @description Creates a tenant in trial state. Slugs are unique platform-wide. This is the public onboarding door until E3 turns it into a verified signup.
-         */
-        post: operations["create-tenant"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -367,10 +467,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the accounts of the practice
+         * @description One page of accounts, newest first, including deactivated ones. Needs users:read.
+         */
+        get: operations["list-users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Name the staff of the practice
+         * @description The same page as the account list, reduced to id, name and role. Used to show who wrote a clinical entry. No email, no status.
+         */
+        get: operations["list-staff-directory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an account */
+        get: operations["get-user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate an account */
+        post: operations["activate-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate an account
+         * @description Blocks the account from signing in without deleting it. Its clinical entries keep their author.
+         */
+        post: operations["deactivate-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change the role of an account
+         * @description Nobody changes their own role. Only an owner grants or changes the owner role. Answers 409 when the account already has that role.
+         */
+        put: operations["change-user-role"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptInvitationBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AcceptInvitationBody.json
+             */
+            readonly $schema?: string;
+            /** @description Name the account will show. */
+            fullName: string;
+            /** @description Chosen by the invitee. At least 12 characters, at most 256. */
+            password: string;
+            /** @description Link secret from the invitation URL. */
+            token: string;
+        };
+        AcceptedBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AcceptedBody.json
+             */
+            readonly $schema?: string;
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+            /** Format: uuid */
+            userId: string;
+        };
         AppointmentBody: {
             /**
              * Format: uri
@@ -393,6 +634,19 @@ export interface components {
             startsAt: string;
             /** @enum {string} */
             status?: "scheduled" | "attended" | "cancelled";
+        };
+        ChangeRoleBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ChangeRoleBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description The role the account will hold.
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
         ClinicalNoteBody: {
             /**
@@ -436,23 +690,31 @@ export interface components {
              */
             updatedAt?: string;
         };
-        CreateTenantInputBody: {
+        CreateInvitationBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateTenantInputBody.json
+             * @example https://example.com/schemas/CreateInvitationBody.json
              */
             readonly $schema?: string;
+            /** @description Email the invitee will sign in with. Must not already have an account in the practice. */
+            email: string;
             /**
-             * @description Display name of the practice.
-             * @example Consultorio Sur
+             * @description Role the account will hold.
+             * @enum {string}
              */
-            name: string;
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+        };
+        DirectoryEntryBody: {
+            /** @description Name to show next to an entry. */
+            fullName: string;
             /**
-             * @description Lowercase DNS label: letters, digits and single inner hyphens.
-             * @example consultorio-sur
+             * Format: uuid
+             * @description Account identifier, the author of a clinical entry.
              */
-            slug: string;
+            id: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -501,6 +763,40 @@ export interface components {
              */
             type: string;
         };
+        InvitationBody: {
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Canonical email the account will be created with. */
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: uuid
+             * @description Invitation identifier.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Account that issued it. Empty once that account was removed.
+             */
+            invitedBy?: string;
+            /**
+             * @description The role the account will hold.
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+        };
+        IssuedInvitationBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IssuedInvitationBody.json
+             */
+            readonly $schema?: string;
+            invitation: components["schemas"]["InvitationBody"];
+            /** @description Link secret. Shown once; the server keeps only its hash. */
+            token: string;
+        };
         ListAppointmentsOutputBody: {
             /**
              * Format: uri
@@ -519,6 +815,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["ClinicalNoteBody"][] | null;
         };
+        ListInvitationsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListInvitationsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["InvitationBody"][] | null;
+        };
         ListPatientsOutputBody: {
             /**
              * Format: uri
@@ -536,6 +841,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["TenantBody"][] | null;
+        };
+        ListUsersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListUsersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["UserBody"][] | null;
         };
         LoginBody: {
             /**
@@ -640,6 +954,23 @@ export interface components {
             /** @description Tax id number as typed. */
             number: string;
         };
+        PreviewBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PreviewBody.json
+             */
+            readonly $schema?: string;
+            /** @description Email the account will be created with. */
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * @description Role the invitee will hold.
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+        };
         RefreshBody: {
             /**
              * Format: uri
@@ -649,6 +980,36 @@ export interface components {
             readonly $schema?: string;
             /** @description Opaque refresh token. Optional when the cookie is sent instead. */
             refreshToken?: string;
+        };
+        RegisterPracticeBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RegisterPracticeBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Email the owner signs in with.
+             * @example ana@consultoriosur.test
+             */
+            ownerEmail: string;
+            /**
+             * @description Name of the owner account.
+             * @example Ana Pérez
+             */
+            ownerName: string;
+            /** @description At least 12 characters, at most 256. */
+            password: string;
+            /**
+             * @description Display name of the practice.
+             * @example Consultorio Sur
+             */
+            practiceName: string;
+            /**
+             * @description Lowercase DNS label: letters, digits and single inner hyphens. Becomes the practice's subdomain.
+             * @example consultorio-sur
+             */
+            slug: string;
         };
         SeriesBody: {
             /**
@@ -727,6 +1088,41 @@ export interface components {
              */
             tenantId: string;
         };
+        SignupBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SignupBody.json
+             */
+            readonly $schema?: string;
+            owner: components["schemas"]["SignupOwnerBody"];
+            tenant: components["schemas"]["TenantBody"];
+        };
+        SignupOwnerBody: {
+            /** @description Canonical login email of the owner. */
+            email: string;
+            /** @description False until the verification flow exists. */
+            emailVerified: boolean;
+            /**
+             * Format: uuid
+             * @description Account identifier of the owner.
+             */
+            id: string;
+            /**
+             * @description Always owner: the registrant is the first owner.
+             * @enum {string}
+             */
+            role: "owner";
+        };
+        StaffDirectoryOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StaffDirectoryOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["DirectoryEntryBody"][] | null;
+        };
         TenantBody: {
             /**
              * Format: uri
@@ -755,6 +1151,39 @@ export interface components {
             status: "trial" | "active" | "suspended";
             /** @description IANA timezone used to expand recurring appointments. */
             timezone: string;
+            /**
+             * Format: date-time
+             * @description End of the trial, RFC 3339 in UTC. Set at registration, 14 days after creation.
+             */
+            trialEndsAt: string;
+        };
+        UserBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UserBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Canonical login email, unique within the practice. */
+            email: string;
+            /** @description Name as the practice registered it. */
+            fullName: string;
+            /**
+             * Format: uuid
+             * @description Account identifier.
+             */
+            id: string;
+            /** @description False after a deactivation. Accounts are never deleted. */
+            isActive: boolean;
+            /**
+             * @description The one role this account holds in the practice.
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
@@ -1127,6 +1556,168 @@ export interface operations {
             };
         };
     };
+    "list-pending-invitations": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListInvitationsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitationBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedInvitationBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "accept-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitationBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptedBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "preview-invitation": {
+        parameters: {
+            query?: {
+                /** @description Link secret from the invitation URL. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "revoke-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Invitation identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-patients": {
         parameters: {
             query?: {
@@ -1471,6 +2062,40 @@ export interface operations {
             };
         };
     };
+    "register-practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterPracticeBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-tenants": {
         parameters: {
             query?: never;
@@ -1487,40 +2112,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListTenantsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "create-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTenantInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantBody"];
                 };
             };
             /** @description Error */
@@ -1553,6 +2144,206 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-users": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListUsersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-staff-directory": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDirectoryOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "activate-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "deactivate-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "change-user-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRoleBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBody"];
                 };
             };
             /** @description Error */
