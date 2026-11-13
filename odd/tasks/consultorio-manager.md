@@ -113,9 +113,9 @@ en cada transición de tarea.
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
-| T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | — |
-| T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | sin commit |
-| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | sin commit |
+| T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | ab7c605 |
+| T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | 942812c |
+| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | 0cb1918 |
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | pendiente |
@@ -1533,3 +1533,13 @@ la exposición), envío por email, ni pantallas (T37).
 
 Pendiente: reiniciar la API (`go run main.go`) para cargar las rutas de invitación. T36 (trial
 signup y rate limit de rutas públicas), T37 (pantallas y `schema.d.ts`), T38 (reglas de instancia y E2E).
+
+**L37 � Decisiones de E3/T36: alta de consultorio en trial**
+
+- **Duraci�n del trial: 14 d�as.** Se fija al crear el consultorio; el vencimiento no bloquea
+  todav�a (el paso a pago queda fuera de E3).
+- **Rate limit en Redis**, compartido entre instancias. Aplica al signup p�blico de T36 y tambi�n a
+  las rutas p�blicas de invitaciones (preview y accept), que quedaron sin l�mite en T35.
+
+Pendiente antes de codar: confirmar que el cliente Redis ya existe en el c�digo o agregarlo como
+adaptador de port, y definir los umbrales (intentos por IP y ventana) al implementar.
