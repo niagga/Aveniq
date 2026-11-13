@@ -1591,3 +1591,55 @@ Pendiente:
 - Reiniciar la API (`go run main.go`) para cargar las rutas nuevas.
 - Verificación por email y vencimiento del trial: sin proveedor y sin enforcement todavía.
 - T37 (frontend) y T38 (reglas de instancia y E2E).
+
+**L39 — E3/T37: pantallas de usuarios, invitación, aceptación y registro (sin commit)**
+
+Decisiones:
+
+- **`/usuarios`** es para owner y admin. Los demás roles ven un aviso, no la lista. La UI oculta lo que
+  la matriz prohíbe (`canManageAccounts`, `mayGrant` en `entities/iam/model.ts`), pero el API decide:
+  nadie cambia su propio acceso y solo el titular toca el rol titular.
+- **Enlace de invitación** (`/invitacion?token=…&consultorio=slug`): se muestra una sola vez en la
+  pantalla del owner. El slug viaja en el enlace porque la aceptación no dice a qué consultorio entrar;
+  la sesión trae el `tenantId`, así que el slug se resuelve desde `GET /api/v1/tenants`.
+- **Aceptación pública**: primero una vista previa (email, rol, vencimiento), después nombre y
+  contraseña con la misma regla del API (12 a 256 caracteres). Cualquier enlace inutilizable muestra
+  un solo mensaje, igual que el 410 del API. Aceptar no inicia sesión: el éxito enlaza a
+  `/login?consultorio=slug` y el login precarga el consultorio.
+- **Registro público** (`/registro`): el slug se sugiere desde el nombre hasta que la persona lo edita a
+  mano. La pantalla dice que el email todavía no está verificado.
+- **Dashboard**: el enlace "Usuarios" aparece solo para owner y admin.
+- **Contrato**: `schema.d.ts` regenerado desde el API en vivo (`pnpm api:types`).
+
+Evidencia:
+
+- `pnpm typecheck` y `pnpm build` limpios. Las rutas nuevas compilan: `/usuarios`, `/registro`
+  estáticas; `/invitacion` y `/login` dinámicas por `searchParams`.
+- Navegador contra el dev server y el API real, flujo A–K: login con consultorio precargado; cuentas
+  con "(vos)" y controles deshabilitados; invitación con enlace; aceptación; segundo uso del enlace
+  responde "Enlace no válido"; rol profesional sin acceso a `/usuarios`; cambio de rol, baja y
+  reactivación; registro con slug sugerido; validación de slug; enlace a `/registro` desde el login.
+- `pnpm e2e` (Chromium instalado con `pnpm e2e:install`): 2 de 3 pasan. El journey de paciente falla al
+  reservar el turno con `That professional already has an appointment in that interval`. El spec
+  reserva siempre el mismo horario y la base de desarrollo acumula turnos de corridas anteriores. No
+  toca las pantallas de T37; se resuelve aislando datos en T38.
+
+Lo que cambió en el entorno de desarrollo:
+
+- Se aplicó `goose up` a la versión 12 (`0012_tenant_trial.sql`). Antes el API respondía 500 en
+  `/api/v1/tenants`.
+- Quedaron datos de prueba: la cuenta "Invitada T37" (en Recepción, activa) y el consultorio
+  `consultorio-prueba-t37` (trial).
+
+Hallazgo fuera de T37, pendiente para T38:
+
+- `GET /api/v1/tenants` no filtra por consultorio (`ListTenants` no tiene scope y la tabla `tenants`
+  no tiene RLS). Cualquier sesión ve la lista de todos los consultorios, y el dashboard la muestra. Hay
+  que acotarla a la sesión o restringirla a la plataforma.
+
+Pendiente:
+
+- Lista de cuentas y de invitaciones con `limit=100` y sin paginación. Suficiente para un consultorio
+  chico; revisar cuando haya más.
+- Verificación de email y vencimiento del trial, igual que en L38.
+- Aislar los datos del E2E de paciente y turno para que la suite sea repetible.
