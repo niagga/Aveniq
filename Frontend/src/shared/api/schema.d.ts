@@ -146,6 +146,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/{id}/clinical-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the encounters of a patient
+         * @description Returns one page of clinical notes, most recent encounter first. The read is recorded in the audit trail.
+         */
+        get: operations["list-clinical-notes"];
+        put?: never;
+        /**
+         * Append an encounter
+         * @description Notes are append-only: a correction is a new note. The author is the caller, taken from the token.
+         */
+        post: operations["add-clinical-note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/clinical-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the clinical record of a patient
+         * @description Returns the frame of the treatment. Reading clinical data is recorded in the audit trail in the same transaction.
+         */
+        get: operations["get-clinical-record"];
+        /**
+         * Write the clinical record of a patient
+         * @description Creates the frame on first save and replaces it afterwards. One record per patient.
+         */
+        put: operations["save-clinical-record"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/deactivate": {
         parameters: {
             query?: never;
@@ -214,6 +262,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ClinicalNoteBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ClinicalNoteBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: uuid
+             * @description The professional who wrote the note, taken from the token.
+             */
+            authorId?: string;
+            content: string;
+            /**
+             * Format: date-time
+             * @description When the session happened, not when the row was written.
+             */
+            encounteredAt: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId?: string;
+        };
+        ClinicalRecordBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ClinicalRecordBody.json
+             */
+            readonly $schema?: string;
+            /** @description What is known: history, context, antecedents. */
+            background?: string;
+            /** @description Why the person came. */
+            chiefComplaint?: string;
+            /** @description What the treatment is aiming at. */
+            objectives?: string;
+            /**
+             * Format: date-time
+             * @description When the frame was last written.
+             */
+            updatedAt?: string;
+        };
         CreateTenantInputBody: {
             /**
              * Format: uri
@@ -278,6 +368,15 @@ export interface components {
              * @example https://example.com/errors/example
              */
             type: string;
+        };
+        ListClinicalNotesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListClinicalNotesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ClinicalNoteBody"][] | null;
         };
         ListPatientsOutputBody: {
             /**
@@ -785,6 +884,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-clinical-notes": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListClinicalNotesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-clinical-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClinicalNoteBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClinicalNoteBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-clinical-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClinicalRecordBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-clinical-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClinicalRecordBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClinicalRecordBody"];
                 };
             };
             /** @description Error */

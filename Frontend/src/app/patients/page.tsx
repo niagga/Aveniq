@@ -83,7 +83,7 @@ function PatientsScreen() {
           </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pacientes</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Ficha del paciente con sus datos fiscales. La historia clínica llega después.
+            Ficha del paciente con sus datos fiscales y la historia clínica.
           </p>
         </div>
         <button

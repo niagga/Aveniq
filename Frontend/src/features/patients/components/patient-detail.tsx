@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   documentKindLabel,
@@ -9,6 +9,7 @@ import {
   taxIDKindLabel,
   type Patient,
 } from "@/entities/patient/model";
+import { ClinicalPanel } from "@/features/patients/components/clinical-panel";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { Notice } from "@/shared/ui/notice";
 
@@ -32,6 +33,11 @@ export function PatientDetail({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [tab, setTab] = useState<"admin" | "clinical">("admin");
+
+  useEffect(() => {
+    setTab("admin");
+  }, [patient.id]);
 
   async function toggleActive() {
     setError(null);
@@ -99,6 +105,18 @@ export function PatientDetail({
         </p>
       ) : null}
 
+      <div className="mt-4 flex gap-1 border-b border-border" role="tablist" aria-label="Ficha del paciente">
+        <TabButton active={tab === "admin"} onClick={() => setTab("admin")}>
+          Datos
+        </TabButton>
+        <TabButton active={tab === "clinical"} onClick={() => setTab("clinical")}>
+          Historia clínica
+        </TabButton>
+      </div>
+
+      {tab === "clinical" ? <ClinicalPanel key={patient.id} patientID={patient.id} /> : null}
+
+      {tab === "admin" ? (
       <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
         <Row label="Documento">
           {patient.document
@@ -124,7 +142,34 @@ export function PatientDetail({
           {patient.administrativeNotes ?? "—"}
         </Row>
       </dl>
+      ) : null}
     </section>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+        active
+          ? "border-brand font-medium text-ink"
+          : "border-transparent text-ink-muted"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

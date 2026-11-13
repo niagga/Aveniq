@@ -89,7 +89,7 @@ en cada transición de tarea.
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | inline | `4d54a24` |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | inline | `bc4163a` |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | inline | `771c80f`, `fbbc46b` |
-| T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | — | — |
+| T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | inline | — |
 | T28 | S15, S5 | E2 | Migración `0008`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | — | — |
 | T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | — | — |
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | — | — |
@@ -1250,3 +1250,31 @@ broken audit fails the read; the note author is the caller; pagination is valida
   treatment".
 - Reading is audited; *which fields* were shown is not. The event records the entity and its id, not a
   summary of the content. That is enough to answer "who looked", which is what the trail is for.
+
+**L28 — E2/T27: the clinical screen (uncommitted)**
+
+`entities/clinical` (wire types and date helpers), `features/patients/clinical-panel` (ficha +
+evoluciones) and a tab on the existing patient detail. `schema.d.ts` regenerated so the screen
+type-checks against the four clinical operations, not a hand-written copy.
+
+### Product decisions the spec did not settle
+
+- **Historia clínica is a tab on the patient, not a route.** Access is decided per patient; a
+  second page would be a second place to forget the session gate.
+- **The clinical panel mounts only when that tab is opened.** Opening the administrative data of a
+  patient must not write `clinical.read`. Switching patients resets to Datos so the previous
+  record cannot linger.
+- **404 on the frame is an empty form**, not an error. The first save creates the row. Any other
+  status is a real problem.
+- **Notes have no edit and no author field.** A correction is a new note. The encounter date is
+  `datetime-local`, converted to RFC 3339; a future date is refused in the form before the 422.
+- **Author UUIDs are not shown.** There is no user-name API yet (E3). Displaying the raw id would
+  look like identity without being one.
+
+### Evidence
+
+- `pnpm typecheck` clean after `pnpm api:types` against the running API.
+- Interactive flow (login, open a patient, save the frame, append a note) is verified in the
+  browser against the local stack.
+
+Pendiente de E2: T28–T31 (agenda), T32 (E2E). T15 sigue en E3.
