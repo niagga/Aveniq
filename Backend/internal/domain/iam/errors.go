@@ -32,6 +32,10 @@ var (
 	// problem, and reporting it as "no tenant context" would send whoever reads
 	// the logs looking in the wrong place.
 	ErrInsufficientPrivilege = errors.New("iam: the database role is not allowed to run this statement")
+	// ErrChangeNotAllowed reports that the actor may use the route but may not make
+	// this particular change: changing their own access, or touching the owner role
+	// without being an owner. The transport answers 403 with a fixed message.
+	ErrChangeNotAllowed = errors.New("iam: change not allowed for this actor")
 )
 
 // ValidationError reports a violated invariant and names the offending field so

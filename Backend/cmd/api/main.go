@@ -21,6 +21,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/redisx"
 	httpiface "github.com/niagga/aveniq/backend/internal/interfaces/http"
@@ -148,6 +149,11 @@ func run() error {
 		CreateSeries:       scheduleapp.NewCreateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		UpdateSeries:       scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:       scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
+		ListUsers:          userapp.NewListUseCase(userRepository, transactor),
+		GetUser:            userapp.NewGetUseCase(userRepository, transactor),
+		ChangeUserRole:     userapp.NewChangeRoleUseCase(userRepository, transactor, auditLog, clock.New()),
+		DeactivateUser:     userapp.NewDeactivateUseCase(userRepository, transactor, auditLog, clock.New()),
+		ActivateUser:       userapp.NewActivateUseCase(userRepository, transactor, auditLog, clock.New()),
 		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
 			Users:    userRepository,
 			Sessions: sessionRepository,

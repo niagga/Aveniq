@@ -17,6 +17,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -196,6 +197,8 @@ type harness struct {
 	tokens  *authn.AccessTokens
 	repo    *fakePatientRepository
 	tenants *fakeTenantRepository
+	users   *fakeUserRepository
+	audit   *fakeAudit
 }
 
 func newHarness(t *testing.T) *harness {
@@ -222,6 +225,9 @@ func newHarness(t *testing.T) *harness {
 		tenants.byID[subject.ID] = subject
 	}
 
+	users := newFakeUserRepository()
+	audit := &fakeAudit{}
+
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ServiceVersion:    "test",
@@ -235,9 +241,14 @@ func newHarness(t *testing.T) *harness {
 		ListPatients:      patientapp.NewListUseCase(repo, scope),
 		AccessTokens:      tokens,
 		RefreshCookie:     httpiface.DefaultRefreshCookieConfig(30*24*time.Hour, false),
+		ListUsers:         userapp.NewListUseCase(users, scope),
+		GetUser:           userapp.NewGetUseCase(users, scope),
+		ChangeUserRole:    userapp.NewChangeRoleUseCase(users, scope, audit, clock),
+		DeactivateUser:    userapp.NewDeactivateUseCase(users, scope, audit, clock),
+		ActivateUser:      userapp.NewActivateUseCase(users, scope, audit, clock),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants}
+	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the

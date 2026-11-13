@@ -114,8 +114,8 @@ en cada transición de tarea.
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
 | T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | — |
-| T34 | S3, S19 | E3 | Dominio y HTTP de usuarios del consultorio: alta, cambio de papel, desactivación; el nombre de autor sale de acá | inline | pendiente |
-| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner, aceptación con contraseña | inline | pendiente |
+| T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | sin commit |
+| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | pendiente |
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | pendiente |
@@ -1425,5 +1425,52 @@ seeded so that cut does not need another catalog change.
 - HTTP: assistant lists patients (200) and is refused on HC (403); admin is refused on
   HC; accountant is refused on patients, tenants, clinical and appointments.
 
-Pendiente de E3: T34 (users), T35 (invites), T36 (trial signup), T37 (frontend), T38
+Pendiente de E3: T35 (invites), T36 (trial signup), T37 (frontend), T38
 (instance-level + E2E). The running API process must be restarted to pick up the guard.
+
+**L35 — E3/T34: cuentas del consultorio, directorio de autores y cambio de acceso (sin commit)**
+
+El alta no entra en T34. `users.password_hash` es `NOT NULL` y solo el invitado puede elegir su
+contraseña, así que una cuenta nace al aceptar una invitación (T35). Crear un usuario desde el
+panel sin ese paso obligaría a inventar una contraseña temporal o a relajar el esquema.
+
+Rutas (`0011` agrega `users:directory`):
+
+| Ruta | Permiso | Quién |
+| --- | --- | --- |
+| `GET /users` | `users:read` | owner, admin |
+| `GET /users/directory` | `users:directory` | owner, admin, professional, assistant |
+| `GET /users/{id}` | `users:read` | owner, admin |
+| `PUT /users/{id}/role` | `users:manage` | owner, admin (reglas abajo) |
+| `POST /users/{id}/deactivate`, `/activate` | `users:manage` | owner, admin (reglas abajo) |
+
+`users:directory` existe para que un profesional vea **quién** escribió una evolución sin ver los
+emails de sus colegas. Es nombre, id y papel, nada más.
+
+Reglas de cambio (`iam.AuthorizeChange`), que son la respuesta a "quién puede dejar el consultorio
+sin dueño":
+
+1. **Nadie cambia su propio acceso.** El único owner no puede degradarse; por eso el consultorio
+   siempre conserva un owner. Un admin tampoco se cambia a sí mismo.
+2. **Solo un owner otorga o toca el papel owner.** Un admin gestiona el personal de abajo y no
+   reparte ni quita la cima.
+
+Cada cambio corre en una sola transacción de tenant: carga, autoriza, persiste y escribe en la
+auditoría (`user.role_changed` con `from`/`to`, `user.deactivated`, `user.activated`). Si la
+auditoría falla, el cambio se revierte.
+
+Errores: 403 con mensaje fijo cuando la regla lo impide (no dice qué regla), 409 si la cuenta ya
+tiene ese papel o ya está en ese estado, 404 para cuentas de otro consultorio.
+
+Lo que T34 **no** hace y queda explícito: filtrar el listado por papel o por nombre, y regenerar el
+cliente OpenAPI (`schema.d.ts`), que pasa a T37 cuando el frontend lo consuma.
+
+### Evidencia
+
+- `go test ./internal/domain/... ./internal/application/... ./internal/interfaces/...` verde.
+- `AuthorizeChange`: 7 casos (propio acceso, owner por admin, owner por owner, admin cediendo owner).
+- HTTP: assistant 403 en `/users` y 200 en directorio; el directorio no trae email ni estado; accountant
+  403 en directorio y detalle; cuenta ajena 404; trail con `from>to` y actor.
+- `0011` aplicada en la base local; `TestPermissionMatrixDrift`, `TestRoleCatalogDrift` y
+  `TestIsolation` verdes con base real.
+- `go build ./...` limpio.

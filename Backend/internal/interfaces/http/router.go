@@ -20,7 +20,9 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
+	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -73,6 +75,11 @@ type Deps struct {
 	CreateSeries       *scheduleapp.CreateSeriesUseCase
 	UpdateSeries       *scheduleapp.UpdateSeriesUseCase
 	CancelSeries       *scheduleapp.CancelSeriesUseCase
+	ListUsers          *userapp.ListUseCase
+	GetUser            *userapp.GetUseCase
+	ChangeUserRole     *userapp.ChangeRoleUseCase
+	DeactivateUser     *userapp.DeactivateUseCase
+	ActivateUser       *userapp.ActivateUseCase
 	AccessTokens       *authn.AccessTokens
 	RefreshCookie      RefreshCookieConfig
 	ReadyChecks        []ReadyCheck
@@ -104,6 +111,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerPatientRoutes(api, deps)
 	registerClinicalRoutes(api, deps)
 	registerScheduleRoutes(api, deps)
+	registerUserRoutes(api, deps)
 
 	return router
 }
@@ -230,6 +238,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var patientValidationErr *patient.ValidationError
 	var clinicalValidationErr *clinical.ValidationError
 	var scheduleValidationErr *schedule.ValidationError
+	var iamValidationErr *iam.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -265,6 +274,16 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	case errors.Is(err, schedule.ErrPatientNotVisible), errors.Is(err, schedule.ErrProfessionalNotVisible):
 		return huma.Error404NotFound("The requested appointment does not exist")
 	case errors.Is(err, patient.ErrInvalidTransition):
+		return huma.Error409Conflict("That state transition is not allowed")
+	case errors.As(err, &iamValidationErr):
+		return huma.Error422UnprocessableEntity(iamValidationErr.Error())
+	case errors.Is(err, iam.ErrChangeNotAllowed):
+		// The message is fixed on purpose: the rule that refused the change is
+		// information about the other accounts, and the caller does not need it.
+		return huma.Error403Forbidden("This change is not allowed for your role")
+	case errors.Is(err, iam.ErrNotFound):
+		return huma.Error404NotFound("The requested user does not exist")
+	case errors.Is(err, iam.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
 	case errors.Is(err, tenant.ErrNotFound):
 		return huma.Error404NotFound("The requested tenant does not exist")
