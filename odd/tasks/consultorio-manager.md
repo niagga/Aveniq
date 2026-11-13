@@ -91,10 +91,10 @@ en cada transición de tarea.
 | T9 | S11 | E0 | Cliente OpenAPI generado y página que consume la API Go | inline | — |
 | T10 | S8 | E0 | `docker-compose` + Caddy para el camino con Docker | inline | — |
 | T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
-| T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | pendiente |
+| T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | `a65c581` |
 | T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
-| T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | pendiente |
+| T15 | S3, S11 | E1 | Matriz de permisos por dominio, invitaciones y alta de tenant en trial | worker | `ab7c605`, `942812c`, `0cb1918`, `2b5430a` (cubierto por T33–T36) |
 | T16 | S5 | E1 | Test de fuga cross-tenant en CI y tests de la capa HTTP | inline | `c1f0f89` |
 | T17 | S3 | E2 | API: el refresh token viaja en cookie `HttpOnly`; login/refresh/logout la setean y la limpian | inline | `6930a07` |
 | T18 | S3, S12 | E2 | Frontend: login, guard de sesión y refresco silencioso | inline | `34dbd60` |
@@ -107,17 +107,17 @@ en cada transición de tarea.
 | T24 | S1, S16 | E2 | Migración `0007`: ficha clínica 1:1 con el paciente + evoluciones, RLS forzado | inline | `4d54a24` |
 | T25 | S1, S11 | E2 | Dominio `clinical` + repositorio sqlc + tests de aislamiento | inline | `bc4163a` |
 | T26 | S1 | E2 | HTTP de historia clínica (ficha y evoluciones; autoría desde el token, nunca del cuerpo) | inline | `771c80f`, `fbbc46b` |
-| T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | inline | — |
-| T28 | S15, S5 | E2 | Migración `0009`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | inline | — |
-| T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | inline | — |
-| T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
-| T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
-| T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
+| T27 | S1, S12 | E2 | Frontend: ficha clínica y evoluciones | inline | `6fc1299` |
+| T28 | S15, S5 | E2 | Migración `0009`: turnos, series recurrentes, zona horaria del tenant, exclusión de solapamiento | inline | `c727eaa` |
+| T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | inline | `c727eaa` |
+| T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | `c727eaa`, `074dee8` |
+| T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | `c727eaa`, `82a9e79` |
+| T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | `e0a48ab`, `82a9e79` |
 | T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | ab7c605 |
 | T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | 942812c |
 | T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | 0cb1918 |
-| T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
-| T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
+| T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | `2b5430a` |
+| T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | `f7954ed` |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
@@ -1707,3 +1707,27 @@ Pendiente:
 
 - Ninguno de T38. La suite E2E usa la base de desarrollo y acumula pacientes y turnos entre corridas.
   Los datos ya son repetibles, pero conviene limpiarla antes de una corrida de referencia.
+
+**L42 — Cierre de E3 y reconciliación del tablero**
+
+Decisiones:
+
+- **T15 queda cubierta por T33 a T36.** La matriz de permisos (T33), los usuarios (T34), las
+  invitaciones (T35) y el alta en trial (T36) son lo que L14 movió a E3. No se reabre.
+- **Filas con commit, no con "pendiente".** T12 y T27 a T32 tenían cierre en su L-entry, pero la
+  fila seguía sin hash. Se completaron con el commit que los entregó.
+
+Mapeo de filas (commit que las entregó):
+
+- T12: `a65c581` (esquema IAM, catálogo de roles y RLS).
+- T15: `ab7c605`, `942812c`, `0cb1918`, `2b5430a` (cubierta por T33 a T36).
+- T27: `6fc1299` (pestaña de historia clínica).
+- T28 a T31: `c727eaa` (migración, dominio, HTTP y agenda). T30 suma `074dee8` (reglas de instancia).
+  T31 suma `82a9e79` (gates por rol en la agenda).
+- T32: `e0a48ab` (journeys E2E), ajustados en `82a9e79`.
+- T36: `2b5430a` (signup en trial con rate limit). Verificación por email sigue pendiente de proveedor.
+- T37: `f7954ed` (usuarios, invitación y signup en frontend).
+- T38: `82a9e79`, con el cierre de tablero en `c89d02b`.
+
+Estado: E3 cerrado. El tablero no define trabajo posterior a E3. El siguiente bloque se tiene que
+definir antes de codar.
