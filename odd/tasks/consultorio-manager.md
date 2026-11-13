@@ -1534,12 +1534,60 @@ la exposición), envío por email, ni pantallas (T37).
 Pendiente: reiniciar la API (`go run main.go`) para cargar las rutas de invitación. T36 (trial
 signup y rate limit de rutas públicas), T37 (pantallas y `schema.d.ts`), T38 (reglas de instancia y E2E).
 
-**L37 � Decisiones de E3/T36: alta de consultorio en trial**
+**L37 — Decisiones de E3/T36: alta de consultorio en trial**
 
-- **Duraci�n del trial: 14 d�as.** Se fija al crear el consultorio; el vencimiento no bloquea
-  todav�a (el paso a pago queda fuera de E3).
-- **Rate limit en Redis**, compartido entre instancias. Aplica al signup p�blico de T36 y tambi�n a
-  las rutas p�blicas de invitaciones (preview y accept), que quedaron sin l�mite en T35.
+- **Duración del trial: 14 días.** Se fija al crear el consultorio (`trial_ends_at`, migración `0012`).
+  El vencimiento no bloquea todavía; el paso a pago queda fuera de E3.
+- **Rate limit en Redis**, compartido entre instancias. Aplica al signup público de T36 y también a
+  las rutas públicas de invitaciones (preview y accept), que quedaron sin límite en T35.
 
-Pendiente antes de codar: confirmar que el cliente Redis ya existe en el c�digo o agregarlo como
-adaptador de port, y definir los umbrales (intentos por IP y ventana) al implementar.
+Pendiente al decidir: confirmar el cliente Redis y definir los umbrales. Resuelto en L38.
+
+**L38 — E3/T36: alta de consultorio en trial implementada (sin commit)**
+
+Decisiones:
+
+- **Alta pública**: `POST /api/v1/signup` crea el consultorio en trial y su owner en una sola
+  transacción de tenant (consultorio, usuario y auditoría `tenant.registered`). Si la auditoría falla,
+  no queda ni consultorio ni owner. Responde 201 con `tenant`, `owner` (con `emailVerified: false`) y
+  `Location: /api/v1/tenants/{slug}`.
+- **Sin sesión al registrarse**: el owner entra después con el login existente, igual que el invitado
+  de T35.
+- **Se retira `POST /api/v1/tenants`**: el alta anterior no creaba owner y no tenía límite. Ahora la
+  ruta responde 405. `tenantapp.CreateUseCase` queda sin uso HTTP; decidir si se borra.
+- **Límites** (`interfaces/http/ratelimit.go`):
+  - `signup`: 5 intentos por cliente cada 1 hora.
+  - `invitation-link`: 30 intentos por cliente cada 10 minutos, en preview y accept. Es por IP, no por
+    token.
+  - Fail closed: si Redis no responde, la ruta devuelve 503 en vez de dejar pasar.
+- **Cliente = IP**: se toma de `RemoteAddr`, que chi `RealIP` reescribe desde `X-Forwarded-For` y
+  `X-Real-IP`. Esto solo es seguro detrás de un proxy que sobrescriba esos headers. Es una condición
+  del despliegue, no del código.
+- **Trial**: `trial_ends_at` se guarda en la fila del tenant (default de 14 días para el seed). El
+  vencimiento todavía no se aplica.
+- **Verificación por email**: pendiente de proveedor. El alta deja `emailVerified: false`.
+
+Piezas: migración `0012_tenant_trial.sql`, `tenant.TrialDuration`, `port.RateLimiter`,
+`redisx.RateLimiter` (script Lua: INCR, y PEXPIRE solo en el primer intento), `application/signup`,
+`interfaces/http/signup_handlers.go` y `ratelimit.go`.
+
+Generación: `sqlcgen/tenant.sql.go` y `sqlcgen/models.go` se regeneraron con sqlc v1.31.1 (binario local,
+`go run` se colgó descargando dependencias). El resultado coincide byte a byte con la edición previa.
+
+Evidencia:
+
+- `go vet ./...` limpio.
+- `go test ./... -count=1` verde con Postgres y Redis reales (`TEST_DATABASE_URL`,
+  `TEST_APP_DATABASE_URL`, `TEST_REDIS_ADDR`), sin pruebas saltadas.
+- Redis (`redisx/ratelimit_test.go`): conteo, aislamiento por clave, ventana fija que no se extiende,
+  reinicio al vencer, entradas inválidas.
+- Postgres (`signup_repository_test.go`): alta atómica, nada queda si falla la auditoría, slug tomado
+  responde 409.
+- HTTP (`signup_routes_test.go`): alta completa, rechazos sin efecto, límite por cliente, 503 con el
+  limiter caído, límite de enlaces de invitación y `POST /tenants` ya no público.
+
+Pendiente:
+
+- Reiniciar la API (`go run main.go`) para cargar las rutas nuevas.
+- Verificación por email y vencimiento del trial: sin proveedor y sin enforcement todavía.
+- T37 (frontend) y T38 (reglas de instancia y E2E).
