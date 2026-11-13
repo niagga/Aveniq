@@ -13,7 +13,9 @@
     "build": "next build",
     "start": "next start --port 3000",
     "typecheck": "tsc --noEmit",
-    "api:types": "openapi-typescript http://127.0.0.1:8080/openapi.json -o src/shared/api/schema.d.ts"
+    "api:types": "openapi-typescript http://127.0.0.1:8080/openapi.json -o src/shared/api/schema.d.ts",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "next": "16.4.6",
@@ -22,6 +24,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

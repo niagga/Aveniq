@@ -1,6 +1,13 @@
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { getAccessToken, setAccessToken } from "@/shared/auth/token";
 
+declare global {
+  interface Window {
+    /** Development-only hook for the two-tab refresh test (T32). */
+    __aveniqEnsureSession?: () => Promise<boolean>;
+  }
+}
+
 /**
  * Session orchestration for the browser.
  *
@@ -213,6 +220,13 @@ export function startSessionChannel(): void {
   }
 
   channel = new BroadcastChannel(CHANNEL_NAME);
+
+  // T32: two-tab Playwright needs a way to fire the same refresh path the timer
+  // uses. Production never reads this; it is unset in the production bundle.
+  if (process.env.NODE_ENV !== "production") {
+    window.__aveniqEnsureSession = ensureSession;
+  }
+
   channel.onmessage = (event: MessageEvent<Message>) => {
     const message = event.data;
 

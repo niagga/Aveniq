@@ -198,10 +198,15 @@ pnpm dev           # development server
 pnpm build         # production build
 pnpm typecheck     # tsc --noEmit
 pnpm api:types     # regenerate src/shared/api/schema.d.ts from the running API
+pnpm e2e:install   # once: download Chromium for Playwright
+pnpm e2e           # E2 journeys: login, two-tab refresh, patients, clinical, agenda
 ```
 
 `pnpm api:types` needs the API running. The generated file is committed so CI can
 typecheck and build without booting a database.
+
+`pnpm e2e` needs the local stack: Postgres, Redis, the API on `127.0.0.1:8080`,
+the seeded demo practice, and the Next dev server (it will reuse one on `:3000`).
 
 ---
 

@@ -94,7 +94,7 @@ en cada transición de tarea.
 | T29 | S15, S11 | E2 | Dominio `schedule` + repositorio sqlc (solapamiento, expansión de series, estados) | inline | — |
 | T30 | S15 | E2 | HTTP de agenda (turnos por rango, alta, cambio de estado, series) | inline | — |
 | T31 | S15, S12 | E2 | Frontend: agenda semanal por profesional | inline | — |
-| T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | — | — |
+| T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -1301,3 +1301,26 @@ Frontend: `/agenda`, week grid for the signed-in professional, one-off booking a
 
 Pendiente de E2: T32 (E2E). T15 sigue en E3. The API process on :8080 must be restarted to serve
 the new routes.
+
+**L30 — E2/T32: Playwright journeys and OpenAPI client (uncommitted)**
+
+Playwright against the local stack (`pnpm e2e`): login, two tabs calling
+`window.__aveniqEnsureSession` in parallel without killing the session, then alta of a
+patient, ficha + evolución, and a one-off booking that shows on the week grid.
+
+The access token stays in memory; a cookie-only `GET /auth/me` from Playwright is 401
+and is not a session proof. The two-tab proof is both tabs still showing "Cerrar sesión".
+The booking must land inside the visible Monday–Sunday window — a +3 day slot from
+Friday is next week and never appears. The patient name in the hidden `<option>` is not
+a visible locator.
+
+`schema.d.ts` regenerated from `http://127.0.0.1:8080/openapi.json` (`pnpm api:types`).
+The hook `__aveniqEnsureSession` is assigned only when `NODE_ENV !== "production"`.
+
+### Evidence
+
+- `pnpm typecheck` clean.
+- `pnpm e2e` 3 passed (Chromium): login, two-tab refresh, patient + clinical + agenda.
+
+E2 (T17–T32) is closed on this machine. T15 remains in E3. Not on CI: the journeys need
+Postgres, Redis, the API, the seed, and a browser.

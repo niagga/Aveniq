@@ -18,6 +18,9 @@ Frontend/.next/
 Frontend/out/
 Frontend/.turbo/
 Frontend/next-env.d.ts
+Frontend/playwright-report/
+Frontend/test-results/
+Frontend/blob-report/
 *.tsbuildinfo
 .pnpm-store/
 .pnpm-debug.log*
