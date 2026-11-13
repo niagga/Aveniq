@@ -115,7 +115,7 @@ en cada transición de tarea.
 | T32 | S4, S11 | E2 | Verificación end-to-end de E2 y regeneración del cliente OpenAPI | Playwright local | — |
 | T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | — |
 | T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | sin commit |
-| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | pendiente |
+| T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | sin commit |
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | pendiente |
@@ -1474,3 +1474,62 @@ cliente OpenAPI (`schema.d.ts`), que pasa a T37 cuando el frontend lo consuma.
 - `0011` aplicada en la base local; `TestPermissionMatrixDrift`, `TestRoleCatalogDrift` y
   `TestIsolation` verdes con base real.
 - `go build ./...` limpio.
+
+**L36 — E3/T35: invitaciones y aceptación con contraseña (sin commit)**
+
+Una invitación es una oferta pendiente, no una cuenta. Solo al aceptarla nace la fila en `users`,
+con la contraseña que elige el invitado (hash argon2id). Sin email: el owner o admin copia el
+enlace de la pantalla (S20).
+
+Decisiones:
+
+- **Token** `inv1.<tenant-uuid>.<43 base64url>`, 32 bytes aleatorios. La base guarda el SHA-256 de
+  la cadena completa. El segmento de tenant es solo una pista para abrir el scope correcto: el mismo
+  secreto bajo otra práctica no coincide con ninguna fila.
+- **Vigencia**: 7 días (`iam.InvitationTTL`).
+- **Contraseña**: entre 12 y 256 caracteres, sin reglas de composición (`iam.ValidatePassword`).
+  Violarla responde 422 y el enlace sigue vivo para reintentar.
+- **Quién invita**: `users:manage` (owner, admin). Solo un owner invita como owner o retira una
+  invitación de owner (`iam.AuthorizeInvitation`). Mismo criterio que cambiar papeles.
+- **Email ya con cuenta en el consultorio**: 409 al **crear**, no al aceptar, para que el owner lo
+  sepa mientras puede retirar la invitación.
+- **Enlace público** (sin sesión): `GET /invitations/preview?token=` y `POST /invitations/accept`.
+  Malformado, desconocido, aceptado, vencido o de otra práctica responden **410** con el mismo
+  mensaje. Distinguirlos le diría a un extraño qué enlaces son reales.
+- **Uso único**: el guard vive en el `UPDATE` condicional (`accepted_at IS NULL AND expires_at > $now`),
+  no en Go. Aceptar crea la cuenta y marca la invitación en la misma transacción de tenant: si la
+  marca pierde la carrera, la cuenta se revierte. Test real: 8 aceptaciones simultáneas, exactamente
+  una gana.
+- **Aceptar no inicia sesión**: responde 201 con `userId`, `email` y `role`, y el invitado entra
+  después con la contraseña recién elegida. Así el flujo público no emite tokens ni cookies; si el
+  frontend quiere entrar de una vez, se resuelve en T37 con el login existente.
+- **Revocar**: borra una invitación pendiente (204). Una aceptada no se revoca (409) y queda como
+  historia de quién entró y cuándo.
+- **Autor eliminado**: `invited_by` pasa a `NULL` (`ON DELETE SET NULL`) y la invitación sigue
+  vigente. Por eso `ReconstituteInvitation` no exige autor.
+- **Auditoría** en la misma transacción: `invitation.created` y `invitation.revoked` (con `role`),
+  `invitation.accepted` (con `role` y `user_id`, el actor es la cuenta nueva).
+
+Piezas: `0002` ya tenía la tabla `invitations` con RLS forzado, así que **no hay migración nueva**.
+Se agregaron `queries/invitations.sql` (sqlc regenerado), `port.InvitationRepository`, el adaptador
+`postgres.InvitationRepository`, el paquete `application/invitation`, `invitation_handlers.go`,
+`authn.NewInvitationToken`/`ParseInvitationToken`, y en `problem()` los casos `ErrEmailTaken` → 409 e
+`ErrInvitationUnusable` → 410.
+
+Lo que T35 **no** hace: rate limit de las rutas públicas (T36, junto con el trial signup que comparte
+la exposición), envío por email, ni pantallas (T37).
+
+### Evidencia
+
+- `go vet ./...` y `gofmt -l` limpios; `go test ./... -count=1` verde.
+- Dominio (`invitation_test.go`): normalización del email, vigencia exacta, aceptada no reutilizable,
+  matriz de `AuthorizeInvitation`, reconstitución sin autor, política de contraseña en los bordes.
+- Token (`invitation_token_test.go`): ida y vuelta, unicidad, hash que cubre el tenant, 5 formas
+  inválidas.
+- HTTP (`invitation_routes_test.go`): ciclo completo, reglas por papel, enlace de otra práctica
+  rechazado, revocación, expiración y contraseña corta.
+- Postgres real (`invitation_repository_test.go`): aislamiento entre prácticas, escopo obligatorio,
+  carrera de aceptaciones, historia inmutable y convite que sobrevive a la baja de su autor.
+
+Pendiente: reiniciar la API (`go run main.go`) para cargar las rutas de invitación. T36 (trial
+signup y rate limit de rutas públicas), T37 (pantallas y `schema.d.ts`), T38 (reglas de instancia y E2E).

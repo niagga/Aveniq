@@ -17,6 +17,7 @@ import (
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
@@ -51,38 +52,43 @@ type ReadyCheck struct {
 // Deps holds everything the router needs. The composition root builds and
 // injects them, which keeps this package free of wiring decisions.
 type Deps struct {
-	Logger             *slog.Logger
-	ServiceVersion     string
-	CreateTenant       *tenantapp.CreateUseCase
-	GetTenantByID      *tenantapp.GetByIDUseCase
-	Login              *authapp.LoginUseCase
-	Refresh            *authapp.RefreshUseCase
-	Logout             *authapp.LogoutUseCase
-	CreatePatient      *patientapp.CreateUseCase
-	UpdatePatient      *patientapp.UpdateUseCase
-	DeactivatePatient  *patientapp.DeactivateUseCase
-	ActivatePatient    *patientapp.ActivateUseCase
-	GetPatient         *patientapp.GetUseCase
-	GetClinicalRecord  *clinicalapp.GetRecordUseCase
-	SaveClinicalRecord *clinicalapp.SaveRecordUseCase
-	ListClinicalNotes  *clinicalapp.ListNotesUseCase
-	AddClinicalNote    *clinicalapp.AddNoteUseCase
-	ListPatients       *patientapp.ListUseCase
-	CreateAppointment  *scheduleapp.CreateAppointmentUseCase
-	ListAppointments   *scheduleapp.ListAppointmentsUseCase
-	AttendAppointment  *scheduleapp.AttendAppointmentUseCase
-	CancelAppointment  *scheduleapp.CancelAppointmentUseCase
-	CreateSeries       *scheduleapp.CreateSeriesUseCase
-	UpdateSeries       *scheduleapp.UpdateSeriesUseCase
-	CancelSeries       *scheduleapp.CancelSeriesUseCase
-	ListUsers          *userapp.ListUseCase
-	GetUser            *userapp.GetUseCase
-	ChangeUserRole     *userapp.ChangeRoleUseCase
-	DeactivateUser     *userapp.DeactivateUseCase
-	ActivateUser       *userapp.ActivateUseCase
-	AccessTokens       *authn.AccessTokens
-	RefreshCookie      RefreshCookieConfig
-	ReadyChecks        []ReadyCheck
+	Logger                 *slog.Logger
+	ServiceVersion         string
+	CreateTenant           *tenantapp.CreateUseCase
+	GetTenantByID          *tenantapp.GetByIDUseCase
+	Login                  *authapp.LoginUseCase
+	Refresh                *authapp.RefreshUseCase
+	Logout                 *authapp.LogoutUseCase
+	CreatePatient          *patientapp.CreateUseCase
+	UpdatePatient          *patientapp.UpdateUseCase
+	DeactivatePatient      *patientapp.DeactivateUseCase
+	ActivatePatient        *patientapp.ActivateUseCase
+	GetPatient             *patientapp.GetUseCase
+	GetClinicalRecord      *clinicalapp.GetRecordUseCase
+	SaveClinicalRecord     *clinicalapp.SaveRecordUseCase
+	ListClinicalNotes      *clinicalapp.ListNotesUseCase
+	AddClinicalNote        *clinicalapp.AddNoteUseCase
+	ListPatients           *patientapp.ListUseCase
+	CreateAppointment      *scheduleapp.CreateAppointmentUseCase
+	ListAppointments       *scheduleapp.ListAppointmentsUseCase
+	AttendAppointment      *scheduleapp.AttendAppointmentUseCase
+	CancelAppointment      *scheduleapp.CancelAppointmentUseCase
+	CreateSeries           *scheduleapp.CreateSeriesUseCase
+	UpdateSeries           *scheduleapp.UpdateSeriesUseCase
+	CancelSeries           *scheduleapp.CancelSeriesUseCase
+	ListUsers              *userapp.ListUseCase
+	GetUser                *userapp.GetUseCase
+	ChangeUserRole         *userapp.ChangeRoleUseCase
+	DeactivateUser         *userapp.DeactivateUseCase
+	ActivateUser           *userapp.ActivateUseCase
+	CreateInvitation       *invitationapp.CreateUseCase
+	ListPendingInvitations *invitationapp.ListPendingUseCase
+	RevokeInvitation       *invitationapp.RevokeUseCase
+	PreviewInvitation      *invitationapp.PreviewUseCase
+	AcceptInvitation       *invitationapp.AcceptUseCase
+	AccessTokens           *authn.AccessTokens
+	RefreshCookie          RefreshCookieConfig
+	ReadyChecks            []ReadyCheck
 }
 
 // NewRouter builds the HTTP handler: operational endpoints, then the versioned
@@ -112,6 +118,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerClinicalRoutes(api, deps)
 	registerScheduleRoutes(api, deps)
 	registerUserRoutes(api, deps)
+	registerInvitationRoutes(api, deps)
 
 	return router
 }
@@ -283,6 +290,12 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error403Forbidden("This change is not allowed for your role")
 	case errors.Is(err, iam.ErrNotFound):
 		return huma.Error404NotFound("The requested user does not exist")
+	case errors.Is(err, iam.ErrEmailTaken):
+		return huma.Error409Conflict("That email already has an account in this practice")
+	case errors.Is(err, iam.ErrInvitationUnusable):
+		// One answer for every reason a link stops opening an account. Telling
+		// "accepted" from "expired" would tell a stranger which links were real.
+		return huma.NewError(http.StatusGone, "This invitation link is no longer valid")
 	case errors.Is(err, iam.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
 	case errors.Is(err, tenant.ErrNotFound):

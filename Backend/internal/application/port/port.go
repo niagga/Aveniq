@@ -194,3 +194,25 @@ type AuditEvent struct {
 type AuditLog interface {
 	Record(ctx context.Context, event AuditEvent) error
 }
+
+// InvitationRepository persists the pending invitations of a practice.
+//
+// Every method runs inside a tenant scope (see TenantScope). The public accept
+// path opens that scope from the tenant hint in the token before ByTokenHash, so a
+// token presented under another practice's hint matches nothing under RLS.
+// Implementations map their failures onto iam.ErrNotFound and
+// iam.ErrInvitationUnusable.
+type InvitationRepository interface {
+	Create(ctx context.Context, subject iam.Invitation) error
+	ByID(ctx context.Context, id iam.InvitationID) (iam.Invitation, error)
+	ByTokenHash(ctx context.Context, hash string) (iam.Invitation, error)
+	// Pending lists invitations that are neither accepted nor expired at now.
+	Pending(ctx context.Context, now time.Time, limit, offset int32) ([]iam.Invitation, error)
+	// MarkAccepted is the single-use guard: it only updates an invitation that is
+	// still unaccepted and unexpired, and answers iam.ErrInvitationUnusable when
+	// another request won the race.
+	MarkAccepted(ctx context.Context, id iam.InvitationID, at time.Time) error
+	// Delete removes a pending invitation. An accepted one stays: it is part of
+	// who joined the practice and when.
+	Delete(ctx context.Context, id iam.InvitationID) error
+}

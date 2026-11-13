@@ -36,6 +36,10 @@ var (
 	// this particular change: changing their own access, or touching the owner role
 	// without being an owner. The transport answers 403 with a fixed message.
 	ErrChangeNotAllowed = errors.New("iam: change not allowed for this actor")
+	// ErrInvitationUnusable reports an invitation that is accepted or expired. It
+	// is one answer on purpose: the invitee learns only that the link no longer
+	// opens an account, not which of the two happened.
+	ErrInvitationUnusable = errors.New("iam: invitation is no longer usable")
 )
 
 // ValidationError reports a violated invariant and names the offending field so
