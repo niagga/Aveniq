@@ -39,6 +39,11 @@ const (
 
 	// DefaultTimezone is the civil zone of the product's first practices.
 	DefaultTimezone = "America/Argentina/Buenos_Aires"
+
+	// TrialDuration is how long a self-registered practice stays in trial. The end is
+	// stored on the tenant when it is created, so changing this constant does not
+	// move the end of practices already registered.
+	TrialDuration = 14 * 24 * time.Hour
 )
 
 // slugPattern enforces lowercase letters and digits separated by single inner
@@ -68,12 +73,13 @@ func (e *ValidationError) Error() string {
 
 // Tenant is the aggregate root.
 type Tenant struct {
-	ID        ID
-	Slug      string
-	Name      string
-	Status    Status
-	Timezone  string
-	CreatedAt time.Time
+	ID          ID
+	Slug        string
+	Name        string
+	Status      Status
+	Timezone    string
+	CreatedAt   time.Time
+	TrialEndsAt time.Time
 }
 
 // New builds a brand-new tenant. It is the only constructor that accepts
@@ -99,20 +105,22 @@ func New(id ID, slug, name string, now time.Time) (Tenant, error) {
 		}
 	}
 
+	created := now.UTC()
 	return Tenant{
-		ID:        id,
-		Slug:      normalizedSlug,
-		Name:      normalizedName,
-		Status:    StatusTrial,
-		Timezone:  DefaultTimezone,
-		CreatedAt: now.UTC(),
+		ID:          id,
+		Slug:        normalizedSlug,
+		Name:        normalizedName,
+		Status:      StatusTrial,
+		Timezone:    DefaultTimezone,
+		CreatedAt:   created,
+		TrialEndsAt: created.Add(TrialDuration),
 	}, nil
 }
 
 // Reconstitute rebuilds a tenant from persisted state. Persistence adapters must
 // use this instead of the zero value or a struct literal: it keeps a single gate
 // for the invariants that must hold for stored data too.
-func Reconstitute(id ID, slug, name string, status Status, timezone string, createdAt time.Time) (Tenant, error) {
+func Reconstitute(id ID, slug, name string, status Status, timezone string, createdAt, trialEndsAt time.Time) (Tenant, error) {
 	if id == "" {
 		return Tenant{}, &ValidationError{Field: "id", Message: "must not be empty"}
 	}
@@ -131,14 +139,18 @@ func Reconstitute(id ID, slug, name string, status Status, timezone string, crea
 	if _, err := time.LoadLocation(timezone); err != nil {
 		return Tenant{}, &ValidationError{Field: "timezone", Message: "must be a valid IANA name"}
 	}
+	if !trialEndsAt.After(createdAt) {
+		return Tenant{}, &ValidationError{Field: "trial_ends_at", Message: "must be after the creation"}
+	}
 
 	return Tenant{
-		ID:        id,
-		Slug:      slug,
-		Name:      name,
-		Status:    status,
-		Timezone:  timezone,
-		CreatedAt: createdAt.UTC(),
+		ID:          id,
+		Slug:        slug,
+		Name:        name,
+		Status:      status,
+		Timezone:    timezone,
+		CreatedAt:   createdAt.UTC(),
+		TrialEndsAt: trialEndsAt.UTC(),
 	}, nil
 }
 

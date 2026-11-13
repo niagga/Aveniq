@@ -185,6 +185,8 @@ type Tenant struct {
 	Country   string
 	// IANA name used to expand recurring series. Instants on appointments stay in UTC.
 	Timezone string
+	// End of the trial period. Set at registration to 14 days after creation.
+	TrialEndsAt time.Time
 }
 
 type User struct {

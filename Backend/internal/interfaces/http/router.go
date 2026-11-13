@@ -19,7 +19,9 @@ import (
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
+	"github.com/niagga/aveniq/backend/internal/application/port"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
+	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
@@ -54,7 +56,8 @@ type ReadyCheck struct {
 type Deps struct {
 	Logger                 *slog.Logger
 	ServiceVersion         string
-	CreateTenant           *tenantapp.CreateUseCase
+	Signup                 *signupapp.UseCase
+	RateLimiter            port.RateLimiter
 	GetTenantByID          *tenantapp.GetByIDUseCase
 	Login                  *authapp.LoginUseCase
 	Refresh                *authapp.RefreshUseCase
@@ -119,6 +122,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerScheduleRoutes(api, deps)
 	registerUserRoutes(api, deps)
 	registerInvitationRoutes(api, deps)
+	registerSignupRoutes(api, deps)
 
 	return router
 }

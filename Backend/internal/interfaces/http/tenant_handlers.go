@@ -17,41 +17,40 @@ import (
 // the application's read model rather than a reuse of it: the transport contract
 // must be free to diverge from the internal shape.
 type tenantBody struct {
-	ID        string `json:"id" format:"uuid" doc:"Tenant identifier (UUIDv7)."`
-	Slug      string `json:"slug" doc:"DNS label that resolves this tenant as a subdomain."`
-	Name      string `json:"name" doc:"Display name of the practice."`
-	Status    string `json:"status" enum:"trial,active,suspended" doc:"Lifecycle state."`
-	Timezone  string `json:"timezone" doc:"IANA timezone used to expand recurring appointments."`
-	CreatedAt string `json:"createdAt" format:"date-time" doc:"Creation timestamp, RFC 3339 in UTC."`
+	ID          string `json:"id" format:"uuid" doc:"Tenant identifier (UUIDv7)."`
+	Slug        string `json:"slug" doc:"DNS label that resolves this tenant as a subdomain."`
+	Name        string `json:"name" doc:"Display name of the practice."`
+	Status      string `json:"status" enum:"trial,active,suspended" doc:"Lifecycle state."`
+	Timezone    string `json:"timezone" doc:"IANA timezone used to expand recurring appointments."`
+	CreatedAt   string `json:"createdAt" format:"date-time" doc:"Creation timestamp, RFC 3339 in UTC."`
+	TrialEndsAt string `json:"trialEndsAt" format:"date-time" doc:"End of the trial, RFC 3339 in UTC. Set at registration, 14 days after creation."`
 }
 
 func toTenantBody(view tenantapp.TenantView) tenantBody {
 	return tenantBody{
-		ID:        view.ID,
-		Slug:      view.Slug,
-		Name:      view.Name,
-		Status:    view.Status,
-		Timezone:  view.Timezone,
-		CreatedAt: view.CreatedAt,
+		ID:          view.ID,
+		Slug:        view.Slug,
+		Name:        view.Name,
+		Status:      view.Status,
+		Timezone:    view.Timezone,
+		CreatedAt:   view.CreatedAt,
+		TrialEndsAt: view.TrialEndsAt,
 	}
 }
 
 type tenantHandlers struct {
-	create  *tenantapp.CreateUseCase
 	getByID *tenantapp.GetByIDUseCase
 	logger  *slog.Logger
 }
 
 // registerTenantRoutes declares the tenant endpoints.
 //
-// The two reads are authenticated and identity-scoped: the practice comes from the
+// Both reads are authenticated and identity-scoped: the practice comes from the
 // signed token, never from the URL or the body, so a session cannot ask for another
-// practice's row. Creation stays public on purpose — it is the only door through
-// which a new practice can exist, and E3 turns it into a real signup with
-// verification and rate limiting.
+// practice's row. There is no creation route here: a practice comes into existence
+// only through the public registration (signup), which also creates its owner.
 func registerTenantRoutes(api huma.API, deps Deps) {
 	handlers := &tenantHandlers{
-		create:  deps.CreateTenant,
 		getByID: deps.GetTenantByID,
 		logger:  deps.Logger,
 	}
@@ -69,16 +68,6 @@ func registerTenantRoutes(api huma.API, deps Deps) {
 		Security:      []map[string][]string{{securitySchemeBearer: {}}},
 		Middlewares:   readGuard,
 	}, handlers.listTenants)
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "create-tenant",
-		Method:        http.MethodPost,
-		Path:          APIPrefix + "/tenants",
-		Summary:       "Register a tenant",
-		Description:   "Creates a tenant in trial state. Slugs are unique platform-wide. This is the public onboarding door until E3 turns it into a verified signup.",
-		Tags:          []string{"tenants"},
-		DefaultStatus: http.StatusCreated,
-	}, handlers.createTenant)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-tenant",
@@ -129,35 +118,6 @@ func (h *tenantHandlers) currentTenant(ctx context.Context) (tenantapp.TenantVie
 		return tenantapp.TenantView{}, problem(ctx, h.logger, err)
 	}
 	return view, nil
-}
-
-// ─── create ──────────────────────────────────────────────────────────────────
-
-type createTenantInput struct {
-	Body struct {
-		Slug string `json:"slug" minLength:"3" maxLength:"63" pattern:"^[a-z0-9]+(-[a-z0-9]+)*$" example:"consultorio-sur" doc:"Lowercase DNS label: letters, digits and single inner hyphens."`
-		Name string `json:"name" minLength:"1" maxLength:"120" example:"Consultorio Sur" doc:"Display name of the practice."`
-	}
-}
-
-type createTenantOutput struct {
-	Location string `header:"Location" doc:"URL of the created tenant."`
-	Body     tenantBody
-}
-
-func (h *tenantHandlers) createTenant(ctx context.Context, in *createTenantInput) (*createTenantOutput, error) {
-	view, err := h.create.Execute(ctx, tenantapp.CreateInput{
-		Slug: in.Body.Slug,
-		Name: in.Body.Name,
-	})
-	if err != nil {
-		return nil, problem(ctx, h.logger, err)
-	}
-
-	return &createTenantOutput{
-		Location: APIPrefix + "/tenants/" + view.Slug,
-		Body:     toTenantBody(view),
-	}, nil
 }
 
 // ─── get ─────────────────────────────────────────────────────────────────────

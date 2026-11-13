@@ -13,17 +13,18 @@ import (
 )
 
 const createTenant = `-- name: CreateTenant :one
-INSERT INTO tenants (id, slug, name, status, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $5)
-RETURNING id, slug, name, status, created_at, updated_at, country, timezone
+INSERT INTO tenants (id, slug, name, status, trial_ends_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING id, slug, name, status, created_at, updated_at, country, timezone, trial_ends_at
 `
 
 type CreateTenantParams struct {
-	ID        pgtype.UUID
-	Slug      string
-	Name      string
-	Status    string
-	CreatedAt time.Time
+	ID          pgtype.UUID
+	Slug        string
+	Name        string
+	Status      string
+	TrialEndsAt time.Time
+	CreatedAt   time.Time
 }
 
 func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error) {
@@ -32,6 +33,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		arg.Slug,
 		arg.Name,
 		arg.Status,
+		arg.TrialEndsAt,
 		arg.CreatedAt,
 	)
 	var i Tenant
@@ -44,12 +46,13 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.UpdatedAt,
 		&i.Country,
 		&i.Timezone,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, status, created_at, updated_at, country, timezone
+SELECT id, slug, name, status, created_at, updated_at, country, timezone, trial_ends_at
 FROM tenants
 WHERE id = $1
 `
@@ -67,12 +70,13 @@ func (q *Queries) GetTenantByID(ctx context.Context, id pgtype.UUID) (Tenant, er
 		&i.UpdatedAt,
 		&i.Country,
 		&i.Timezone,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT id, slug, name, status, created_at, updated_at, country, timezone
+SELECT id, slug, name, status, created_at, updated_at, country, timezone, trial_ends_at
 FROM tenants
 WHERE slug = $1
 `
@@ -89,12 +93,13 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (Tenant, err
 		&i.UpdatedAt,
 		&i.Country,
 		&i.Timezone,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, status, created_at, updated_at, country, timezone
+SELECT id, slug, name, status, created_at, updated_at, country, timezone, trial_ends_at
 FROM tenants
 ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
@@ -123,6 +128,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Ten
 			&i.UpdatedAt,
 			&i.Country,
 			&i.Timezone,
+			&i.TrialEndsAt,
 		); err != nil {
 			return nil, err
 		}

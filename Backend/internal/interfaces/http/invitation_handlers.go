@@ -76,8 +76,8 @@ type invitationHandlers struct {
 // public: the preview and the acceptance authenticate with the token itself, and
 // they reveal nothing about the practice beyond the invitation.
 //
-// The public routes are not rate limited yet; that is T36, together with the trial
-// signup that shares the same exposure.
+// The public routes share one rate limit per client (invitationLinkPolicy), so a
+// guessed secret cannot be tried at speed.
 func registerInvitationRoutes(api huma.API, deps Deps) {
 	handlers := &invitationHandlers{
 		create:  deps.CreateInvitation,
@@ -135,6 +135,7 @@ func registerInvitationRoutes(api huma.API, deps Deps) {
 		Description:   "Public. Answers 410 for any link that does not open an account: malformed, unknown, accepted or expired. The same answer for all four, on purpose.",
 		Tags:          []string{"invitations"},
 		DefaultStatus: http.StatusOK,
+		Middlewares:   rateLimited(api, deps.RateLimiter, deps.Logger, invitationLinkPolicy),
 	}, handlers.previewInvitation)
 
 	huma.Register(api, huma.Operation{
@@ -145,6 +146,7 @@ func registerInvitationRoutes(api huma.API, deps Deps) {
 		Description:   "Public. Creates the account with the email and role of the invitation and the password the invitee chooses, then marks the link used. Answers 410 for an unusable link and 422 for a password shorter than 12 characters.",
 		Tags:          []string{"invitations"},
 		DefaultStatus: http.StatusCreated,
+		Middlewares:   rateLimited(api, deps.RateLimiter, deps.Logger, invitationLinkPolicy),
 	}, handlers.acceptInvitation)
 }
 

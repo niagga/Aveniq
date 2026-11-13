@@ -195,6 +195,14 @@ type AuditLog interface {
 	Record(ctx context.Context, event AuditEvent) error
 }
 
+// RateLimiter counts attempts per key inside a fixed window. Hit records one attempt
+// and answers how many the window holds now, this one included. The counter lives
+// in a shared store, so every API instance sees the same attempts. An error means
+// the store could not answer; callers decide whether that fails open or closed.
+type RateLimiter interface {
+	Hit(ctx context.Context, key string, window time.Duration) (int64, error)
+}
+
 // InvitationRepository persists the pending invitations of a practice.
 //
 // Every method runs inside a tenant scope (see TenantScope). The public accept

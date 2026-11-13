@@ -48,12 +48,21 @@ func (r *TenantRepository) Create(ctx context.Context, subject tenant.Tenant) er
 		return err
 	}
 
-	_, err = r.queries.CreateTenant(ctx, sqlcgen.CreateTenantParams{
-		ID:        id,
-		Slug:      subject.Slug,
-		Name:      subject.Name,
-		Status:    string(subject.Status),
-		CreatedAt: subject.CreatedAt,
+	// Inside a tenant transaction the insert joins it, so a signup that fails on the
+	// owner account does not leave a practice without an owner. The tenants table has
+	// no row-level security, so the same transaction can write it.
+	queries := r.queries
+	if tx, ok := tenantTransaction(ctx); ok {
+		queries = r.queries.WithTx(tx)
+	}
+
+	_, err = queries.CreateTenant(ctx, sqlcgen.CreateTenantParams{
+		ID:          id,
+		Slug:        subject.Slug,
+		Name:        subject.Name,
+		Status:      string(subject.Status),
+		TrialEndsAt: subject.TrialEndsAt,
+		CreatedAt:   subject.CreatedAt,
 	})
 	if err != nil {
 		return translateError(err)
@@ -117,6 +126,7 @@ func toDomain(row sqlcgen.Tenant) (tenant.Tenant, error) {
 		tenant.Status(row.Status),
 		row.Timezone,
 		row.CreatedAt,
+		row.TrialEndsAt,
 	)
 	if err != nil {
 		return tenant.Tenant{}, fmt.Errorf("postgres: stored tenant %s is invalid: %w", row.ID.String(), err)

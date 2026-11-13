@@ -21,6 +21,7 @@ import (
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
+	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
@@ -131,7 +132,8 @@ func run() error {
 	deps := httpiface.Deps{
 		Logger:                 logger,
 		ServiceVersion:         version,
-		CreateTenant:           tenantapp.NewCreateUseCase(tenantRepository, clock.New(), idgen.UUIDGenerator{}),
+		Signup:                 signupapp.NewUseCase(tenantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, hasher),
+		RateLimiter:            redisx.NewRateLimiter(redisClient),
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenantRepository),
 		Login:                  loginUseCase,
 		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),

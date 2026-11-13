@@ -17,6 +17,7 @@ import (
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
@@ -160,7 +161,17 @@ type fakeTenantRepository struct {
 	byID map[tenant.ID]tenant.Tenant
 }
 
-func (r *fakeTenantRepository) Create(context.Context, tenant.Tenant) error { return nil }
+// Create enforces the slug uniqueness the table enforces, so a signup that reuses a
+// slug answers the conflict the real repository would.
+func (r *fakeTenantRepository) Create(_ context.Context, subject tenant.Tenant) error {
+	for _, existing := range r.byID {
+		if existing.Slug == subject.Slug {
+			return tenant.ErrSlugTaken
+		}
+	}
+	r.byID[subject.ID] = subject
+	return nil
+}
 
 func (r *fakeTenantRepository) BySlug(_ context.Context, slug string) (tenant.Tenant, error) {
 	for _, subject := range r.byID {
@@ -202,6 +213,7 @@ type harness struct {
 	audit   *fakeAudit
 
 	invitations *fakeInvitationRepository
+	limiter     *fakeRateLimiter
 }
 
 func newHarness(t *testing.T) *harness {
@@ -231,11 +243,13 @@ func newHarness(t *testing.T) *harness {
 	users := newFakeUserRepository()
 	audit := &fakeAudit{}
 	invitations := newFakeInvitationRepository()
+	limiter := &fakeRateLimiter{hits: map[string]int64{}}
 
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ServiceVersion:         "test",
-		CreateTenant:           tenantapp.NewCreateUseCase(tenants, clock, uuidIDs{}),
+		Signup:                 signupapp.NewUseCase(tenants, users, scope, audit, clock, uuidIDs{}, fakeHasher{}),
+		RateLimiter:            limiter,
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
 		CreatePatient:          patientapp.NewCreateUseCase(repo, catalog, scope, clock, uuidIDs{}),
 		UpdatePatient:          patientapp.NewUpdateUseCase(repo, catalog, scope, clock),
@@ -257,7 +271,7 @@ func newHarness(t *testing.T) *harness {
 		AcceptInvitation:       invitationapp.NewAcceptUseCase(invitations, users, scope, audit, clock, uuidIDs{}, fakeHasher{}),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit, invitations: invitations}
+	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the
