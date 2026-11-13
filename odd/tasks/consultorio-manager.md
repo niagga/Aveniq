@@ -1643,3 +1643,18 @@ Pendiente:
   chico; revisar cuando haya más.
 - Verificación de email y vencimiento del trial, igual que en L38.
 - Aislar los datos del E2E de paciente y turno para que la suite sea repetible.
+
+**L40 — E3/T38: decisiones de instancia (antes de codar)**
+
+Respuestas de AskQuestion y reglas que se derivan:
+
+- **Tratante** (patients.treating_professional_id): campo explícito, un paciente un tratante. Un
+  professional que da de alta un paciente queda como su tratante. Owner y admin lo reasignan. Los
+  pacientes anteriores a T38 quedan sin tratante hasta que el owner o admin los asigne.
+- **Agenda**: un professional agenda solo con sus pacientes (los que tiene como tratante). Owner, admin
+  y assistant agendan con cualquier paciente.
+- **Concesión de HC** (S23): la da solo el tratante, a un profesional del consultorio. Da lectura de la
+  ficha y de la HC de ese paciente. **No** da permiso para agendar. Decisión mía, revisable.
+- **Alcance del professional**: ve sus pacientes (tratante) y los pacientes concedidos, y de los turnos
+  solo los suyos. Un paciente fuera de su alcance responde 404, no 403, para no revelar que existe.
+- **Tenants**: GET /api/v1/tenants se acota al consultorio de la sesión. Cierra el hallazgo de L39.
