@@ -1763,4 +1763,6 @@ Decisiones:
 
 Evidencia: la seed corre sin variable (se niega) y con variable (no inserta nada porque las cuentas
 ya existen). El E2E sin `E2E_PASSWORD` falla con mensaje claro. `go test ./cmd/passhash` pasa.
-Pendiente: correr `pnpm e2e` con `E2E_PASSWORD` seteada al valor de desarrollo.
+Verificado después del cambio: `pnpm e2e` con `E2E_PASSWORD` seteada al valor de desarrollo, leído
+del historial solo para esa corrida. Seis de seis pasan (journey del profesional e isolation de
+e3-care). Las dos variables se borraron de la sesión al terminar.
