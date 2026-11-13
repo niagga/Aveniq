@@ -118,7 +118,7 @@ en cada transición de tarea.
 | T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | 0cb1918 |
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | pendiente |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | pendiente |
-| T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | pendiente |
+| T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -1658,3 +1658,52 @@ Respuestas de AskQuestion y reglas que se derivan:
 - **Alcance del professional**: ve sus pacientes (tratante) y los pacientes concedidos, y de los turnos
   solo los suyos. Un paciente fuera de su alcance responde 404, no 403, para no revelar que existe.
 - **Tenants**: GET /api/v1/tenants se acota al consultorio de la sesión. Cierra el hallazgo de L39.
+
+**L41 — E3/T38: pruebas E2E de aislamiento y frontend de instancia (cerrado en 82a9e79)**
+
+Decisiones:
+
+- **Historia clínica en solo lectura sin ficha escrita**: el grantee ve la ficha vacía con el aviso
+  "Tenés acceso de lectura. Solo el profesional tratante escribe esta ficha." Un 404 con el paciente
+  ya cargado significa que el tratante todavía no guardó la ficha, no que falte acceso. Un grant
+  revocado sigue dando 403 y muestra el error real. Revisable.
+- **Reserva en E2E**: el spec prueba horas en punto entre 8 y 19 hasta encontrar un hueco libre del
+  profesional. Los turnos duran 45 minutos, así que dos horas en punto nunca se solapan.
+
+Evidencia:
+
+- `pnpm e2e`: 6 de 6 pasan, en dos corridas seguidas (Chromium, 1 worker). Cubre el journey del
+  profesional (e2) y las tres pruebas de aislamiento (e3-care): solo ve sus pacientes, el assistant
+  lee el padrón sin historia clínica, y el grantee lee, no escribe ni agenda, y pierde la lectura al
+  revocar.
+- `pnpm typecheck` limpio.
+
+Hallazgos corregidos en esta corrida (todos en los tests o en la ficha, ninguno en las reglas de
+dominio):
+
+- La búsqueda por "E3 <sello>" no encontraba nada: el nombre lleva una palabra en el medio ("Propio",
+  "Tratado"). Ahora se busca por el sello numérico, que sí es subcadena de ambos.
+- El selector de paciente en agenda no resolvía con `getByLabel(…, { exact: true })`. Sin `exact` sí.
+- Un grantee sin ficha escrita veía "No tenés acceso a esta historia clínica." (404 mal leído).
+- La reserva del journey chocaba con turnos de corridas anteriores del mismo profesional.
+
+Entorno:
+
+- La API en 127.0.0.1:8080 ya sirve el código nuevo: el spec publica `clinical-grants`,
+  `clinical-grants/{grantId}/revoke` y `treating-professional`.
+- La base de desarrollo acumula pacientes y turnos de las corridas E2E (nombres con sello). Los tests
+  siguen pasando porque cada corrida usa su sello y su hueco.
+
+Cierre:
+
+- `pnpm build` limpio: `/usuarios`, `/registro`, `/patients` y `/agenda` estáticas; `/invitacion` y
+  `/login` dinámicas.
+- Dead code: se borró `tenantapp.ListUseCase` (y su test) junto con `TenantRepository.List`, sus fakes,
+  la implementación Postgres y la query `ListTenants`. `sqlc generate` regenerado; solo cambió
+  `tenant.sql.go`. `go build`, `go vet` y `go test ./...` (incluidos los de Postgres) pasan.
+- Commits separados: backend de limpieza, frontend de T38 y tablero.
+
+Pendiente:
+
+- Ninguno de T38. La suite E2E usa la base de desarrollo y acumula pacientes y turnos entre corridas.
+  Los datos ya son repetibles, pero conviene limpiarla antes de una corrida de referencia.
