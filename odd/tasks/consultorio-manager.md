@@ -1731,3 +1731,36 @@ Mapeo de filas (commit que las entregó):
 
 Estado: E3 cerrado. El tablero no define trabajo posterior a E3. El siguiente bloque se tiene que
 definir antes de codar.
+
+**L43 — Reglas de trabajo vigentes (indicadas por el dueño del proyecto)**
+
+Decisiones:
+
+- **Migraciones**: se aplican a la base de desarrollo sin pedir permiso. La API la reinicia el dueño
+  cuando se le avisa.
+- **Cambios que rompen**: cualquier cambio que rompa un endpoint, un contrato o datos existentes se
+  pregunta antes de hacerlo.
+- **Endpoints nuevos**: se pueden agregar cuando tienen sentido. Antes se analiza si el endpoint
+  cubre una necesidad real y no duplica otro.
+- **Decisiones de producto**: se toman, se registran en el log con la alternativa descartada y quedan
+  revisables. No se bloquea el trabajo esperando respuesta si la decisión es revisable.
+- **Commit y push**: solo cuando se piden.
+- **Credenciales**: no se imprimen en el chat ni en el log. Van en variables de entorno.
+
+**L44 — Credenciales de desarrollo: variables de entorno, sin rotar ni reescribir historial**
+
+Decisiones:
+
+- **Sin literal en el repo.** La seed toma `AVENIQ_SEED_PASSWORD` y genera el hash con argon2id al
+  correr (`Backend/cmd/passhash`). El E2E toma `E2E_PASSWORD` y falla si falta. Las dos variables
+  tienen que tener el mismo valor, el que ya usa la base de desarrollo.
+- **Cuentas demo sin cambios.** Las cuatro filas de la base de desarrollo conservan su hash. Rotarlas
+  queda como opción local si hace falta invalidar el valor viejo para este entorno.
+- **Historial de Git sin reescribir.** El literal sigue en commits anteriores (`82a9e79` y previos).
+  Es una credencial de desarrollo, no de producción. Un force-push a `main` rompe clones y PRs y no
+  compensa el riesgo. Si aparece un secreto real (DSN, JWT, API key), se rota, se invalida y, si
+  hace falta, se reescribe el historial en ese caso.
+
+Evidencia: la seed corre sin variable (se niega) y con variable (no inserta nada porque las cuentas
+ya existen). El E2E sin `E2E_PASSWORD` falla con mensaje claro. `go test ./cmd/passhash` pasa.
+Pendiente: correr `pnpm e2e` con `E2E_PASSWORD` seteada al valor de desarrollo.
