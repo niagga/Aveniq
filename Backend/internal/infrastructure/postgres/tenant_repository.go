@@ -37,7 +37,6 @@ var _ interface {
 	Create(ctx context.Context, subject tenant.Tenant) error
 	BySlug(ctx context.Context, slug string) (tenant.Tenant, error)
 	ByID(ctx context.Context, id tenant.ID) (tenant.Tenant, error)
-	List(ctx context.Context, limit, offset int32) ([]tenant.Tenant, error)
 } = (*TenantRepository)(nil)
 
 // Create inserts a new tenant, translating a slug collision into the domain error
@@ -94,27 +93,6 @@ func (r *TenantRepository) ByID(ctx context.Context, id tenant.ID) (tenant.Tenan
 		return tenant.Tenant{}, translateError(err)
 	}
 	return toDomain(row)
-}
-
-// List returns one page of tenants, newest first.
-func (r *TenantRepository) List(ctx context.Context, limit, offset int32) ([]tenant.Tenant, error) {
-	rows, err := r.queries.ListTenants(ctx, sqlcgen.ListTenantsParams{
-		Limit:  limit,
-		Offset: offset,
-	})
-	if err != nil {
-		return nil, translateError(err)
-	}
-
-	subjects := make([]tenant.Tenant, 0, len(rows))
-	for _, row := range rows {
-		subject, err := toDomain(row)
-		if err != nil {
-			return nil, err
-		}
-		subjects = append(subjects, subject)
-	}
-	return subjects, nil
 }
 
 // toDomain rebuilds the aggregate through its validating constructor.

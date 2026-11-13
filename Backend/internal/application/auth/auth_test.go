@@ -38,10 +38,6 @@ func (f *fakeTenantRepository) BySlug(_ context.Context, slug string) (tenant.Te
 	return subject, nil
 }
 
-func (f *fakeTenantRepository) List(context.Context, int32, int32) ([]tenant.Tenant, error) {
-	return nil, nil
-}
-
 // ByID resolves the practice from the signed identity, which is how T19 scopes a
 // session to its own tenant.
 func (f *fakeTenantRepository) ByID(_ context.Context, id tenant.ID) (tenant.Tenant, error) {

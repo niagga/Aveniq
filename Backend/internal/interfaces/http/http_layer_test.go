@@ -259,10 +259,6 @@ func (r *fakeTenantRepository) ByID(_ context.Context, id tenant.ID) (tenant.Ten
 	return subject, nil
 }
 
-func (r *fakeTenantRepository) List(context.Context, int32, int32) ([]tenant.Tenant, error) {
-	return nil, nil
-}
-
 type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }

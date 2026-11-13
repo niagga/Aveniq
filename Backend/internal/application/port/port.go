@@ -52,7 +52,6 @@ type TenantRepository interface {
 	Create(ctx context.Context, subject tenant.Tenant) error
 	BySlug(ctx context.Context, slug string) (tenant.Tenant, error)
 	ByID(ctx context.Context, id tenant.ID) (tenant.Tenant, error)
-	List(ctx context.Context, limit, offset int32) ([]tenant.Tenant, error)
 }
 
 // Clock abstracts time so use cases are deterministic under test.
