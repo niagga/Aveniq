@@ -1,9 +1,18 @@
 import { expect, type Page } from "@playwright/test";
 
+// The development password is never written into the repository. It is the value the seed
+// was run with (AVENIQ_SEED_PASSWORD in scripts/local-seed.ps1), passed in here as E2E_PASSWORD.
+const password = process.env.E2E_PASSWORD;
+if (!password) {
+  throw new Error(
+    "E2E_PASSWORD is not set. Use the same value as AVENIQ_SEED_PASSWORD, the one the local seed was run with.",
+  );
+}
+
 export const DEMO = {
   tenant: process.env.E2E_TENANT ?? "demo",
   email: process.env.E2E_EMAIL ?? "demo@aveniq.local",
-  password: process.env.E2E_PASSWORD ?? "demo-aveniq-2026",
+  password,
 };
 
 /**

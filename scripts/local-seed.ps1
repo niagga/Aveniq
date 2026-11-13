@@ -18,13 +18,18 @@ param(
     # Keep the practice slug stable so re-runs find it.
     [string]$Slug = 'demo',
     [string]$Name = 'Consultorio Demo',
-    [string]$Email = 'demo@aveniq.local',
-    # Development-only credential. It is committed on purpose, next to the other dev
-    # passwords (aveniq_dev, aveniq_app_dev), and it only exists in this stack.
-    [string]$Password = 'demo-aveniq-2026'
+    [string]$Email = 'demo@aveniq.local'
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The development password is never written into the repository. It comes from the
+# environment, and the seed hashes it on every run. The E2E reads the same value from
+# E2E_PASSWORD, so set both to one value.
+$Password = $env:AVENIQ_SEED_PASSWORD
+if ([string]::IsNullOrEmpty($Password)) {
+    throw 'Set AVENIQ_SEED_PASSWORD to the development password first (the E2E reads the same value from E2E_PASSWORD).'
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $LocalDir = Join-Path $RepoRoot '.local'
@@ -53,10 +58,19 @@ if (-not (Test-Path $Psql)) {
 $env:PGPASSWORD = $DbPass
 $env:PGCLIENTENCODING = 'UTF8'
 
-# The hash of $Password, minted with the production argon2id parameters
-# (m=64 MiB, t=3, p=4) so the seeded login exercises the real verification path.
-# Regenerate it with the authn package if the password changes.
-$PasswordHash = '$argon2id$v=19$m=65536,t=3,p=4$57Uhrs4N6gYdDzU0va+RzQ$8WZgrOGrSx0kkHVhFIhozXD5hRceqRLE+9edfqDnI8Y'
+# The argon2id hash of $Password, minted with the production parameters (m=64 MiB, t=3, p=4)
+# so the seeded login exercises the real verification path. The hash is salted, so it differs
+# on every run. Accounts that already exist keep the hash they were created with.
+$PasswordHash = $null
+Push-Location (Join-Path $RepoRoot 'Backend')
+try {
+    $PasswordHash = (go run ./cmd/passhash | Out-String).Trim()
+} finally {
+    Pop-Location
+}
+if ($LASTEXITCODE -ne 0 -or -not $PasswordHash.StartsWith('$argon2id$')) {
+    throw 'Could not hash the seed password. Check that Go is installed and AVENIQ_SEED_PASSWORD is set.'
+}
 
 Write-Host "`nDevelopment data" -ForegroundColor Green
 
@@ -102,6 +116,6 @@ Write-Ok "practice '$Slug' and owner '$Email' are in place"
 Write-Host "`nSign in with:" -ForegroundColor Green
 Write-Host "  consultorio  $Slug"
 Write-Host "  email        $Email"
-Write-Host "  contraseña   $Password"
+Write-Host "  contraseña   la de AVENIQ_SEED_PASSWORD (no se imprime)"
 Write-Host "`n  Development credentials. They live in this stack only and are not shipped by any migration." -ForegroundColor Yellow
 
