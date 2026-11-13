@@ -22,7 +22,7 @@ import { apiErrorMessage, browserApi } from "@/shared/api/client";
  * This panel is mounted only when the professional opens the clinical tab, so
  * looking at a phone number does not write a clinical.read audit event.
  */
-export function ClinicalPanel({ patientID }: { patientID: string }) {
+export function ClinicalPanel({ patientID, readOnly = false }: { patientID: string; readOnly?: boolean }) {
   const [record, setRecord] = useState<ClinicalRecord | null>(null);
   const [notes, setNotes] = useState<ClinicalNote[] | null>(null);
   const [hasMoreNotes, setHasMoreNotes] = useState(false);
@@ -47,8 +47,10 @@ export function ClinicalPanel({ patientID }: { patientID: string }) {
         return;
       }
 
-      // No frame yet is a first visit, not a failure: the form starts empty and
-      // the first save creates the row. Any other status is a real problem.
+      // No frame yet is a first visit, not a failure: the form starts empty and the
+      // first save creates the row. A reader only reaches this panel for a patient it
+      // can see, so a 404 here means no frame has been written yet, not no access.
+      // Any other status is a real problem.
       if (recordResult.response.status === 404) {
         setRecord({ chiefComplaint: "", background: "", objectives: "" });
       } else if (!recordResult.response.ok || !recordResult.data) {
@@ -66,7 +68,7 @@ export function ClinicalPanel({ patientID }: { patientID: string }) {
     } finally {
       setIsLoading(false);
     }
-  }, [patientID]);
+  }, [patientID, readOnly]);
 
   useEffect(() => {
     void load();
@@ -111,12 +113,16 @@ export function ClinicalPanel({ patientID }: { patientID: string }) {
       ) : null}
 
       {record ? (
-        <RecordForm
-          patientID={patientID}
-          record={record}
-          onSaved={setRecord}
-          onError={setError}
-        />
+        readOnly ? (
+          <RecordReadOnly record={record} />
+        ) : (
+          <RecordForm
+            patientID={patientID}
+            record={record}
+            onSaved={setRecord}
+            onError={setError}
+          />
+        )
       ) : null}
 
       {notes ? (
@@ -124,6 +130,7 @@ export function ClinicalPanel({ patientID }: { patientID: string }) {
           patientID={patientID}
           notes={notes}
           hasMore={hasMoreNotes}
+          readOnly={readOnly}
           onAdded={(note) => {
             setNotes((current) => [note, ...(current ?? [])]);
           }}
@@ -244,10 +251,39 @@ function RecordForm({
   );
 }
 
+/** The frame as a reader sees it: the same fields, nothing to edit. */
+function RecordReadOnly({ record }: { record: ClinicalRecord }) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">Ficha clínica</h3>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          Tenés acceso de lectura. Solo el profesional tratante escribe esta ficha.
+        </p>
+      </div>
+      <dl className="grid gap-3 text-sm">
+        <ReadOnlyField label="Motivo de consulta">{record.chiefComplaint}</ReadOnlyField>
+        <ReadOnlyField label="Antecedentes">{record.background}</ReadOnlyField>
+        <ReadOnlyField label="Objetivos">{record.objectives}</ReadOnlyField>
+      </dl>
+    </section>
+  );
+}
+
+function ReadOnlyField({ label, children }: { label: string; children?: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-ink-muted">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap">{children && children.length > 0 ? children : "—"}</dd>
+    </div>
+  );
+}
+
 function NotesSection({
   patientID,
   notes,
   hasMore,
+  readOnly,
   onAdded,
   onLoadMore,
   onError,
@@ -255,6 +291,7 @@ function NotesSection({
   patientID: string;
   notes: ClinicalNote[];
   hasMore: boolean;
+  readOnly: boolean;
   onAdded: (note: ClinicalNote) => void;
   onLoadMore: () => void;
   onError: (message: string | null) => void;
@@ -314,6 +351,7 @@ function NotesSection({
         </p>
       </div>
 
+      {readOnly ? null : (
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
         <Field id={`${prefix}-when`} label="Fecha del encuentro">
           <input
@@ -345,6 +383,7 @@ function NotesSection({
           {isSaving ? "Registrando…" : "Registrar evolución"}
         </button>
       </form>
+      )}
 
       {notes.length === 0 ? (
         <p className="text-sm text-ink-muted">Todavía no hay evoluciones.</p>

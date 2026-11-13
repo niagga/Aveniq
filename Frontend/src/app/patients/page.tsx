@@ -7,7 +7,9 @@ import type { Patient } from "@/entities/patient/model";
 import { PatientDetail, PatientLoadError } from "@/features/patients/components/patient-detail";
 import { PatientForm } from "@/features/patients/components/patient-form";
 import { PatientTable } from "@/features/patients/components/patient-table";
+import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
+import { RoleGate } from "@/shared/auth/role-gate";
 import { SessionGate } from "@/shared/auth/session-gate";
 
 /**
@@ -21,7 +23,9 @@ export default function PatientsPage() {
   return (
     <main className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-6 py-12">
       <SessionGate>
-        <PatientsScreen />
+        <RoleGate allowed={canSeePatients}>
+          <PatientsScreen />
+        </RoleGate>
       </SessionGate>
     </main>
   );

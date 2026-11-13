@@ -5,7 +5,12 @@ import Link from "next/link";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
-import { canManageAccounts } from "@/entities/iam/model";
+import {
+  canManageAccounts,
+  canReadPractice,
+  canSeePatients,
+  canUseAgenda,
+} from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { getSessionUser } from "@/shared/auth/session";
@@ -37,7 +42,12 @@ function Dashboard() {
   const [tenants, setTenants] = useState<TenantBody[] | null>(null);
   const [failedStatus, setFailedStatus] = useState<number | null>(null);
 
+  const role = getSessionUser()?.role;
+  // The accountant holds no tenant:read, so the practice card would only show a refusal.
+  const showPractice = canReadPractice(role);
+
   useEffect(() => {
+    if (!showPractice) return;
     let active = true;
 
     void (async () => {
@@ -54,7 +64,7 @@ function Dashboard() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showPractice]);
 
   return (
     <>
@@ -66,19 +76,23 @@ function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            href="/patients"
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-          >
-            Pacientes
-          </Link>
-          <Link
-            href="/agenda"
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-          >
-            Agenda
-          </Link>
-          {canManageAccounts(getSessionUser()?.role) ? (
+          {canSeePatients(role) ? (
+            <Link
+              href="/patients"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Pacientes
+            </Link>
+          ) : null}
+          {canUseAgenda(role) ? (
+            <Link
+              href="/agenda"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Agenda
+            </Link>
+          ) : null}
+          {canManageAccounts(role) ? (
             <Link
               href="/usuarios"
               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
@@ -90,7 +104,7 @@ function Dashboard() {
         </div>
       </header>
 
-      {failedStatus !== null ? (
+      {!showPractice ? null : failedStatus !== null ? (
         <Notice tone="danger" title="No pudimos leer el consultorio">
           {failedStatus === 0
             ? "La API no responde. Verificá que el backend esté corriendo en 127.0.0.1:8080."

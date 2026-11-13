@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { signIn } from "./helpers";
+import { ACCOUNTS, signIn, signInAs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -39,8 +39,10 @@ test("two tabs can refresh at once without killing the session", async ({ contex
   await other.close();
 });
 
-test("a patient can be registered, given a clinical record, and booked", async ({ page }) => {
-  await signIn(page);
+test("a professional registers a patient, keeps its clinical record, and books it", async ({ page }) => {
+  // Only a professional opens the clinical record, and registering a patient makes that
+  // professional its treating one (T38). The owner has no clinical tab.
+  await signInAs(page, ACCOUNTS.professional);
   await page.getByRole("link", { name: "Pacientes" }).click();
   await expect(page.getByRole("heading", { name: "Pacientes" })).toBeVisible();
 
@@ -71,18 +73,28 @@ test("a patient can be registered, given a clinical record, and booked", async (
 
   // The week grid is Monday–Sunday. Booking +3 days from Friday lands next week
   // and never appears; book tomorrow (or later today on Sunday).
-  const start = new Date();
-  if (start.getDay() === 0) {
-    start.setHours(start.getHours() + 1, stamp % 50, 0, 0);
+  // The professional keeps earlier appointments from previous runs, so try whole hours
+  // until one is free. Each slot is on the hour and lasts 45 minutes, so no two can overlap.
+  const day = new Date();
+  if (day.getDay() === 0) {
+    day.setHours(day.getHours() + 1, 0, 0, 0);
   } else {
-    start.setDate(start.getDate() + 1);
-    start.setHours(16, stamp % 50, 0, 0);
+    day.setDate(day.getDate() + 1);
   }
   const pad = (n: number) => String(n).padStart(2, "0");
-  const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:${pad(start.getMinutes())}`;
-  await page.getByLabel("Inicio").fill(local);
-  await page.getByRole("button", { name: "Reservar" }).click();
-  await expect(page.getByRole("button", { name: new RegExp(patientName) })).toBeVisible({
-    timeout: 10_000,
-  });
+  const booked = page.getByRole("button", { name: new RegExp(patientName) });
+  let isBooked = false;
+  for (let hour = 8; hour < 20 && !isBooked; hour++) {
+    const start = new Date(day);
+    start.setHours(hour, 0, 0, 0);
+    if (start < new Date()) continue;
+    const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
+    await page.getByLabel("Inicio").fill(local);
+    await page.getByRole("button", { name: "Reservar" }).click();
+    isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
+      () => true,
+      () => false,
+    );
+  }
+  expect(isBooked, "no free hour left on the next day").toBe(true);
 });

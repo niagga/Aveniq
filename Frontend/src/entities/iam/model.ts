@@ -32,6 +32,25 @@ export function canManageAccounts(role: string | undefined): boolean {
 }
 
 /**
+ * Owner, admin, professional and assistant hold patients:read, schedule:read and
+ * tenant:read; the accountant holds none of them (permission matrix, T33). The API
+ * enforces it; these helpers only keep a role off a screen that can only fail.
+ */
+export function canSeePatients(role: string | undefined): boolean {
+  return role === "owner" || role === "admin" || role === "professional" || role === "assistant";
+}
+
+/** The agenda is schedule:read, held by the same four roles. */
+export function canUseAgenda(role: string | undefined): boolean {
+  return canSeePatients(role);
+}
+
+/** The practice card is tenant:read, held by the same four roles. */
+export function canReadPractice(role: string | undefined): boolean {
+  return canSeePatients(role);
+}
+
+/**
  * Whether a viewer may grant `role` or act on an account that holds it. Mirrors
  * iam.AuthorizeChange and iam.AuthorizeInvitation so the screen does not offer what
  * the API will refuse. The API stays the authority.

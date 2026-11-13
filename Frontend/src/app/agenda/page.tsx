@@ -4,14 +4,18 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { WeekCalendar } from "@/features/agenda/components/week-calendar";
+import { canUseAgenda } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
+import { RoleGate } from "@/shared/auth/role-gate";
 import { SessionGate } from "@/shared/auth/session-gate";
 
 export default function AgendaPage() {
   return (
     <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 px-6 py-12">
       <SessionGate>
-        <AgendaScreen />
+        <RoleGate allowed={canUseAgenda}>
+          <AgendaScreen />
+        </RoleGate>
       </SessionGate>
     </main>
   );

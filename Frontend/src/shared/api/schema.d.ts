@@ -339,6 +339,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/{id}/clinical-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the clinical grants of a patient
+         * @description Lists every grant over the patient, live and revoked. Only the treating professional and the owner see it.
+         */
+        get: operations["list-clinical-grants"];
+        put?: never;
+        /**
+         * Grant a professional access to a patient's clinical record
+         * @description Gives another professional read access to the file and the clinical record. Only the treating professional grants. A grant does not allow booking or writing.
+         */
+        post: operations["grant-clinical-record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/clinical-grants/{grantId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a clinical grant
+         * @description Withdraws a grant. The row stays as history; revoking twice is not an error.
+         */
+        post: operations["revoke-clinical-grant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/clinical-notes": {
         parameters: {
             query?: never;
@@ -401,6 +445,26 @@ export interface paths {
          * @description Stops the patient from appearing in new appointments without losing the row or its clinical record.
          */
         post: operations["deactivate-patient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/treating-professional": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign the treating professional of a patient
+         * @description Sets who treats the patient. Only the owner and the admin assign; the professional must hold the professional role.
+         */
+        put: operations["assign-treating-professional"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -635,6 +699,19 @@ export interface components {
             /** @enum {string} */
             status?: "scheduled" | "attended" | "cancelled";
         };
+        AssignTreatingInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AssignTreatingInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: uuid
+             * @description The professional who will treat the patient.
+             */
+            professionalId: string;
+        };
         ChangeRoleBody: {
             /**
              * Format: uri
@@ -763,6 +840,39 @@ export interface components {
              */
             type: string;
         };
+        GrantBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GrantBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            grantedAt: string;
+            /** Format: uuid */
+            grantedBy: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            professionalId: string;
+            /** Format: date-time */
+            revokedAt?: string;
+        };
+        GrantInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GrantInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: uuid
+             * @description The professional who will read the clinical record.
+             */
+            professionalId: string;
+        };
         InvitationBody: {
             /** Format: date-time */
             createdAt: string;
@@ -814,6 +924,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["ClinicalNoteBody"][] | null;
+        };
+        ListGrantsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListGrantsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GrantBody"][] | null;
         };
         ListInvitationsOutputBody: {
             /**
@@ -907,6 +1026,8 @@ export interface components {
              * @description Practice the patient belongs to.
              */
             tenantId: string;
+            /** @description The professional who treats the patient. Empty until one is assigned. */
+            treatingProfessionalId?: string;
             /** Format: date-time */
             updatedAt: string;
         };
@@ -1156,6 +1277,18 @@ export interface components {
              * @description End of the trial, RFC 3339 in UTC. Set at registration, 14 days after creation.
              */
             trialEndsAt: string;
+        };
+        TreatingBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TreatingBody.json
+             */
+            readonly $schema?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            professionalId: string;
         };
         UserBody: {
             /**
@@ -1889,6 +2022,108 @@ export interface operations {
             };
         };
     };
+    "list-clinical-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListGrantsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "grant-clinical-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "revoke-clinical-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+                /** @description Grant identifier. */
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-clinical-notes": {
         parameters: {
             query?: {
@@ -2049,6 +2284,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PatientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "assign-treating-professional": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Patient identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignTreatingInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreatingBody"];
                 };
             };
             /** @description Error */

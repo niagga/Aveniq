@@ -6,14 +6,36 @@ export const DEMO = {
   password: process.env.E2E_PASSWORD ?? "demo-aveniq-2026",
 };
 
-/** Signs in through the product form and waits until the dashboard is up. */
-export async function signIn(page: Page): Promise<void> {
+/**
+ * The accounts the seed creates in the demo practice (scripts/local-seed.ps1). The names
+ * are what the screens show, so tests can pick a professional from a select by its label.
+ */
+export const ACCOUNTS = {
+  owner: { email: DEMO.email, password: DEMO.password, name: "Demo Owner" },
+  professional: { email: "profesional@aveniq.local", password: DEMO.password, name: "Demo Profesional" },
+  otherProfessional: {
+    email: "profesional2@aveniq.local",
+    password: DEMO.password,
+    name: "Demo Profesional 2",
+  },
+  assistant: { email: "recepcion@aveniq.local", password: DEMO.password, name: "Demo Recepcion" },
+} as const;
+
+export type Account = { email: string; password: string; name: string };
+
+/** Signs in as the given account through the product form and waits for the dashboard. */
+export async function signInAs(page: Page, account: Account): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Consultorio").fill(DEMO.tenant);
-  await page.getByLabel("Email").fill(DEMO.email);
-  await page.getByLabel("Contraseña").fill(DEMO.password);
+  await page.getByLabel("Email").fill(account.email);
+  await page.getByLabel("Contraseña").fill(account.password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("button", { name: "Cerrar sesión" })).toBeVisible({
     timeout: 15_000,
   });
+}
+
+/** Signs in as the demo owner. */
+export async function signIn(page: Page): Promise<void> {
+  await signInAs(page, ACCOUNTS.owner);
 }

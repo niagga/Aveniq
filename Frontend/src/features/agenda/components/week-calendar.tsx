@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { canBookWith } from "@/entities/care/model";
 import type { Patient } from "@/entities/patient/model";
 import {
   addDays,
@@ -27,7 +28,9 @@ const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
  */
 export function WeekCalendar({ timeZone }: { timeZone: string }) {
   const zone = timeZone || DEFAULT_ZONE;
-  const professionalId = getSessionUser()?.id ?? "";
+  const viewer = getSessionUser();
+  const professionalId = viewer?.id ?? "";
+  const role = viewer?.role;
 
   const [anchor, setAnchor] = useState(() => new Date());
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
@@ -91,6 +94,17 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
     return patients.find((patient) => patient.id === id)?.fullName ?? "Paciente";
   }
 
+  // A professional books only with the patients it treats (T38). The roster it reads can
+  // also carry granted patients, which it may read but not book, so they are left out here.
+  const bookable = useMemo(
+    () => patients.filter((patient) => canBookWith(role, patient, professionalId)),
+    [patients, role, professionalId],
+  );
+  const bookingNotice =
+    role === "professional" && bookable.length === 0
+      ? "No tenés pacientes a tu cargo para agendar. Un paciente queda a tu cargo cuando lo registrás vos o el titular te lo asigna."
+      : null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -130,7 +144,8 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
 
       <BookingForms
         professionalId={professionalId}
-        patients={patients}
+        patients={bookable}
+        notice={bookingNotice}
         zone={zone}
         onCreated={() => void load()}
         onError={setError}
@@ -192,12 +207,14 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
 function BookingForms({
   professionalId,
   patients,
+  notice,
   zone,
   onCreated,
   onError,
 }: {
   professionalId: string;
   patients: Patient[];
+  notice: string | null;
   zone: string;
   onCreated: () => void;
   onError: (message: string | null) => void;
@@ -273,6 +290,7 @@ function BookingForms({
     <div className="grid gap-4 rounded-[var(--radius-panel)] border border-border bg-surface p-4 lg:grid-cols-2">
       <form onSubmit={(event) => void bookOne(event)} className="space-y-3">
         <h2 className="text-sm font-semibold">Nuevo turno</h2>
+        {notice ? <p className="text-xs text-ink-muted">{notice}</p> : null}
         <PatientSelect patients={patients} value={patientId} onChange={setPatientId} />
         <label className="block text-xs font-medium text-ink-muted">
           Inicio

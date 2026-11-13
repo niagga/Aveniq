@@ -9,8 +9,18 @@ import {
   taxIDKindLabel,
   type Patient,
 } from "@/entities/patient/model";
+import {
+  canAssignTreating,
+  canManageGrants,
+  canOpenClinicalRecord,
+  canWriteClinicalRecord,
+} from "@/entities/care/model";
 import { ClinicalPanel } from "@/features/patients/components/clinical-panel";
+import { GrantsPanel } from "@/features/patients/components/grants-panel";
+import { TreatingProfessional } from "@/features/patients/components/treating-professional";
+import { useStaff } from "@/features/patients/staff";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
+import { getSessionUser } from "@/shared/auth/session";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -34,6 +44,12 @@ export function PatientDetail({
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [tab, setTab] = useState<"admin" | "clinical">("admin");
+
+  // The viewer decides what this screen offers; the API decides what is allowed.
+  const viewer = getSessionUser();
+  const role = viewer?.role;
+  const userId = viewer?.id ?? "";
+  const staff = useStaff(role);
 
   useEffect(() => {
     setTab("admin");
@@ -109,12 +125,20 @@ export function PatientDetail({
         <TabButton active={tab === "admin"} onClick={() => setTab("admin")}>
           Datos
         </TabButton>
-        <TabButton active={tab === "clinical"} onClick={() => setTab("clinical")}>
-          Historia clínica
-        </TabButton>
+        {canOpenClinicalRecord(role) ? (
+          <TabButton active={tab === "clinical"} onClick={() => setTab("clinical")}>
+            Historia clínica
+          </TabButton>
+        ) : null}
       </div>
 
-      {tab === "clinical" ? <ClinicalPanel key={patient.id} patientID={patient.id} /> : null}
+      {tab === "clinical" && canOpenClinicalRecord(role) ? (
+        <ClinicalPanel
+          key={patient.id}
+          patientID={patient.id}
+          readOnly={!canWriteClinicalRecord(role, patient, userId)}
+        />
+      ) : null}
 
       {tab === "admin" ? (
       <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
@@ -141,7 +165,19 @@ export function PatientDetail({
         <Row label="Notas administrativas" wide>
           {patient.administrativeNotes ?? "—"}
         </Row>
+        <Row label="Profesional tratante" wide>
+          <TreatingProfessional
+            patient={patient}
+            staff={staff}
+            canAssign={canAssignTreating(role)}
+            onChanged={onChanged}
+          />
+        </Row>
       </dl>
+      ) : null}
+
+      {tab === "admin" && canManageGrants(role, patient, userId) ? (
+        <GrantsPanel patient={patient} role={role} userId={userId} staff={staff} />
       ) : null}
     </section>
   );

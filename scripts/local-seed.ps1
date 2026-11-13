@@ -70,6 +70,27 @@ SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner'
 FROM tenants t
 WHERE t.slug = '$Slug'
 ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+
+-- Professionals and front desk for the T38 journeys: a treating professional, a second
+-- professional who must not see the first one's patients, and an assistant who must
+-- not see the clinical record. Same development credential as the owner.
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'profesional@aveniq.local', '$PasswordHash', 'Demo Profesional', 'professional', true, now(), now()
+FROM tenants t
+WHERE t.slug = '$Slug'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'profesional2@aveniq.local', '$PasswordHash', 'Demo Profesional 2', 'professional', true, now(), now()
+FROM tenants t
+WHERE t.slug = '$Slug'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'recepcion@aveniq.local', '$PasswordHash', 'Demo Recepcion', 'assistant', true, now(), now()
+FROM tenants t
+WHERE t.slug = '$Slug'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
 "@
 
 $output = & $Psql "postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable" -v ON_ERROR_STOP=1 -q -c $sql 2>&1
