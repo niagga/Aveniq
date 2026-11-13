@@ -1,4 +1,4 @@
-package patientapp_test
+﻿package patientapp_test
 
 import (
 	"context"
@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -71,6 +73,22 @@ type fakeDocumentCatalog struct {
 	countries          map[string]string
 	tenantCountryCalls int
 }
+
+// AssignTreating persists the treating professional the way the adapter does: as a row write.
+func (f *fakePatientRepository) AssignTreating(ctx context.Context, subject patient.Patient) error {
+	return f.Update(ctx, subject)
+}
+
+// fakeGrants answers the grant question with no live grant: these tests do not act as a granted professional.
+type fakeGrants struct{}
+
+func (fakeGrants) Create(context.Context, care.Grant) error { return nil }
+func (fakeGrants) ByID(context.Context, string) (care.Grant, error) {
+	return care.Grant{}, care.ErrGrantNotFound
+}
+func (fakeGrants) HasLiveGrant(context.Context, string, string) (bool, error) { return false, nil }
+func (fakeGrants) ListByPatient(context.Context, string) ([]care.Grant, error) { return nil, nil }
+func (fakeGrants) Save(context.Context, care.Grant) error { return nil }
 
 func newFakeDocumentCatalog() *fakeDocumentCatalog {
 	return &fakeDocumentCatalog{
@@ -182,16 +200,17 @@ func newWorld(t *testing.T) *world {
 	}
 	clock := &fixedClock{now: now}
 	ids := &seqIDs{}
+	access := careapp.NewAccess(repo, fakeGrants{})
 
 	return &world{
 		repo:       repo,
 		catalog:    catalog,
 		scope:      scope,
 		create:     patientapp.NewCreateUseCase(repo, catalog, scope, clock, ids),
-		update:     patientapp.NewUpdateUseCase(repo, catalog, scope, clock),
-		deactivate: patientapp.NewDeactivateUseCase(repo, scope, clock),
-		activate:   patientapp.NewActivateUseCase(repo, scope, clock),
-		get:        patientapp.NewGetUseCase(repo, scope),
+		update:     patientapp.NewUpdateUseCase(repo, catalog, scope, clock, access),
+		deactivate: patientapp.NewDeactivateUseCase(repo, scope, clock, access),
+		activate:   patientapp.NewActivateUseCase(repo, scope, clock, access),
+		get:        patientapp.NewGetUseCase(scope, access),
 		list:       patientapp.NewListUseCase(repo, scope),
 	}
 }

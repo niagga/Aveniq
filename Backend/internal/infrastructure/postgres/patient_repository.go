@@ -100,6 +100,8 @@ func (r *PatientRepository) List(ctx context.Context, filter port.PatientFilter)
 	rows, err := queries.ListPatients(ctx, sqlcgen.ListPatientsParams{
 		Column1: filter.Search,
 		Column2: filter.ActiveOnly,
+		Column5: filter.OwnOnly,
+		Column6: filter.ViewerID,
 		Limit:   filter.Limit,
 		Offset:  filter.Offset,
 	})
@@ -152,6 +154,26 @@ func (r *PatientRepository) Update(ctx context.Context, subject patient.Patient)
 	return nil
 }
 
+// AssignTreating sets the treating professional of an existing patient. It is a
+// statement of its own, not part of Update, so the permission to edit a file and the
+// permission to hand a patient to someone else stay separate in the database too.
+func (r *PatientRepository) AssignTreating(ctx context.Context, subject patient.Patient) error {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = queries.SetPatientTreatingProfessional(ctx, sqlcgen.SetPatientTreatingProfessionalParams{
+		ID:                     toPatientUUID(subject.ID),
+		TreatingProfessionalID: optionalUUID(subject.TreatingProfessionalID),
+		UpdatedAt:              subject.UpdatedAt,
+	})
+	if err != nil {
+		return translatePatientError(err)
+	}
+	return nil
+}
+
 // createPatientParams maps the aggregate onto the insert.
 func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, error) {
 	tenantID, err := toPGUUIDFromTenant(subject.TenantID)
@@ -160,49 +182,51 @@ func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, 
 	}
 
 	return sqlcgen.CreatePatientParams{
-		ID:                    toPatientUUID(subject.ID),
-		TenantID:              tenantID,
-		Country:               subject.Country,
-		FullName:              subject.FullName,
-		BirthDate:             toPGDate(subject.BirthDate),
-		DocumentType:          documentField(subject.Document, func(d *patient.Document) string { return d.Kind }),
-		DocumentNumber:        documentField(subject.Document, func(d *patient.Document) string { return d.Number }),
-		DocumentNormalized:    documentField(subject.Document, func(d *patient.Document) string { return d.Normalized }),
-		Phone:                 subject.Phone,
-		Email:                 subject.Email,
-		EmergencyContactName:  subject.EmergencyContactName,
-		EmergencyContactPhone: subject.EmergencyContactPhone,
-		TaxID:                 taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Number }),
-		TaxIDKind:             taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Kind }),
-		FiscalCondition:       subject.FiscalCondition,
-		FiscalAddress:         subject.FiscalAddress,
-		AdministrativeNotes:   subject.AdministrativeNotes,
-		IsActive:              subject.IsActive,
-		CreatedAt:             subject.CreatedAt,
-		UpdatedAt:             subject.UpdatedAt,
+		ID:                     toPatientUUID(subject.ID),
+		TenantID:               tenantID,
+		Country:                subject.Country,
+		FullName:               subject.FullName,
+		BirthDate:              toPGDate(subject.BirthDate),
+		DocumentType:           documentField(subject.Document, func(d *patient.Document) string { return d.Kind }),
+		DocumentNumber:         documentField(subject.Document, func(d *patient.Document) string { return d.Number }),
+		DocumentNormalized:     documentField(subject.Document, func(d *patient.Document) string { return d.Normalized }),
+		Phone:                  subject.Phone,
+		Email:                  subject.Email,
+		EmergencyContactName:   subject.EmergencyContactName,
+		EmergencyContactPhone:  subject.EmergencyContactPhone,
+		TaxID:                  taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Number }),
+		TaxIDKind:              taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Kind }),
+		FiscalCondition:        subject.FiscalCondition,
+		FiscalAddress:          subject.FiscalAddress,
+		AdministrativeNotes:    subject.AdministrativeNotes,
+		IsActive:               subject.IsActive,
+		CreatedAt:              subject.CreatedAt,
+		UpdatedAt:              subject.UpdatedAt,
+		TreatingProfessionalID: optionalUUID(subject.TreatingProfessionalID),
 	}, nil
 }
 
 // patientToDomain rebuilds the aggregate from a row.
 func patientToDomain(row sqlcgen.Patient) (patient.Patient, error) {
 	subject, err := patient.Reconstitute(patient.Stored{
-		ID:                    patient.ID(row.ID.String()),
-		TenantID:              tenantIDOf(row.TenantID),
-		Country:               row.Country,
-		FullName:              row.FullName,
-		BirthDate:             dateFromPG(row.BirthDate),
-		Document:              documentFromRow(row),
-		Phone:                 row.Phone,
-		Email:                 row.Email,
-		EmergencyContactName:  row.EmergencyContactName,
-		EmergencyContactPhone: row.EmergencyContactPhone,
-		TaxID:                 taxIDFromRow(row),
-		FiscalCondition:       row.FiscalCondition,
-		FiscalAddress:         row.FiscalAddress,
-		AdministrativeNotes:   row.AdministrativeNotes,
-		IsActive:              row.IsActive,
-		CreatedAt:             row.CreatedAt,
-		UpdatedAt:             row.UpdatedAt,
+		ID:                     patient.ID(row.ID.String()),
+		TenantID:               tenantIDOf(row.TenantID),
+		Country:                row.Country,
+		FullName:               row.FullName,
+		BirthDate:              dateFromPG(row.BirthDate),
+		Document:               documentFromRow(row),
+		Phone:                  row.Phone,
+		Email:                  row.Email,
+		EmergencyContactName:   row.EmergencyContactName,
+		EmergencyContactPhone:  row.EmergencyContactPhone,
+		TaxID:                  taxIDFromRow(row),
+		FiscalCondition:        row.FiscalCondition,
+		FiscalAddress:          row.FiscalAddress,
+		AdministrativeNotes:    row.AdministrativeNotes,
+		TreatingProfessionalID: uuidString(row.TreatingProfessionalID),
+		IsActive:               row.IsActive,
+		CreatedAt:              row.CreatedAt,
+		UpdatedAt:              row.UpdatedAt,
 	})
 	if err != nil {
 		return patient.Patient{}, fmt.Errorf("postgres: stored patient %s is invalid: %w", row.ID.String(), err)
@@ -301,4 +325,26 @@ func dateFromPG(value pgtype.Date) *time.Time {
 	}
 	when := value.Time
 	return &when
+}
+
+// optionalUUID converts an optional professional identity into the pgx type; nil is
+// the absent state, not the zero UUID.
+func optionalUUID(value *string) pgtype.UUID {
+	if value == nil {
+		return pgtype.UUID{}
+	}
+	parsed, err := uuid.Parse(*value)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: parsed, Valid: true}
+}
+
+// uuidString maps a nullable column back onto the domain's string identity.
+func uuidString(value pgtype.UUID) *string {
+	if !value.Valid {
+		return nil
+	}
+	text := value.String()
+	return &text
 }

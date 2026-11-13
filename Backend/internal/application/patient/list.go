@@ -3,7 +3,9 @@ package patientapp
 import (
 	"context"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -20,8 +22,10 @@ const (
 // default page; a negative or oversized one is rejected instead of being passed
 // through to the database.
 type ListInput struct {
-	// TenantID comes from the verified access token, never from the body.
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID   string
+	ActorID    string
+	Role       string
 	Search     string
 	ActiveOnly bool
 	Limit      int32
@@ -55,9 +59,12 @@ func (uc *ListUseCase) Execute(ctx context.Context, in ListInput) ([]PatientView
 
 	var views []PatientView
 	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		who := careapp.Viewer(in.ActorID, in.Role)
 		rows, err := uc.repo.List(ctx, port.PatientFilter{
 			Search:     in.Search,
 			ActiveOnly: in.ActiveOnly,
+			OwnOnly:    care.OwnOnly(who),
+			ViewerID:   in.ActorID,
 			Limit:      limit,
 			Offset:     in.Offset,
 		})

@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
@@ -24,6 +25,7 @@ import (
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
@@ -89,6 +91,10 @@ type Deps struct {
 	RevokeInvitation       *invitationapp.RevokeUseCase
 	PreviewInvitation      *invitationapp.PreviewUseCase
 	AcceptInvitation       *invitationapp.AcceptUseCase
+	AssignTreating         *careapp.AssignTreatingUseCase
+	GrantClinical          *careapp.GrantClinicalUseCase
+	ListGrants             *careapp.ListGrantsUseCase
+	RevokeGrant            *careapp.RevokeGrantUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -123,6 +129,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerUserRoutes(api, deps)
 	registerInvitationRoutes(api, deps)
 	registerSignupRoutes(api, deps)
+	registerCareRoutes(api, deps)
 
 	return router
 }
@@ -248,6 +255,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var validationErr *tenant.ValidationError
 	var patientValidationErr *patient.ValidationError
 	var clinicalValidationErr *clinical.ValidationError
+	var careValidationErr *care.ValidationError
 	var scheduleValidationErr *schedule.ValidationError
 	var iamValidationErr *iam.ValidationError
 	var clientErr huma.StatusError
@@ -266,6 +274,18 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("A patient with that document already exists in this practice")
 	case errors.Is(err, patient.ErrNotFound):
 		return huma.Error404NotFound("The requested patient does not exist")
+	case errors.Is(err, care.ErrGrantNotFound):
+		return huma.Error404NotFound("The requested clinical grant does not exist")
+	case errors.Is(err, care.ErrForbidden):
+		// The caller may see the patient but not act on it: the answer names the action
+		// refused, not the rule, so the other accounts' relationships stay private.
+		return huma.Error403Forbidden("This action is not allowed for your role")
+	case errors.Is(err, care.ErrGrantAlreadyLive):
+		return huma.Error409Conflict("That professional already has access to this clinical record")
+	case errors.Is(err, care.ErrNotProfessional):
+		return huma.Error422UnprocessableEntity("The treating professional must be an active professional of the practice")
+	case errors.As(err, &careValidationErr):
+		return huma.Error422UnprocessableEntity(careValidationErr.Error())
 	case errors.As(err, &clinicalValidationErr):
 		return huma.Error422UnprocessableEntity(clinicalValidationErr.Error())
 	case errors.Is(err, clinical.ErrNotFound):

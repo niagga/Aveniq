@@ -4,14 +4,19 @@ import (
 	"context"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
 // SeriesInput is a weekly recurrence.
 type SeriesInput struct {
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID           string
+	ActorID            string
+	Role               string
 	ProfessionalUserID string
 	PatientID          string
 	Weekday            int
@@ -24,6 +29,8 @@ type SeriesInput struct {
 // SeriesIDInput names a series.
 type SeriesIDInput struct {
 	TenantID string
+	ActorID  string
+	Role     string
 	ID       string
 }
 
@@ -34,6 +41,7 @@ type CreateSeriesUseCase struct {
 	scope   port.TenantScope
 	clock   port.Clock
 	ids     port.IDGenerator
+	access  *careapp.Access
 }
 
 // NewCreateSeriesUseCase wires the use case.
@@ -43,8 +51,9 @@ func NewCreateSeriesUseCase(
 	scope port.TenantScope,
 	clock port.Clock,
 	ids port.IDGenerator,
+	access *careapp.Access,
 ) *CreateSeriesUseCase {
-	return &CreateSeriesUseCase{slots: slots, tenants: tenants, scope: scope, clock: clock, ids: ids}
+	return &CreateSeriesUseCase{slots: slots, tenants: tenants, scope: scope, clock: clock, ids: ids, access: access}
 }
 
 // Execute writes the series and every occurrence in one tenant transaction.
@@ -77,7 +86,19 @@ func (uc *CreateSeriesUseCase) Execute(ctx context.Context, in SeriesInput) (Ser
 	}
 
 	created := make([]schedule.Appointment, 0, len(intervals))
+	who := careapp.Viewer(in.ActorID, in.Role)
+	if !care.ManagesAppointment(who, in.ProfessionalUserID) {
+		return SeriesView{}, care.ErrForbidden
+	}
+
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		resolved, err := uc.access.Resolve(ctx, who, in.PatientID)
+		if err != nil {
+			return err
+		}
+		if !care.Books(who, resolved.Patient) {
+			return care.ErrForbidden
+		}
 		if err := uc.slots.CreateSeries(ctx, series); err != nil {
 			return err
 		}
@@ -129,6 +150,8 @@ func NewUpdateSeriesUseCase(
 // UpdateSeriesInput is a rewrite of an existing series' civil time.
 type UpdateSeriesInput struct {
 	TenantID         string
+	ActorID          string
+	Role             string
 	ID               string
 	Weekday          int
 	LocalStartMinute int
@@ -154,6 +177,9 @@ func (uc *UpdateSeriesUseCase) Execute(ctx context.Context, in UpdateSeriesInput
 		existing, err := uc.slots.SeriesByID(ctx, schedule.SeriesID(in.ID))
 		if err != nil {
 			return err
+		}
+		if !care.ManagesAppointment(careapp.Viewer(in.ActorID, in.Role), existing.ProfessionalUserID) {
+			return schedule.ErrNotFound
 		}
 
 		updated, err := schedule.NewSeries(existing.ID, existing.TenantID, schedule.SeriesDraft{
@@ -226,8 +252,12 @@ func NewCancelSeriesUseCase(slots port.ScheduleRepository, scope port.TenantScop
 // Execute cancels scheduled occurrences of the series.
 func (uc *CancelSeriesUseCase) Execute(ctx context.Context, in SeriesIDInput) error {
 	return uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
-		if _, err := uc.slots.SeriesByID(ctx, schedule.SeriesID(in.ID)); err != nil {
+		existing, err := uc.slots.SeriesByID(ctx, schedule.SeriesID(in.ID))
+		if err != nil {
 			return err
+		}
+		if !care.ManagesAppointment(careapp.Viewer(in.ActorID, in.Role), existing.ProfessionalUserID) {
+			return schedule.ErrNotFound
 		}
 		return uc.slots.CancelScheduled(ctx, schedule.SeriesID(in.ID), uc.clock.Now())
 	})

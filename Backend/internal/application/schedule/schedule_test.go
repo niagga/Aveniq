@@ -1,15 +1,46 @@
-package scheduleapp_test
+﻿package scheduleapp_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
+
+// newAccess builds the access helper over a patient that exists and nobody treats. These tests run as an
+// unrestricted caller, so the access helper only has to find the patient.
+func newAccess() *careapp.Access {
+	return careapp.NewAccess(fakePatients{}, fakeGrants{})
+}
+
+type fakePatients struct{}
+
+func (fakePatients) Create(context.Context, patient.Patient) error { return nil }
+func (fakePatients) ByID(_ context.Context, id patient.ID) (patient.Patient, error) {
+	return patient.Patient{ID: id, IsActive: true, FullName: "Ana"}, nil
+}
+func (fakePatients) List(context.Context, port.PatientFilter) ([]patient.Patient, error) {
+	return nil, nil
+}
+func (fakePatients) Update(context.Context, patient.Patient) error         { return nil }
+func (fakePatients) AssignTreating(context.Context, patient.Patient) error { return nil }
+
+type fakeGrants struct{}
+
+func (fakeGrants) Create(context.Context, care.Grant) error { return nil }
+func (fakeGrants) ByID(context.Context, string) (care.Grant, error) {
+	return care.Grant{}, care.ErrGrantNotFound
+}
+func (fakeGrants) HasLiveGrant(context.Context, string, string) (bool, error) { return false, nil }
+func (fakeGrants) ListByPatient(context.Context, string) ([]care.Grant, error) { return nil, nil }
+func (fakeGrants) Save(context.Context, care.Grant) error { return nil }
 
 type fakeScope struct{}
 
@@ -71,7 +102,7 @@ func (f fakeTenants) List(context.Context, int32, int32) ([]tenant.Tenant, error
 func TestCreateAppointmentPersistsAScheduledSlot(t *testing.T) {
 	now := time.Date(2026, 11, 16, 15, 0, 0, 0, time.UTC)
 	slots := &fakeSlots{}
-	uc := scheduleapp.NewCreateAppointmentUseCase(slots, fakeScope{}, fakeClock{now}, &fakeIDs{})
+	uc := scheduleapp.NewCreateAppointmentUseCase(slots, fakeScope{}, fakeClock{now}, &fakeIDs{}, newAccess())
 
 	view, err := uc.Execute(context.Background(), scheduleapp.CreateAppointmentInput{
 		TenantID:           "11111111-1111-1111-1111-111111111111",
@@ -98,7 +129,7 @@ func TestCreateSeriesExpandsWeeklyOccurrences(t *testing.T) {
 		t.Fatal(err)
 	}
 	slots := &fakeSlots{}
-	uc := scheduleapp.NewCreateSeriesUseCase(slots, fakeTenants{row: practice}, fakeScope{}, fakeClock{now}, &fakeIDs{})
+	uc := scheduleapp.NewCreateSeriesUseCase(slots, fakeTenants{row: practice}, fakeScope{}, fakeClock{now}, &fakeIDs{}, newAccess())
 
 	view, err := uc.Execute(context.Background(), scheduleapp.SeriesInput{
 		TenantID:           string(practice.ID),

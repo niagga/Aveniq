@@ -8,9 +8,9 @@ INSERT INTO patients (
     document_type, document_number, document_normalized,
     phone, email, emergency_contact_name, emergency_contact_phone,
     tax_id, tax_id_kind, fiscal_condition, fiscal_address,
-    administrative_notes, is_active, created_at, updated_at
+    administrative_notes, is_active, created_at, updated_at, treating_professional_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 RETURNING *;
 
 -- name: GetPatientByID :one
@@ -41,6 +41,9 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListPatients :many
+-- OwnOnly ($5) narrows the list to the patients the viewer ($6) treats or holds a live
+-- grant on. The professional's view is decided here, in the query, so a page is never
+-- filled with patients the caller may not see and then trimmed.
 -- The search matches a fragment of the name or the exact normalized document: a
 -- document is either found or not, and a partial match on an identifier is how one
 -- patient's history is shown to another by mistake.
@@ -48,8 +51,23 @@ SELECT *
 FROM patients
 WHERE ($1::text = '' OR full_name ILIKE '%' || $1::text || '%' OR document_normalized = upper($1::text))
   AND (NOT $2::boolean OR is_active)
+  AND (NOT $5::boolean OR treating_professional_id::text = $6::text OR EXISTS (
+        SELECT 1
+        FROM clinical_grants g
+        WHERE g.patient_id = patients.id
+          AND g.professional_user_id::text = $6::text
+          AND g.revoked_at IS NULL))
 ORDER BY full_name ASC, id ASC
 LIMIT $3 OFFSET $4;
+
+-- name: SetPatientTreatingProfessional :one
+-- The treating professional is changed on its own statement: editing the file is not
+-- the same permission as assigning the patient to someone.
+UPDATE patients
+SET treating_professional_id = $2,
+    updated_at             = $3
+WHERE id = $1
+RETURNING *;
 
 -- name: GetTenantCountry :one
 -- Resolved outside the tenant scope: `tenants` has no row-level security, and the

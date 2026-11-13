@@ -1,16 +1,18 @@
-package patientapp
+﻿package patientapp
 
 import (
 	"context"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
-	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
 // GetInput names the patient to resolve.
 type GetInput struct {
-	// TenantID comes from the verified access token, never from the body.
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID string
+	ActorID  string
+	Role     string
 	ID       string
 }
 
@@ -20,24 +22,24 @@ type GetInput struct {
 // method refuses to run outside WithTenant (L10), so a missing scope must be loud
 // and never disguised as an empty result.
 type GetUseCase struct {
-	repo  port.PatientRepository
-	scope port.TenantScope
+	scope  port.TenantScope
+	access *careapp.Access
 }
 
 // NewGetUseCase wires the use case.
-func NewGetUseCase(repo port.PatientRepository, scope port.TenantScope) *GetUseCase {
-	return &GetUseCase{repo: repo, scope: scope}
+func NewGetUseCase(scope port.TenantScope, access *careapp.Access) *GetUseCase {
+	return &GetUseCase{scope: scope, access: access}
 }
 
-// Execute returns the patient or patient.ErrNotFound.
+// Execute returns the patient the caller may see, or patient.ErrNotFound.
 func (uc *GetUseCase) Execute(ctx context.Context, in GetInput) (PatientView, error) {
 	var view PatientView
 	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
-		subject, err := uc.repo.ByID(ctx, patient.ID(in.ID))
+		resolved, err := uc.access.Resolve(ctx, careapp.Viewer(in.ActorID, in.Role), in.ID)
 		if err != nil {
 			return err
 		}
-		view = toView(subject)
+		view = toView(resolved.Patient)
 		return nil
 	})
 	if err != nil {

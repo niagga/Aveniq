@@ -14,6 +14,7 @@ const (
 	PermUsersDirectory   PermissionCode = "users:directory"
 	PermPatientsRead     PermissionCode = "patients:read"
 	PermPatientsWrite    PermissionCode = "patients:write"
+	PermPatientsAssign   PermissionCode = "patients:assign"
 	PermClinicalReadOwn  PermissionCode = "clinical:read:own"
 	PermClinicalWriteOwn PermissionCode = "clinical:write:own"
 	PermClinicalReadAny  PermissionCode = "clinical:read:any"
@@ -38,6 +39,7 @@ func Catalog() []PermissionCode {
 		PermUsersDirectory,
 		PermPatientsRead,
 		PermPatientsWrite,
+		PermPatientsAssign,
 		PermClinicalReadOwn,
 		PermClinicalWriteOwn,
 		PermClinicalReadAny,
@@ -72,7 +74,7 @@ func (p PermissionCode) Valid() bool {
 var Grants = map[RoleCode][]PermissionCode{
 	RoleAdmin: {
 		PermUsersRead, PermUsersWrite, PermUsersManage,
-		PermPatientsRead, PermPatientsWrite,
+		PermPatientsRead, PermPatientsWrite, PermPatientsAssign,
 		PermScheduleRead, PermScheduleWrite,
 		PermBillingRead, PermReportsRead,
 		PermTenantRead, PermTenantSettings,

@@ -32,44 +32,46 @@ type TaxIDView struct {
 // domain types, and the domain should not have to know JSON. Optional data is nil
 // or the empty string; "absent" and "empty" are one state in the aggregate.
 type PatientView struct {
-	ID                    string
-	TenantID              string
-	Country               string
-	FullName              string
-	BirthDate             string // RFC 3339, empty when absent
-	Document              *DocumentView
-	Phone                 string
-	Email                 string
-	EmergencyContactName  string
-	EmergencyContactPhone string
-	TaxID                 *TaxIDView
-	FiscalCondition       string
-	FiscalAddress         string
-	AdministrativeNotes   string
-	IsActive              bool
-	CreatedAt             string // RFC 3339, always UTC
-	UpdatedAt             string // RFC 3339, always UTC
+	ID                     string
+	TenantID               string
+	Country                string
+	FullName               string
+	BirthDate              string // RFC 3339, empty when absent
+	Document               *DocumentView
+	Phone                  string
+	Email                  string
+	EmergencyContactName   string
+	EmergencyContactPhone  string
+	TaxID                  *TaxIDView
+	FiscalCondition        string
+	FiscalAddress          string
+	AdministrativeNotes    string
+	TreatingProfessionalID string // empty until an owner or admin assigns one
+	IsActive               bool
+	CreatedAt              string // RFC 3339, always UTC
+	UpdatedAt              string // RFC 3339, always UTC
 }
 
 func toView(subject patient.Patient) PatientView {
 	return PatientView{
-		ID:                    string(subject.ID),
-		TenantID:              string(subject.TenantID),
-		Country:               subject.Country,
-		FullName:              subject.FullName,
-		BirthDate:             formatTime(subject.BirthDate),
-		Document:              toDocumentView(subject.Document),
-		Phone:                 deref(subject.Phone),
-		Email:                 deref(subject.Email),
-		EmergencyContactName:  deref(subject.EmergencyContactName),
-		EmergencyContactPhone: deref(subject.EmergencyContactPhone),
-		TaxID:                 toTaxIDView(subject.TaxID),
-		FiscalCondition:       deref(subject.FiscalCondition),
-		FiscalAddress:         deref(subject.FiscalAddress),
-		AdministrativeNotes:   deref(subject.AdministrativeNotes),
-		IsActive:              subject.IsActive,
-		CreatedAt:             subject.CreatedAt.UTC().Format(timeLayout),
-		UpdatedAt:             subject.UpdatedAt.UTC().Format(timeLayout),
+		ID:                     string(subject.ID),
+		TenantID:               string(subject.TenantID),
+		Country:                subject.Country,
+		FullName:               subject.FullName,
+		BirthDate:              formatTime(subject.BirthDate),
+		Document:               toDocumentView(subject.Document),
+		Phone:                  deref(subject.Phone),
+		Email:                  deref(subject.Email),
+		EmergencyContactName:   deref(subject.EmergencyContactName),
+		EmergencyContactPhone:  deref(subject.EmergencyContactPhone),
+		TaxID:                  toTaxIDView(subject.TaxID),
+		FiscalCondition:        deref(subject.FiscalCondition),
+		FiscalAddress:          deref(subject.FiscalAddress),
+		AdministrativeNotes:    deref(subject.AdministrativeNotes),
+		TreatingProfessionalID: deref(subject.TreatingProfessionalID),
+		IsActive:               subject.IsActive,
+		CreatedAt:              subject.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:              subject.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 

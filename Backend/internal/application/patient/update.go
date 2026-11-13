@@ -1,18 +1,21 @@
-package patientapp
+﻿package patientapp
 
 import (
 	"context"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
-	"github.com/niagga/aveniq/backend/internal/domain/patient"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 )
 
 // UpdateInput is the edited profile of an existing patient, plus the identity of
 // the row to change.
 type UpdateInput struct {
 	ProfileInput
-	// TenantID comes from the verified access token, never from the body.
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID string
+	ActorID  string
+	Role     string
 	ID       string
 }
 
@@ -22,11 +25,12 @@ type UpdateUseCase struct {
 	catalog port.DocumentCatalog
 	scope   port.TenantScope
 	clock   port.Clock
+	access  *careapp.Access
 }
 
 // NewUpdateUseCase wires the use case.
-func NewUpdateUseCase(repo port.PatientRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock) *UpdateUseCase {
-	return &UpdateUseCase{repo: repo, catalog: catalog, scope: scope, clock: clock}
+func NewUpdateUseCase(repo port.PatientRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, access *careapp.Access) *UpdateUseCase {
+	return &UpdateUseCase{repo: repo, catalog: catalog, scope: scope, clock: clock, access: access}
 }
 
 // Execute loads the patient inside the tenant scope, applies the same
@@ -40,12 +44,16 @@ func (uc *UpdateUseCase) Execute(ctx context.Context, in UpdateInput) (PatientVi
 
 	var view PatientView
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
-		current, err := uc.repo.ByID(ctx, patient.ID(in.ID))
+		who := careapp.Viewer(in.ActorID, in.Role)
+		resolved, err := uc.access.Resolve(ctx, who, in.ID)
 		if err != nil {
-			// A patient that does not exist is patient.ErrNotFound, untouched.
+			// A patient the caller may not see is patient.ErrNotFound, untouched.
 			return err
 		}
-		subject, err := current.ChangeProfile(draft, uc.clock.Now())
+		if !care.EditsPatient(who, resolved.Patient) {
+			return care.ErrForbidden
+		}
+		subject, err := resolved.Patient.ChangeProfile(draft, uc.clock.Now())
 		if err != nil {
 			return err
 		}

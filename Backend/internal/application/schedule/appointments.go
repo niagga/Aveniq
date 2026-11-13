@@ -4,14 +4,19 @@ import (
 	"context"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
 // CreateAppointmentInput is a one-off slot.
 type CreateAppointmentInput struct {
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID           string
+	ActorID            string
+	Role               string
 	ProfessionalUserID string
 	PatientID          string
 	StartsAt           time.Time
@@ -22,6 +27,8 @@ type CreateAppointmentInput struct {
 // ListAppointmentsInput is the weekly window.
 type ListAppointmentsInput struct {
 	TenantID       string
+	ActorID        string
+	Role           string
 	From           time.Time
 	To             time.Time
 	ProfessionalID string
@@ -30,20 +37,27 @@ type ListAppointmentsInput struct {
 // TransitionInput names a slot whose status is changing.
 type TransitionInput struct {
 	TenantID string
+	ActorID  string
+	Role     string
 	ID       string
 }
 
 // CreateAppointmentUseCase books a one-off slot.
+//
+// Two instance rules apply on top of the permission schedule:write: a professional
+// books only in its own agenda and only with the patients it treats; the rest of the
+// practice books with any patient. The patient must be one the caller may see.
 type CreateAppointmentUseCase struct {
-	slots port.ScheduleRepository
-	scope port.TenantScope
-	clock port.Clock
-	ids   port.IDGenerator
+	slots  port.ScheduleRepository
+	scope  port.TenantScope
+	clock  port.Clock
+	ids    port.IDGenerator
+	access *careapp.Access
 }
 
 // NewCreateAppointmentUseCase wires the use case.
-func NewCreateAppointmentUseCase(slots port.ScheduleRepository, scope port.TenantScope, clock port.Clock, ids port.IDGenerator) *CreateAppointmentUseCase {
-	return &CreateAppointmentUseCase{slots: slots, scope: scope, clock: clock, ids: ids}
+func NewCreateAppointmentUseCase(slots port.ScheduleRepository, scope port.TenantScope, clock port.Clock, ids port.IDGenerator, access *careapp.Access) *CreateAppointmentUseCase {
+	return &CreateAppointmentUseCase{slots: slots, scope: scope, clock: clock, ids: ids, access: access}
 }
 
 // Execute inserts one scheduled slot. Overlap is refused by the database.
@@ -65,7 +79,19 @@ func (uc *CreateAppointmentUseCase) Execute(ctx context.Context, in CreateAppoin
 		return AppointmentView{}, err
 	}
 
+	who := careapp.Viewer(in.ActorID, in.Role)
+	if !care.ManagesAppointment(who, in.ProfessionalUserID) {
+		return AppointmentView{}, care.ErrForbidden
+	}
+
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		resolved, err := uc.access.Resolve(ctx, who, in.PatientID)
+		if err != nil {
+			return err
+		}
+		if !care.Books(who, resolved.Patient) {
+			return care.ErrForbidden
+		}
 		return uc.slots.CreateAppointment(ctx, slot)
 	})
 	if err != nil {
@@ -75,6 +101,9 @@ func (uc *CreateAppointmentUseCase) Execute(ctx context.Context, in CreateAppoin
 }
 
 // ListAppointmentsUseCase reads the window the weekly screen shows.
+//
+// A professional's listing is its own agenda: asked without a professional it returns
+// its own appointments, and asked for another professional it is refused.
 type ListAppointmentsUseCase struct {
 	slots port.ScheduleRepository
 	scope port.TenantScope
@@ -91,12 +120,21 @@ func (uc *ListAppointmentsUseCase) Execute(ctx context.Context, in ListAppointme
 		return nil, &schedule.ValidationError{Field: "range", Message: "to must be after from"}
 	}
 
+	who := careapp.Viewer(in.ActorID, in.Role)
+	professionalID := in.ProfessionalID
+	if care.OwnOnly(who) && professionalID == "" {
+		professionalID = in.ActorID
+	}
+	if !care.ManagesAppointment(who, professionalID) {
+		return nil, care.ErrForbidden
+	}
+
 	var views []AppointmentView
 	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
 		slots, err := uc.slots.ListAppointments(ctx, port.AppointmentFilter{
 			From:           in.From.UTC(),
 			To:             in.To.UTC(),
-			ProfessionalID: in.ProfessionalID,
+			ProfessionalID: professionalID,
 		})
 		if err != nil {
 			return err
@@ -127,8 +165,9 @@ func NewAttendAppointmentUseCase(slots port.ScheduleRepository, scope port.Tenan
 
 // Execute attends the slot.
 func (uc *AttendAppointmentUseCase) Execute(ctx context.Context, in TransitionInput) (AppointmentView, error) {
+	who := careapp.Viewer(in.ActorID, in.Role)
 	return transition(ctx, uc.scope, in.TenantID, func(ctx context.Context) (schedule.Appointment, error) {
-		slot, err := uc.slots.AppointmentByID(ctx, schedule.AppointmentID(in.ID))
+		slot, err := ownedSlot(ctx, uc.slots, who, in.ID)
 		if err != nil {
 			return schedule.Appointment{}, err
 		}
@@ -157,8 +196,9 @@ func NewCancelAppointmentUseCase(slots port.ScheduleRepository, scope port.Tenan
 
 // Execute cancels the slot.
 func (uc *CancelAppointmentUseCase) Execute(ctx context.Context, in TransitionInput) (AppointmentView, error) {
+	who := careapp.Viewer(in.ActorID, in.Role)
 	return transition(ctx, uc.scope, in.TenantID, func(ctx context.Context) (schedule.Appointment, error) {
-		slot, err := uc.slots.AppointmentByID(ctx, schedule.AppointmentID(in.ID))
+		slot, err := ownedSlot(ctx, uc.slots, who, in.ID)
 		if err != nil {
 			return schedule.Appointment{}, err
 		}
@@ -171,6 +211,19 @@ func (uc *CancelAppointmentUseCase) Execute(ctx context.Context, in TransitionIn
 		}
 		return updated, nil
 	})
+}
+
+// ownedSlot loads the appointment the caller may work on. One that belongs to another
+// professional answers schedule.ErrNotFound, the same as one that does not exist.
+func ownedSlot(ctx context.Context, slots port.ScheduleRepository, who care.Viewer, id string) (schedule.Appointment, error) {
+	slot, err := slots.AppointmentByID(ctx, schedule.AppointmentID(id))
+	if err != nil {
+		return schedule.Appointment{}, err
+	}
+	if !care.ManagesAppointment(who, slot.ProfessionalUserID) {
+		return schedule.Appointment{}, schedule.ErrNotFound
+	}
+	return slot, nil
 }
 
 func transition(

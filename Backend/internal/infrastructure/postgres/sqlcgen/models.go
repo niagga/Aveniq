@@ -52,6 +52,16 @@ type AuditLog struct {
 	CreatedAt time.Time
 }
 
+type ClinicalGrant struct {
+	ID                 pgtype.UUID
+	TenantID           pgtype.UUID
+	PatientID          pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	GrantedBy          pgtype.UUID
+	GrantedAt          time.Time
+	RevokedAt          pgtype.Timestamptz
+}
+
 // One row per encounter. Notes are never deleted: a correction is a new note, because deleting clinical history is a legal problem, not a UI decision.
 type ClinicalNote struct {
 	ID           pgtype.UUID
@@ -109,27 +119,28 @@ type Invitation struct {
 }
 
 type Patient struct {
-	ID                    pgtype.UUID
-	TenantID              pgtype.UUID
-	FullName              string
-	BirthDate             pgtype.Date
-	DocumentType          *string
-	DocumentNumber        *string
-	Phone                 *string
-	Email                 *string
-	EmergencyContactName  *string
-	EmergencyContactPhone *string
-	FiscalCondition       *string
-	LegalName             *string
-	FiscalAddress         *string
-	AdministrativeNotes   *string
-	IsActive              bool
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-	Country               string
-	DocumentNormalized    *string
-	TaxID                 *string
-	TaxIDKind             *string
+	ID                     pgtype.UUID
+	TenantID               pgtype.UUID
+	FullName               string
+	BirthDate              pgtype.Date
+	DocumentType           *string
+	DocumentNumber         *string
+	Phone                  *string
+	Email                  *string
+	EmergencyContactName   *string
+	EmergencyContactPhone  *string
+	FiscalCondition        *string
+	LegalName              *string
+	FiscalAddress          *string
+	AdministrativeNotes    *string
+	IsActive               bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	Country                string
+	DocumentNormalized     *string
+	TaxID                  *string
+	TaxIDKind              *string
+	TreatingProfessionalID pgtype.UUID
 }
 
 // Platform-wide permission catalog. Codes are stable API surface.

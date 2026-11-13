@@ -31,42 +31,44 @@ type patientTaxIDBody struct {
 }
 
 type patientBody struct {
-	ID                    string               `json:"id" format:"uuid" doc:"Patient identifier."`
-	TenantID              string               `json:"tenantId" format:"uuid" doc:"Practice the patient belongs to."`
-	Country               string               `json:"country" doc:"Country whose rules validate the document and fiscal data."`
-	FullName              string               `json:"fullName" doc:"Name as the practice registered it."`
-	BirthDate             string               `json:"birthDate,omitempty" doc:"Date of birth, YYYY-MM-DD."`
-	Document              *patientDocumentBody `json:"document,omitempty"`
-	Phone                 string               `json:"phone,omitempty"`
-	Email                 string               `json:"email,omitempty"`
-	EmergencyContactName  string               `json:"emergencyContactName,omitempty"`
-	EmergencyContactPhone string               `json:"emergencyContactPhone,omitempty"`
-	TaxID                 *patientTaxIDBody    `json:"taxId,omitempty"`
-	FiscalCondition       string               `json:"fiscalCondition,omitempty"`
-	FiscalAddress         string               `json:"fiscalAddress,omitempty"`
-	AdministrativeNotes   string               `json:"administrativeNotes,omitempty"`
-	IsActive              bool                 `json:"isActive" doc:"False after a deactivation. Patients are never deleted."`
-	CreatedAt             string               `json:"createdAt" format:"date-time"`
-	UpdatedAt             string               `json:"updatedAt" format:"date-time"`
+	ID                     string               `json:"id" format:"uuid" doc:"Patient identifier."`
+	TenantID               string               `json:"tenantId" format:"uuid" doc:"Practice the patient belongs to."`
+	Country                string               `json:"country" doc:"Country whose rules validate the document and fiscal data."`
+	FullName               string               `json:"fullName" doc:"Name as the practice registered it."`
+	BirthDate              string               `json:"birthDate,omitempty" doc:"Date of birth, YYYY-MM-DD."`
+	Document               *patientDocumentBody `json:"document,omitempty"`
+	Phone                  string               `json:"phone,omitempty"`
+	Email                  string               `json:"email,omitempty"`
+	EmergencyContactName   string               `json:"emergencyContactName,omitempty"`
+	EmergencyContactPhone  string               `json:"emergencyContactPhone,omitempty"`
+	TaxID                  *patientTaxIDBody    `json:"taxId,omitempty"`
+	FiscalCondition        string               `json:"fiscalCondition,omitempty"`
+	FiscalAddress          string               `json:"fiscalAddress,omitempty"`
+	AdministrativeNotes    string               `json:"administrativeNotes,omitempty"`
+	TreatingProfessionalID string               `json:"treatingProfessionalId,omitempty" doc:"The professional who treats the patient. Empty until one is assigned."`
+	IsActive               bool                 `json:"isActive" doc:"False after a deactivation. Patients are never deleted."`
+	CreatedAt              string               `json:"createdAt" format:"date-time"`
+	UpdatedAt              string               `json:"updatedAt" format:"date-time"`
 }
 
 func toPatientBody(view patientapp.PatientView) patientBody {
 	body := patientBody{
-		ID:                    view.ID,
-		TenantID:              view.TenantID,
-		Country:               view.Country,
-		FullName:              view.FullName,
-		BirthDate:             view.BirthDate,
-		Phone:                 view.Phone,
-		Email:                 view.Email,
-		EmergencyContactName:  view.EmergencyContactName,
-		EmergencyContactPhone: view.EmergencyContactPhone,
-		FiscalCondition:       view.FiscalCondition,
-		FiscalAddress:         view.FiscalAddress,
-		AdministrativeNotes:   view.AdministrativeNotes,
-		IsActive:              view.IsActive,
-		CreatedAt:             view.CreatedAt,
-		UpdatedAt:             view.UpdatedAt,
+		ID:                     view.ID,
+		TenantID:               view.TenantID,
+		Country:                view.Country,
+		FullName:               view.FullName,
+		BirthDate:              view.BirthDate,
+		Phone:                  view.Phone,
+		Email:                  view.Email,
+		EmergencyContactName:   view.EmergencyContactName,
+		EmergencyContactPhone:  view.EmergencyContactPhone,
+		FiscalCondition:        view.FiscalCondition,
+		FiscalAddress:          view.FiscalAddress,
+		AdministrativeNotes:    view.AdministrativeNotes,
+		TreatingProfessionalID: view.TreatingProfessionalID,
+		IsActive:               view.IsActive,
+		CreatedAt:              view.CreatedAt,
+		UpdatedAt:              view.UpdatedAt,
 	}
 
 	if view.Document != nil {
@@ -240,6 +242,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 }
 
 func (h *patientHandlers) createPatient(ctx context.Context, in *createPatientInput) (*patientOutput, error) {
+	who := identityOf(ctx)
 	profile, err := in.Body.profile()
 	if err != nil {
 		return nil, err
@@ -247,7 +250,9 @@ func (h *patientHandlers) createPatient(ctx context.Context, in *createPatientIn
 
 	view, err := h.create.Execute(ctx, patientapp.CreateInput{
 		ProfileInput: profile,
-		TenantID:     tenantOf(ctx),
+		TenantID:     who.TenantID,
+		ActorID:      who.UserID,
+		Role:         who.Role,
 	})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
@@ -256,8 +261,11 @@ func (h *patientHandlers) createPatient(ctx context.Context, in *createPatientIn
 }
 
 func (h *patientHandlers) listPatients(ctx context.Context, in *listPatientsInput) (*listPatientsOutput, error) {
+	who := identityOf(ctx)
 	views, err := h.list.Execute(ctx, patientapp.ListInput{
-		TenantID:   tenantOf(ctx),
+		TenantID:   who.TenantID,
+		ActorID:    who.UserID,
+		Role:       who.Role,
 		Search:     in.Search,
 		ActiveOnly: in.ActiveOnly,
 		Limit:      in.Limit,
@@ -276,7 +284,8 @@ func (h *patientHandlers) listPatients(ctx context.Context, in *listPatientsInpu
 }
 
 func (h *patientHandlers) getPatient(ctx context.Context, in *patientIDInput) (*patientOutput, error) {
-	view, err := h.get.Execute(ctx, patientapp.GetInput{TenantID: tenantOf(ctx), ID: in.ID})
+	who := identityOf(ctx)
+	view, err := h.get.Execute(ctx, patientapp.GetInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
@@ -284,6 +293,7 @@ func (h *patientHandlers) getPatient(ctx context.Context, in *patientIDInput) (*
 }
 
 func (h *patientHandlers) updatePatient(ctx context.Context, in *updatePatientInput) (*patientOutput, error) {
+	who := identityOf(ctx)
 	profile, err := in.Body.profile()
 	if err != nil {
 		return nil, err
@@ -291,7 +301,9 @@ func (h *patientHandlers) updatePatient(ctx context.Context, in *updatePatientIn
 
 	view, err := h.update.Execute(ctx, patientapp.UpdateInput{
 		ProfileInput: profile,
-		TenantID:     tenantOf(ctx),
+		TenantID:     who.TenantID,
+		ActorID:      who.UserID,
+		Role:         who.Role,
 		ID:           in.ID,
 	})
 	if err != nil {
@@ -301,7 +313,8 @@ func (h *patientHandlers) updatePatient(ctx context.Context, in *updatePatientIn
 }
 
 func (h *patientHandlers) deactivatePatient(ctx context.Context, in *patientIDInput) (*patientOutput, error) {
-	view, err := h.deactivate.Execute(ctx, patientapp.DeactivateInput{TenantID: tenantOf(ctx), ID: in.ID})
+	who := identityOf(ctx)
+	view, err := h.deactivate.Execute(ctx, patientapp.DeactivateInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
@@ -309,19 +322,12 @@ func (h *patientHandlers) deactivatePatient(ctx context.Context, in *patientIDIn
 }
 
 func (h *patientHandlers) activatePatient(ctx context.Context, in *patientIDInput) (*patientOutput, error) {
-	view, err := h.activate.Execute(ctx, patientapp.ActivateInput{TenantID: tenantOf(ctx), ID: in.ID})
+	who := identityOf(ctx)
+	view, err := h.activate.Execute(ctx, patientapp.ActivateInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
 	return &patientOutput{Body: toPatientBody(view)}, nil
-}
-
-// tenantOf reads the practice from the verified identity. The route is behind the
-// guard, so an empty result would be a wiring defect; an empty tenant then fails at
-// the use case with a validation error instead of writing into a zero UUID.
-func tenantOf(ctx context.Context) string {
-	identity, _ := IdentityFrom(ctx)
-	return identity.TenantID
 }
 
 // ─── inputs and outputs ──────────────────────────────────────────────────────

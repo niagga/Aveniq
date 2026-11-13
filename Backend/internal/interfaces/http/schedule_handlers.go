@@ -223,6 +223,8 @@ func (h *scheduleHandlers) listHandler(ctx context.Context, in *listAppointments
 	who := identityOf(ctx)
 	views, err := h.list.Execute(ctx, scheduleapp.ListAppointmentsInput{
 		TenantID:       who.TenantID,
+		ActorID:        who.UserID,
+		Role:           who.Role,
 		From:           from,
 		To:             to,
 		ProfessionalID: in.ProfessionalID,
@@ -257,6 +259,8 @@ func (h *scheduleHandlers) createHandler(ctx context.Context, in *createAppointm
 
 	view, err := h.create.Execute(ctx, scheduleapp.CreateAppointmentInput{
 		TenantID:           who.TenantID,
+		ActorID:            who.UserID,
+		Role:               who.Role,
 		ProfessionalUserID: professional,
 		PatientID:          in.Body.PatientID,
 		StartsAt:           starts,
@@ -273,7 +277,7 @@ func (h *scheduleHandlers) createHandler(ctx context.Context, in *createAppointm
 
 func (h *scheduleHandlers) attendHandler(ctx context.Context, in *appointmentIDInput) (*appointmentOutput, error) {
 	who := identityOf(ctx)
-	view, err := h.attend.Execute(ctx, scheduleapp.TransitionInput{TenantID: who.TenantID, ID: in.ID})
+	view, err := h.attend.Execute(ctx, scheduleapp.TransitionInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
@@ -284,7 +288,7 @@ func (h *scheduleHandlers) attendHandler(ctx context.Context, in *appointmentIDI
 
 func (h *scheduleHandlers) cancelHandler(ctx context.Context, in *appointmentIDInput) (*appointmentOutput, error) {
 	who := identityOf(ctx)
-	view, err := h.cancel.Execute(ctx, scheduleapp.TransitionInput{TenantID: who.TenantID, ID: in.ID})
+	view, err := h.cancel.Execute(ctx, scheduleapp.TransitionInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
@@ -305,6 +309,8 @@ func (h *scheduleHandlers) createSeriesHandler(ctx context.Context, in *createSe
 	}
 	view, err := h.createSeries.Execute(ctx, scheduleapp.SeriesInput{
 		TenantID:           who.TenantID,
+		ActorID:            who.UserID,
+		Role:               who.Role,
 		ProfessionalUserID: professional,
 		PatientID:          in.Body.PatientID,
 		Weekday:            in.Body.Weekday,
@@ -329,6 +335,8 @@ func (h *scheduleHandlers) updateSeriesHandler(ctx context.Context, in *updateSe
 	who := identityOf(ctx)
 	view, err := h.updateSeries.Execute(ctx, scheduleapp.UpdateSeriesInput{
 		TenantID:         who.TenantID,
+		ActorID:          who.UserID,
+		Role:             who.Role,
 		ID:               in.ID,
 		Weekday:          in.Body.Weekday,
 		LocalStartMinute: in.Body.LocalStartMinute,
@@ -346,7 +354,7 @@ func (h *scheduleHandlers) updateSeriesHandler(ctx context.Context, in *updateSe
 
 func (h *scheduleHandlers) cancelSeriesHandler(ctx context.Context, in *appointmentIDInput) (*struct{}, error) {
 	who := identityOf(ctx)
-	if err := h.cancelSeries.Execute(ctx, scheduleapp.SeriesIDInput{TenantID: who.TenantID, ID: in.ID}); err != nil {
+	if err := h.cancelSeries.Execute(ctx, scheduleapp.SeriesIDInput{TenantID: who.TenantID, ActorID: who.UserID, Role: who.Role, ID: in.ID}); err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}
 	return nil, nil

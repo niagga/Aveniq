@@ -3,7 +3,9 @@ package patientapp
 import (
 	"context"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
@@ -12,8 +14,10 @@ import (
 // and the active flag are absent because the system decides them.
 type CreateInput struct {
 	ProfileInput
-	// TenantID comes from the verified access token, never from the body.
+	// TenantID, ActorID and Role come from the verified access token, never from the body.
 	TenantID string
+	ActorID  string
+	Role     string
 }
 
 // CreateUseCase registers a new patient.
@@ -47,6 +51,11 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (PatientVi
 		subject, err := patient.New(patient.ID(uc.ids.NewID()), tenant.ID(in.TenantID), draft, uc.clock.Now())
 		if err != nil {
 			return err
+		}
+		// A professional who registers a patient treats it: nobody else is set until an
+		// owner or admin assigns one. The other roles register without a treating one.
+		if care.BecomesTreatingOnCreate(careapp.Viewer(in.ActorID, in.Role)) {
+			subject = subject.WithTreating(in.ActorID)
 		}
 		if err := uc.repo.Create(ctx, subject); err != nil {
 			return err

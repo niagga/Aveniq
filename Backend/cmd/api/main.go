@@ -17,6 +17,7 @@ import (
 	"time"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
@@ -94,6 +95,8 @@ func run() error {
 	scheduleRepository := postgres.NewScheduleRepository(pool)
 	auditLog := postgres.NewAuditRepository(pool)
 	transactor := postgres.NewTransactor(pool)
+	clinicalGrantRepository := postgres.NewClinicalGrantRepository(pool)
+	careAccess := careapp.NewAccess(patientRepository, clinicalGrantRepository)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -137,20 +140,24 @@ func run() error {
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenantRepository),
 		Login:                  loginUseCase,
 		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
-		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New()),
-		DeactivatePatient:      patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New()),
-		ActivatePatient:        patientapp.NewActivateUseCase(patientRepository, transactor, clock.New()),
-		GetPatient:             patientapp.NewGetUseCase(patientRepository, transactor),
+		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New(), careAccess),
+		DeactivatePatient:      patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New(), careAccess),
+		ActivatePatient:        patientapp.NewActivateUseCase(patientRepository, transactor, clock.New(), careAccess),
+		GetPatient:             patientapp.NewGetUseCase(transactor, careAccess),
 		ListPatients:           patientapp.NewListUseCase(patientRepository, transactor),
-		GetClinicalRecord:      clinicalapp.NewGetRecordUseCase(clinicalRepository, transactor, auditLog),
-		SaveClinicalRecord:     clinicalapp.NewSaveRecordUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
-		ListClinicalNotes:      clinicalapp.NewListNotesUseCase(clinicalRepository, transactor, auditLog),
-		AddClinicalNote:        clinicalapp.NewAddNoteUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
-		CreateAppointment:      scheduleapp.NewCreateAppointmentUseCase(scheduleRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		GetClinicalRecord:      clinicalapp.NewGetRecordUseCase(clinicalRepository, transactor, auditLog, careAccess),
+		SaveClinicalRecord:     clinicalapp.NewSaveRecordUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),
+		ListClinicalNotes:      clinicalapp.NewListNotesUseCase(clinicalRepository, transactor, auditLog, careAccess),
+		AddClinicalNote:        clinicalapp.NewAddNoteUseCase(clinicalRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),
+		CreateAppointment:      scheduleapp.NewCreateAppointmentUseCase(scheduleRepository, transactor, clock.New(), idgen.UUIDGenerator{}, careAccess),
 		ListAppointments:       scheduleapp.NewListAppointmentsUseCase(scheduleRepository, transactor),
 		AttendAppointment:      scheduleapp.NewAttendAppointmentUseCase(scheduleRepository, transactor, clock.New()),
 		CancelAppointment:      scheduleapp.NewCancelAppointmentUseCase(scheduleRepository, transactor, clock.New()),
-		CreateSeries:           scheduleapp.NewCreateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		CreateSeries:           scheduleapp.NewCreateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}, careAccess),
+		AssignTreating:         careapp.NewAssignTreatingUseCase(patientRepository, userRepository, transactor, auditLog, clock.New(), careAccess),
+		GrantClinical:          careapp.NewGrantClinicalUseCase(clinicalGrantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),
+		ListGrants:             careapp.NewListGrantsUseCase(clinicalGrantRepository, transactor, careAccess),
+		RevokeGrant:            careapp.NewRevokeGrantUseCase(clinicalGrantRepository, transactor, auditLog, clock.New(), careAccess),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),

@@ -3,6 +3,7 @@ package clinicalapp
 import (
 	"context"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -12,6 +13,7 @@ import (
 type RecordInput struct {
 	TenantID  string
 	ActorID   string
+	Role      string
 	PatientID string
 }
 
@@ -21,6 +23,7 @@ type RecordInput struct {
 type RecordDraftInput struct {
 	TenantID       string
 	ActorID        string
+	Role           string
 	PatientID      string
 	ChiefComplaint string
 	Background     string
@@ -32,19 +35,25 @@ type GetRecordUseCase struct {
 	records port.ClinicalRepository
 	scope   port.TenantScope
 	audit   port.AuditLog
+	access  *careapp.Access
 }
 
 // NewGetRecordUseCase wires the use case.
-func NewGetRecordUseCase(records port.ClinicalRepository, scope port.TenantScope, audit port.AuditLog) *GetRecordUseCase {
-	return &GetRecordUseCase{records: records, scope: scope, audit: audit}
+func NewGetRecordUseCase(records port.ClinicalRepository, scope port.TenantScope, audit port.AuditLog, access *careapp.Access) *GetRecordUseCase {
+	return &GetRecordUseCase{records: records, scope: scope, audit: audit, access: access}
 }
 
-// Execute reads the record inside the tenant transaction and audits it there.
+// Execute reads the record inside the tenant transaction and audits it there. The
+// rule is checked first: a caller who may not read the record reads nothing.
 func (uc *GetRecordUseCase) Execute(ctx context.Context, in RecordInput) (RecordView, error) {
 	who := caller{tenantID: in.TenantID, actorID: in.ActorID}
 
 	var view RecordView
 	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		if err := checkReadClinical(ctx, uc.access, careapp.Viewer(in.ActorID, in.Role), in.PatientID); err != nil {
+			return err
+		}
+
 		record, err := uc.records.RecordByPatient(ctx, in.PatientID)
 		if err != nil {
 			return err
@@ -72,6 +81,7 @@ type SaveRecordUseCase struct {
 	audit   port.AuditLog
 	clock   port.Clock
 	ids     port.IDGenerator
+	access  *careapp.Access
 }
 
 // NewSaveRecordUseCase wires the use case.
@@ -81,8 +91,9 @@ func NewSaveRecordUseCase(
 	audit port.AuditLog,
 	clock port.Clock,
 	ids port.IDGenerator,
+	access *careapp.Access,
 ) *SaveRecordUseCase {
-	return &SaveRecordUseCase{records: records, scope: scope, audit: audit, clock: clock, ids: ids}
+	return &SaveRecordUseCase{records: records, scope: scope, audit: audit, clock: clock, ids: ids, access: access}
 }
 
 // Execute upserts the frame for a patient.
@@ -108,6 +119,9 @@ func (uc *SaveRecordUseCase) Execute(ctx context.Context, in RecordDraftInput) (
 
 	var view RecordView
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		if err := checkWriteClinical(ctx, uc.access, careapp.Viewer(in.ActorID, in.Role), in.PatientID); err != nil {
+			return err
+		}
 		saved, err := uc.records.UpsertRecord(ctx, record)
 		if err != nil {
 			return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -19,6 +20,7 @@ const (
 type ListNotesInput struct {
 	TenantID  string
 	ActorID   string
+	Role      string
 	PatientID string
 	Limit     int32
 	Offset    int32
@@ -31,6 +33,7 @@ type ListNotesInput struct {
 type AddNoteInput struct {
 	TenantID      string
 	ActorID       string
+	Role          string
 	PatientID     string
 	EncounteredAt time.Time
 	Content       string
@@ -38,17 +41,19 @@ type AddNoteInput struct {
 
 // ListNotesUseCase reads a patient's encounters and records the access.
 type ListNotesUseCase struct {
-	notes port.ClinicalRepository
-	scope port.TenantScope
-	audit port.AuditLog
+	notes  port.ClinicalRepository
+	scope  port.TenantScope
+	audit  port.AuditLog
+	access *careapp.Access
 }
 
 // NewListNotesUseCase wires the use case.
-func NewListNotesUseCase(notes port.ClinicalRepository, scope port.TenantScope, audit port.AuditLog) *ListNotesUseCase {
-	return &ListNotesUseCase{notes: notes, scope: scope, audit: audit}
+func NewListNotesUseCase(notes port.ClinicalRepository, scope port.TenantScope, audit port.AuditLog, access *careapp.Access) *ListNotesUseCase {
+	return &ListNotesUseCase{notes: notes, scope: scope, audit: audit, access: access}
 }
 
-// Execute lists the notes, newest first, and audits the read.
+// Execute lists the notes, newest first, and audits the read. The rule is checked
+// before the notes are loaded.
 func (uc *ListNotesUseCase) Execute(ctx context.Context, in ListNotesInput) ([]NoteView, error) {
 	limit, offset, err := pageOf(in.Limit, in.Offset)
 	if err != nil {
@@ -59,6 +64,9 @@ func (uc *ListNotesUseCase) Execute(ctx context.Context, in ListNotesInput) ([]N
 
 	var views []NoteView
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		if err := checkReadClinical(ctx, uc.access, careapp.Viewer(in.ActorID, in.Role), in.PatientID); err != nil {
+			return err
+		}
 		notes, err := uc.notes.NotesByPatient(ctx, in.PatientID, limit, offset)
 		if err != nil {
 			return err
@@ -81,11 +89,12 @@ func (uc *ListNotesUseCase) Execute(ctx context.Context, in ListNotesInput) ([]N
 
 // AddNoteUseCase appends one encounter.
 type AddNoteUseCase struct {
-	notes port.ClinicalRepository
-	scope port.TenantScope
-	audit port.AuditLog
-	clock port.Clock
-	ids   port.IDGenerator
+	notes  port.ClinicalRepository
+	scope  port.TenantScope
+	audit  port.AuditLog
+	clock  port.Clock
+	ids    port.IDGenerator
+	access *careapp.Access
 }
 
 // NewAddNoteUseCase wires the use case.
@@ -95,8 +104,9 @@ func NewAddNoteUseCase(
 	audit port.AuditLog,
 	clock port.Clock,
 	ids port.IDGenerator,
+	access *careapp.Access,
 ) *AddNoteUseCase {
-	return &AddNoteUseCase{notes: notes, scope: scope, audit: audit, clock: clock, ids: ids}
+	return &AddNoteUseCase{notes: notes, scope: scope, audit: audit, clock: clock, ids: ids, access: access}
 }
 
 // Execute validates and appends the note.
@@ -122,6 +132,9 @@ func (uc *AddNoteUseCase) Execute(ctx context.Context, in AddNoteInput) (NoteVie
 
 	var view NoteView
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		if err := checkWriteClinical(ctx, uc.access, careapp.Viewer(in.ActorID, in.Role), in.PatientID); err != nil {
+			return err
+		}
 		if err := uc.notes.AddNote(ctx, note); err != nil {
 			return err
 		}

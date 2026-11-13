@@ -194,7 +194,7 @@ func (h *userHandlers) staffDirectory(ctx context.Context, in *listUsersInput) (
 }
 
 func (h *userHandlers) getUser(ctx context.Context, in *userIDInput) (*userOutput, error) {
-	view, err := h.get.Execute(ctx, tenantOf(ctx), in.ID)
+	view, err := h.get.Execute(ctx, identityOf(ctx).TenantID, in.ID)
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
 	}

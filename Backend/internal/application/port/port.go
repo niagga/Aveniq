@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
@@ -70,15 +71,38 @@ type PatientRepository interface {
 	ByID(ctx context.Context, id patient.ID) (patient.Patient, error)
 	List(ctx context.Context, filter PatientFilter) ([]patient.Patient, error)
 	Update(ctx context.Context, subject patient.Patient) error
+	// AssignTreating persists only the treating professional of the patient. It is
+	// separate from Update so editing the file and reassigning the patient are two
+	// writes with two permissions.
+	AssignTreating(ctx context.Context, subject patient.Patient) error
 }
 
 // PatientFilter narrows a listing. Search matches a fragment of the name or the
 // exact normalized document.
+//
+// OwnOnly restricts the listing to the patients the viewer treats or holds a live
+// grant on. It is decided by the use case from the viewer's role, and the adapter
+// applies it in the query so pagination counts only what the viewer may see.
 type PatientFilter struct {
 	Search     string
 	ActiveOnly bool
+	OwnOnly    bool
+	ViewerID   string
 	Limit      int32
 	Offset     int32
+}
+
+// ClinicalGrantRepository persists the clinical grants a treating professional gives
+// over a patient. Like the other repositories it runs inside a tenant scope, and it
+// maps its failures onto care.ErrGrantNotFound and care.ErrGrantAlreadyLive.
+type ClinicalGrantRepository interface {
+	Create(ctx context.Context, grant care.Grant) error
+	ByID(ctx context.Context, id string) (care.Grant, error)
+	// HasLiveGrant reports whether the professional holds an unrevoked grant on the
+	// patient. It is the only grant question the read paths ask.
+	HasLiveGrant(ctx context.Context, patientID, professionalUserID string) (bool, error)
+	ListByPatient(ctx context.Context, patientID string) ([]care.Grant, error)
+	Save(ctx context.Context, grant care.Grant) error
 }
 
 // FiscalCondition is a catalog row: which fiscal situations a country knows.

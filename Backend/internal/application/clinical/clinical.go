@@ -10,7 +10,9 @@ import (
 	"context"
 	"time"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 )
 
@@ -66,6 +68,34 @@ func deref(value *string) string {
 type caller struct {
 	tenantID string
 	actorID  string
+}
+
+// checkReadClinical lets a read of the clinical record through only when the caller may
+// see the patient and the rule for the clinical record allows it. A patient the caller
+// may not see is patient.ErrNotFound; one the caller sees but may not read clinically
+// is care.ErrForbidden. Both are checked before any clinical data is loaded.
+func checkReadClinical(ctx context.Context, access *careapp.Access, who care.Viewer, patientID string) error {
+	resolved, err := access.Resolve(ctx, who, patientID)
+	if err != nil {
+		return err
+	}
+	if !care.ReadsClinical(who, resolved.Patient, resolved.Granted) {
+		return care.ErrForbidden
+	}
+	return nil
+}
+
+// checkWriteClinical is checkReadClinical for a write: only the treating professional
+// writes the clinical record, a granted one reads it.
+func checkWriteClinical(ctx context.Context, access *careapp.Access, who care.Viewer, patientID string) error {
+	resolved, err := access.Resolve(ctx, who, patientID)
+	if err != nil {
+		return err
+	}
+	if !care.WritesClinical(who, resolved.Patient) {
+		return care.ErrForbidden
+	}
+	return nil
 }
 
 // auditRead records that clinical data was looked at, inside the caller's transaction.

@@ -14,12 +14,15 @@ import (
 
 	"github.com/google/uuid"
 
+	careapp "github.com/niagga/aveniq/backend/internal/application/care"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
+	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -105,9 +108,75 @@ func (r *fakePatientRepository) List(ctx context.Context, filter port.PatientFil
 		if filter.Search != "" && !strings.Contains(subject.FullName, filter.Search) {
 			continue
 		}
+		// The clinical grants are not modelled here: the adapter's query is covered by the
+		// Postgres tests. The treating professional alone decides the narrowing in this double.
+		if filter.OwnOnly && (subject.TreatingProfessionalID == nil || *subject.TreatingProfessionalID != filter.ViewerID) {
+			continue
+		}
 		subjects = append(subjects, subject)
 	}
 	return subjects, nil
+}
+
+// AssignTreating stores the treating professional the way the adapter does: as a row write.
+func (r *fakePatientRepository) AssignTreating(ctx context.Context, subject patient.Patient) error {
+	return r.Update(ctx, subject)
+}
+
+// fakeGrantRepository keeps grants in memory. It enforces the one live grant per patient and
+// professional that the partial unique index enforces in the database.
+type fakeGrantRepository struct {
+	rows []care.Grant
+}
+
+func newFakeGrantRepository() *fakeGrantRepository { return &fakeGrantRepository{} }
+
+func (g *fakeGrantRepository) Create(_ context.Context, grant care.Grant) error {
+	for _, row := range g.rows {
+		if row.Live() && row.PatientID == grant.PatientID && row.ProfessionalUserID == grant.ProfessionalUserID {
+			return care.ErrGrantAlreadyLive
+		}
+	}
+	g.rows = append(g.rows, grant)
+	return nil
+}
+
+func (g *fakeGrantRepository) ByID(_ context.Context, id string) (care.Grant, error) {
+	for _, row := range g.rows {
+		if row.ID == id {
+			return row, nil
+		}
+	}
+	return care.Grant{}, care.ErrGrantNotFound
+}
+
+func (g *fakeGrantRepository) HasLiveGrant(_ context.Context, patientID, professionalID string) (bool, error) {
+	for _, row := range g.rows {
+		if row.Live() && row.PatientID == patientID && row.ProfessionalUserID == professionalID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (g *fakeGrantRepository) ListByPatient(_ context.Context, patientID string) ([]care.Grant, error) {
+	var out []care.Grant
+	for _, row := range g.rows {
+		if row.PatientID == patientID {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func (g *fakeGrantRepository) Save(_ context.Context, grant care.Grant) error {
+	for i, row := range g.rows {
+		if row.ID == grant.ID {
+			g.rows[i] = grant
+			return nil
+		}
+	}
+	return care.ErrGrantNotFound
 }
 
 func (r *fakePatientRepository) Update(ctx context.Context, subject patient.Patient) error {
@@ -230,6 +299,9 @@ func newHarness(t *testing.T) *harness {
 	repo := newFakePatientRepository()
 	catalog := fakeCatalog{}
 	scope := fakeScope{}
+	grants := newFakeGrantRepository()
+	access := careapp.NewAccess(repo, grants)
+	clinicalRecords := newFakeClinicalRepository()
 
 	tenants := &fakeTenantRepository{byID: map[tenant.ID]tenant.Tenant{}}
 	for _, slug := range []string{"practica-a", "practica-b"} {
@@ -252,10 +324,16 @@ func newHarness(t *testing.T) *harness {
 		RateLimiter:            limiter,
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
 		CreatePatient:          patientapp.NewCreateUseCase(repo, catalog, scope, clock, uuidIDs{}),
-		UpdatePatient:          patientapp.NewUpdateUseCase(repo, catalog, scope, clock),
-		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock),
-		ActivatePatient:        patientapp.NewActivateUseCase(repo, scope, clock),
-		GetPatient:             patientapp.NewGetUseCase(repo, scope),
+		UpdatePatient:          patientapp.NewUpdateUseCase(repo, catalog, scope, clock, access),
+		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock, access),
+		ActivatePatient:        patientapp.NewActivateUseCase(repo, scope, clock, access),
+		GetPatient:             patientapp.NewGetUseCase(scope, access),
+		AssignTreating:         careapp.NewAssignTreatingUseCase(repo, users, scope, audit, clock, access),
+		GrantClinical:          careapp.NewGrantClinicalUseCase(grants, users, scope, audit, clock, uuidIDs{}, access),
+		ListGrants:             careapp.NewListGrantsUseCase(grants, scope, access),
+		RevokeGrant:            careapp.NewRevokeGrantUseCase(grants, scope, audit, clock, access),
+		GetClinicalRecord:      clinicalapp.NewGetRecordUseCase(clinicalRecords, scope, audit, access),
+		SaveClinicalRecord:     clinicalapp.NewSaveRecordUseCase(clinicalRecords, scope, audit, clock, uuidIDs{}, access),
 		ListPatients:           patientapp.NewListUseCase(repo, scope),
 		AccessTokens:           tokens,
 		RefreshCookie:          httpiface.DefaultRefreshCookieConfig(30*24*time.Hour, false),

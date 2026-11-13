@@ -46,11 +46,24 @@ type Patient struct {
 
 	AdministrativeNotes *string
 
+	// TreatingProfessionalID is the professional who treats the patient (the tratante).
+	// Nil means nobody treats it yet: patients registered before the field existed
+	// have none until an owner or admin assigns one. Its meaning and who may change
+	// it are decided in domain/care, not here.
+	TreatingProfessionalID *string
+
 	// IsActive is the deactivation flag. Patients are never deleted: clinical
 	// notes will reference this row.
 	IsActive  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// WithTreating returns the patient with the given professional as its treating one.
+// The receiver is a value, so the caller decides whether to persist the result.
+func (p Patient) WithTreating(professionalUserID string) Patient {
+	p.TreatingProfessionalID = &professionalUserID
+	return p
 }
 
 // Draft is the data a caller may provide. Identity, timestamps and the active flag
@@ -116,6 +129,8 @@ type Stored struct {
 
 	AdministrativeNotes *string
 
+	TreatingProfessionalID *string
+
 	IsActive  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -133,23 +148,24 @@ func Reconstitute(stored Stored) (Patient, error) {
 	}
 
 	return Patient{
-		ID:                    stored.ID,
-		TenantID:              stored.TenantID,
-		Country:               stored.Country,
-		FullName:              stored.FullName,
-		BirthDate:             stored.BirthDate,
-		Document:              stored.Document,
-		Phone:                 stored.Phone,
-		Email:                 stored.Email,
-		EmergencyContactName:  stored.EmergencyContactName,
-		EmergencyContactPhone: stored.EmergencyContactPhone,
-		TaxID:                 stored.TaxID,
-		FiscalCondition:       stored.FiscalCondition,
-		FiscalAddress:         stored.FiscalAddress,
-		AdministrativeNotes:   stored.AdministrativeNotes,
-		IsActive:              stored.IsActive,
-		CreatedAt:             stored.CreatedAt.UTC(),
-		UpdatedAt:             stored.UpdatedAt.UTC(),
+		ID:                     stored.ID,
+		TenantID:               stored.TenantID,
+		Country:                stored.Country,
+		FullName:               stored.FullName,
+		BirthDate:              stored.BirthDate,
+		Document:               stored.Document,
+		Phone:                  stored.Phone,
+		Email:                  stored.Email,
+		EmergencyContactName:   stored.EmergencyContactName,
+		EmergencyContactPhone:  stored.EmergencyContactPhone,
+		TaxID:                  stored.TaxID,
+		FiscalCondition:        stored.FiscalCondition,
+		FiscalAddress:          stored.FiscalAddress,
+		AdministrativeNotes:    stored.AdministrativeNotes,
+		TreatingProfessionalID: stored.TreatingProfessionalID,
+		IsActive:               stored.IsActive,
+		CreatedAt:              stored.CreatedAt.UTC(),
+		UpdatedAt:              stored.UpdatedAt.UTC(),
 	}, nil
 }
 

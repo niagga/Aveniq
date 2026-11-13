@@ -120,6 +120,7 @@ func (h *clinicalHandlers) getRecordHandler(ctx context.Context, in *patientIDIn
 	view, err := h.getRecord.Execute(ctx, clinicalapp.RecordInput{
 		TenantID:  who.TenantID,
 		ActorID:   who.UserID,
+		Role:      who.Role,
 		PatientID: in.ID,
 	})
 	if err != nil {
@@ -141,6 +142,7 @@ func (h *clinicalHandlers) saveRecordHandler(ctx context.Context, in *saveRecord
 	view, err := h.saveRecord.Execute(ctx, clinicalapp.RecordDraftInput{
 		TenantID:       who.TenantID,
 		ActorID:        who.UserID,
+		Role:           who.Role,
 		PatientID:      in.ID,
 		ChiefComplaint: in.Body.ChiefComplaint,
 		Background:     in.Body.Background,
@@ -165,6 +167,7 @@ func (h *clinicalHandlers) listNotesHandler(ctx context.Context, in *listClinica
 	views, err := h.listNotes.Execute(ctx, clinicalapp.ListNotesInput{
 		TenantID:  who.TenantID,
 		ActorID:   who.UserID,
+		Role:      who.Role,
 		PatientID: in.ID,
 		Limit:     in.Limit,
 		Offset:    in.Offset,
@@ -198,6 +201,7 @@ func (h *clinicalHandlers) addNoteHandler(ctx context.Context, in *addClinicalNo
 	view, err := h.addNote.Execute(ctx, clinicalapp.AddNoteInput{
 		TenantID:      who.TenantID,
 		ActorID:       who.UserID,
+		Role:          who.Role,
 		PatientID:     in.ID,
 		EncounteredAt: encounteredAt,
 		Content:       in.Body.Content,
