@@ -105,6 +105,13 @@ SELECT gen_random_uuid(), t.id, 'recepcion@aveniq.local', '$PasswordHash', 'Demo
 FROM tenants t
 WHERE t.slug = '$Slug'
 ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+
+-- The accountant of E4 (S22): bills and voids vouchers, reads nothing clinical.
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'contador@aveniq.local', '$PasswordHash', 'Demo Contador', 'accountant', true, now(), now()
+FROM tenants t
+WHERE t.slug = '$Slug'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
 "@
 
 $output = & $Psql "postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable" -v ON_ERROR_STOP=1 -q -c $sql 2>&1
