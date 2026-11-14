@@ -119,6 +119,12 @@ en cada transición de tarea.
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | `2b5430a` |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | `f7954ed` |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
+| T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | — |
+| T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | — |
+| T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | — |
+| T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | — |
+| T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | — |
+| T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -1766,3 +1772,58 @@ ya existen). El E2E sin `E2E_PASSWORD` falla con mensaje claro. `go test ./cmd/p
 Verificado después del cambio: `pnpm e2e` con `E2E_PASSWORD` seteada al valor de desarrollo, leído
 del historial solo para esa corrida. Seis de seis pasan (journey del profesional e isolation de
 e3-care). Las dos variables se borraron de la sesión al terminar.
+
+**L45 — Alcance del MVP: comprobantes internos dentro, facturación electrónica y envío fuera**
+
+Decisiones:
+
+- **Dentro del MVP**: comprobantes internos, con CRUD e histórico (S2 y S7). Son los que el consultorio
+  registra para llevar su propia cuenta, sin emitir nada ante el fisco.
+- **Fuera del MVP**: integración con la plataforma de envío de facturas (S2) y facturación electrónica
+  (S7). S7 ya la deja para más adelante.
+- **Rol `accountant`** (S22): depende de este bloque. Hoy tiene permisos vacíos hasta que exista
+  el dominio de comprobantes.
+
+**L46 — Desglose de E4 aprobado (T39 a T44)**
+
+Decisiones:
+
+- **El comprobante puede vivir sin paciente.** Un cargo suelto tiene concepto e importe, sin datos del
+  comprobante del paciente. Si hay paciente, el snapshot del paciente es obligatorio.
+- **`admin` solo lee comprobantes.** Emitir y anular quedan para `owner` y `accountant`, que ya están
+  así en la matriz de `0002` y `0010`.
+- **`accountant` ve sujetos de facturación, no el padrón.** El servidor estampa el nombre del consultorio
+  en cada comprobante al emitirlo. El `accountant` no necesita `GET /tenants` para mostrar el encabezado.
+- **Numeración sin huecos y sin reuso.** Un contador por consultorio se incrementa en la misma
+  transacción que el alta. Anular no libera el número.
+- **Inmutabilidad.** Un comprobante emitido no cambia salvo la anulación, y no se borra. Lo garantiza un
+  trigger en la base, no solo el dominio.
+
+Orden: T39 (esquema y aislamiento) → T40 (dominio) → T41 (HTTP) → T42 (frontend) → T43 (menú por rol) →
+T44 (E2E y cierre). Ninguna fila se saltea sin decisión registrada.
+
+Pendiente: T39 es el primer corte y se codifica ahora. Las filas quedan sin commitear hasta que se pida.
+- **Alternativas descartadas**: MVP sin facturación (cierra antes, pero no cumple S2) y S2 completo con
+  envío (adelanta una integración que S7 deja para después).
+- **Revisable**: si el consultorio necesita enviar comprobantes desde el MVP, se revisa este alcance.
+
+Desglose resuelto en L46 (T39 a T44).
+
+**L47 — T39 codificado: esquema de comprobantes, aislamiento e inmutabilidad**
+
+Cambios (sin commitear):
+- `Backend/migrations/0014_create_billing.sql`: `appointments_tenant_id_id_unique`, `voucher_counters`,
+  `vouchers` con FK compuestas a `patients` y `appointments`, `UNIQUE (tenant_id, number)`, trigger
+  `vouchers_guard` (sin DELETE, sin cambios tras la anulación, columnas inmutables al emitir) y RLS
+  forzado en las dos tablas.
+- `Backend/internal/infrastructure/postgres/billing_schema_test.go`: `TestBillingSchema`, 11 subtests.
+- `scripts/local-seed.ps1`: cuenta `contador@aveniq.local` con rol `accountant` (mismo hash que el resto
+  de las cuentas demo, sin literal en el repo).
+
+Evidencia:
+- `goose up` aplicó `0014` en la base de desarrollo (versión 14).
+- `go test ./internal/infrastructure/postgres -run TestBillingSchema -v -count=1`: 11 de 11 pasan.
+- `go vet ./...` y `go test ./... -count=1`: todo verde. `gofmt -l` sin salida en el paquete.
+
+Pendiente: correr la seed para crear `contador@aveniq.local` en la base de desarrollo. Requiere
+`AVENIQ_SEED_PASSWORD` en la sesión, que hoy no está seteada. T39 se cierra al commitear.
