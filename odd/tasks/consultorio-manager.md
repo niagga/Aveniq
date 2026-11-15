@@ -120,7 +120,7 @@ en cada transición de tarea.
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | `f7954ed` |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
 | T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | `ecc6b81` |
-| T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | — |
+| T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | `7e83c45` |
 | T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | — |
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | — |
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | — |
@@ -1827,6 +1827,7 @@ Evidencia:
 
 Pendiente: correr la seed para crear `contador@aveniq.local` en la base de desarrollo. Requiere
 `AVENIQ_SEED_PASSWORD` en la sesión, que hoy no está seteada. T39 se cierra al commitear.
+
 **L48 — Reconciliation after pulling main from another machine (2026-11-14)**
 
 The work between L28 and L47 happened on a different machine and arrived here as 26 commits
@@ -1885,3 +1886,30 @@ broken.
 already carried theirs. Remaining: **T40–T44** (billing domain, HTTP, frontend, dashboard by role,
 E4 end-to-end). No `domain/billing` or `application/billing` package exists yet, so T40 is the next
 one, not a formality.
+
+**L49 — T40 committed: domain billing and voucher repository**
+
+What changed (commit `7e83c45`, rebased onto `3b0ac27`):
+
+- `Backend/internal/domain/billing`: issue (`NewIssued`), number (`AssignNumber`), void (`Void`). A
+  loose charge carries no patient and no buyer; a voucher for a patient needs the buyer name. Void
+  keeps the number and the snapshot (practice name, buyer).
+- `port.BillingRepository` plus `port.VoucherFilter`, for the HTTP slice (T41).
+- `queries/billing.sql` and the regenerated `sqlcgen/billing.sql.go`. `sqlc generate` is idempotent.
+- `BillingRepository.Issue` reserves the number in the same `WithTenant` transaction. A failed issue
+  (a patient of another practice) rolls the counter back: no gap.
+
+Evidence:
+
+- `go test ./internal/domain/billing -count=1`: passes.
+- `go test ./internal/infrastructure/postgres -run TestBillingRepository -v -count=1`: 6 of 6
+  (consecutive numbers with a void that does not reuse, rolled-back issue leaves no gap, snapshot
+  kept after void, isolation between practices, second void refused, no tenant scope refused).
+- `go test ./... -count=1` and `go vet ./...`: green on the rebased tree.
+- Pre-existing drift, not touched here: `gofmt -l` lists several committed files
+  (`internal/application/clinical/clinical_test.go`, `internal/application/patient/get.go`,
+  `internal/application/patient/update.go`, `internal/application/schedule/schedule_test.go`). CI does
+  not run gofmt, so it does not block, but it should be fixed in its own commit.
+
+Next: T41 (HTTP: list, detail, issue, void, billing subjects without roster; audit in the same
+transaction).
