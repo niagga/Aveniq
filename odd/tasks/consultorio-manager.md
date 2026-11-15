@@ -124,7 +124,7 @@ en cada transición de tarea.
 | T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | `0941c15` |
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | `c30e75f` |
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | `fd0fe24` |
-| T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | — |
+| T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | `00bedc8`, `a8b3cd6` |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2019,7 +2019,7 @@ Evidence:
 
 Next: T44 (E2E for E4 and close).
 
-**L53 — T44 E2E for E4 written, not run (uncommitted)**
+**L53 — T44 E2E for E4 written, not run (committed `00bedc8`)**
 
 What changed:
 
@@ -2039,7 +2039,29 @@ What changed:
 Evidence:
 
 - `pnpm typecheck`: green. `playwright test --list`: 13 tests listed.
-- NOT run: needs the seed run with `AVENIQ_SEED_PASSWORD` (adds `contador` and `admin`; idempotent)
-  and the same value as `E2E_PASSWORD`. E4 is not closed until the run is green.
 
 Next: run the seed and `pnpm e2e e4-billing` with the local API; then close E4 (T44 row and L54).
+
+**L54 — T44 E2E for E4 green; E4 closed (committed `a8b3cd6`)**
+
+What changed beyond L53:
+
+- `scripts/local-seed.ps1` now updates the password hash of the demo accounts on conflict, so
+  `.env` stays the source of truth. Before this, existing accounts kept the hash they were
+  created with and the owner could not sign in after a password change.
+- The seed and Playwright read `D:\Repos\Aveniq\.env` (git-ignored). The file is never committed.
+- Spec fix: the heading is "Emitir un comprobante", not "Emitir comprobante".
+
+Evidence:
+
+- Seed run: practice `demo` in place.
+- `pnpm exec playwright test e4-billing`: 7 passed (accountant issues and voids; owner reads;
+  admin reads only; voucher names a patient; accountant dashboard is billing-only; professional
+  and assistant are refused).
+- E4 is ready to close on commit of T44.
+
+E4 (internal vouchers, T39 to T44) is closed: schema, domain, HTTP, screens, menu by role and the
+browser run. Not covered by E4 and still open: e-invoicing and sending (out of the MVP, L45), the
+appointment/patient consistency check on `appointmentId`, document normalization in the subject
+search, the `down` of migration 0014, the `gofmt` drift in older files, and the Snyk scan (needs
+the user to authenticate).
