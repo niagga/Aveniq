@@ -1992,3 +1992,29 @@ Evidence:
   seed (`contador@aveniq.local`) has not been run on the dev database. That is T44.
 
 Next: T43 (menu and dashboard by role), then T44 (E2E and close of E4).
+
+**L52 — T43 menu and landing by role (uncommitted, pending approval)**
+
+What changed:
+
+- `entities/iam/model.ts`: `homePathFor(role)`. The accountant lands on `/facturacion`; every
+  other role lands on `/`. Typed as the literal union `"/" | "/facturacion"` because Next's typed
+  routes reject a plain `string`.
+- `login-form.tsx`: after sign-in the screen goes to `homePathFor(role)` instead of always `/`.
+  `login()` adopts the session before it answers, so the role is known at that point.
+- The dashboard already hid per role (T37, T42); nothing there changed. The accountant sees only
+  the "Facturación" link and no practice card; professional and assistant see no billing link.
+- Checked the role helpers against `domain/iam/permission.go` (owner, admin, professional,
+  assistant, accountant): patients, agenda, practice, users, billing read, issue and void all
+  agree with the backend matrix.
+
+Evidence:
+
+- `pnpm typecheck` and `pnpm build`: green.
+- `homePathFor` and the helper matrix run with node: accountant → `/facturacion` and sees no
+  patients, agenda, users or practice; professional has no billing; admin reads billing but cannot
+  issue or void.
+- NOT verified in a browser: needs the restarted API (T41) and the accountant seed
+  (`contador@aveniq.local`), both in T44.
+
+Next: T44 (E2E for E4 and close).

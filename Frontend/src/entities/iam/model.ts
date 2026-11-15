@@ -26,6 +26,15 @@ export function roleLabel(role: string): string {
 /** The API enforces this for every chosen password (iam.ValidatePassword). */
 export const PASSWORD_MIN_LENGTH = 12;
 
+/**
+ * The screen a role lands on after signing in. The accountant's whole job is billing, so it
+ * lands there; every other role lands on the dashboard. The dashboard stays reachable for
+ * the accountant too: it is the menu, and it shows only what the accountant may open.
+ */
+export function homePathFor(role: string | undefined): "/" | "/facturacion" {
+  return role === "accountant" ? "/facturacion" : "/";
+}
+
 /** Owner and admin hold users:read and users:manage; the other roles hold neither. */
 export function canManageAccounts(role: string | undefined): boolean {
   return role === "owner" || role === "admin";

@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
-import { login } from "@/shared/auth/session";
+import { homePathFor } from "@/entities/iam/model";
+import { getSessionUser, login } from "@/shared/auth/session";
 
 /**
  * Sign-in form.
@@ -45,7 +46,8 @@ export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: stri
       }
 
       setPassword("");
-      router.replace("/");
+      // The session is adopted by login(), so the role is known here.
+      router.replace(homePathFor(getSessionUser()?.role));
     } catch {
       setError("No pudimos contactar al servidor. Revisá que la API esté corriendo.");
     } finally {
