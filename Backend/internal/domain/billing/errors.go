@@ -23,7 +23,9 @@ var (
 	ErrImmutable = errors.New("billing: an issued voucher is immutable except for its void")
 	// ErrPatientNotVisible reports a patient UUID that is not in this tenant.
 	ErrPatientNotVisible = errors.New("billing: the patient is not visible in this tenant scope")
-	// ErrAppointmentNotVisible reports an appointment UUID that is not in this tenant.
+	// ErrAppointmentNotVisible reports an appointment that the voucher's patient does not hold
+	// in this tenant: another practice's, another patient's, or nonexistent. They are one answer
+	// on purpose, so a voucher cannot be used to probe which appointments exist.
 	ErrAppointmentNotVisible = errors.New("billing: the appointment is not visible in this tenant scope")
 	// ErrActorNotVisible reports an issuer or voider UUID that is not in this tenant.
 	ErrActorNotVisible = errors.New("billing: the actor is not visible in this tenant scope")

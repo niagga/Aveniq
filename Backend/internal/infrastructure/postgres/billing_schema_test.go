@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -185,6 +186,57 @@ func TestBillingSchema(t *testing.T) {
 			return err
 		})
 		expectCode(t, err, "23001", "delete of an issued voucher")
+	})
+
+	t.Run("an appointment is a row of one patient: its voucher must name that patient", func(t *testing.T) {
+		// A second patient of practice A, so a mismatch is inside one practice.
+		otherPatient := uuid.NewString()
+		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
+				VALUES ($1, $2, 'AR', 'Otra paciente', now(), now())`, otherPatient, scratchTenantA)
+			return err
+		}); err != nil {
+			t.Fatalf("setup: second patient: %v", err)
+		}
+
+		appointment := uuid.NewString()
+		start := time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC)
+		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO appointments (
+					id, tenant_id, professional_user_id, patient_id,
+					starts_at, ends_at, status, created_at, updated_at
+				) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', now(), now())`,
+				appointment, scratchTenantA, users[scratchTenantA], patients[scratchTenantA], start, start.Add(45*time.Minute))
+			return err
+		}); err != nil {
+			t.Fatalf("setup: appointment: %v", err)
+		}
+
+		// insertFor issues a patient voucher with the given appointment, as the application does.
+		insertFor := func(number int, patientID *string, appointmentID *string) error {
+			return withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+				_, err := app.Exec(ctx, `
+					INSERT INTO vouchers (
+						id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency,
+						practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
+					) VALUES ($1, $2, $3, $4, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6, $7, now(), now(), now())`,
+					uuid.NewString(), scratchTenantA, number, patientID, appointmentID, ptr("Paciente"), users[scratchTenantA])
+				return err
+			})
+		}
+
+		// The appointment without its patient: the CHECK refuses it.
+		expectCode(t, insertFor(30, nil, ptr(appointment)), "23514", "appointment without a patient")
+
+		// The appointment of another patient of the same practice: the composite key refuses it.
+		expectCode(t, insertFor(31, ptr(otherPatient), ptr(appointment)), "23503", "appointment of another patient")
+
+		// The appointment of its own patient is accepted.
+		if err := insertFor(32, ptr(patients[scratchTenantA]), ptr(appointment)); err != nil {
+			t.Fatalf("cannot issue a voucher for the appointment's own patient: %v", err)
+		}
 	})
 
 	t.Run("a practice cannot see or void another practice's vouchers", func(t *testing.T) {

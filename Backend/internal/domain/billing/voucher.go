@@ -106,6 +106,11 @@ func NewIssued(id VoucherID, tenantID tenant.ID, issuedBy string, draft IssueDra
 
 	patientID := strings.TrimSpace(draft.PatientID)
 	appointmentID := strings.TrimSpace(draft.AppointmentID)
+	// An appointment is one patient's: a voucher that names one must name that patient.
+	// The schema checks that the appointment is the patient's; this refuses the half-filled case.
+	if appointmentID != "" && patientID == "" {
+		return Voucher{}, &ValidationError{Field: "appointment_id", Message: "needs a patient: an appointment belongs to one patient"}
+	}
 	buyerName := sanitize(draft.BuyerName)
 	buyerTaxID := sanitize(draft.BuyerTaxID)
 	buyerFiscal := sanitize(draft.BuyerFiscalCondition)

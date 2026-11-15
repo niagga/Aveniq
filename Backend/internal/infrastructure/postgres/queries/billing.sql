@@ -59,13 +59,18 @@ FROM patients
 WHERE id = $1;
 
 -- name: SearchBillingSubjects :many
--- Active patients whose name, document or tax id contains the pattern. The caller
--- wraps the fragment in % and escapes the LIKE wildcards; the page is bounded here.
+-- Active patients whose name contains the pattern, or whose document or tax id contains
+-- the identifier. The caller wraps the name fragment in % and escapes the LIKE wildcards;
+-- the identifier is already letters and digits in upper case (billing.IdentifierFragment)
+-- and is NULL when the fragment is too short to search identifiers by. Documents and tax
+-- ids are compared with their separators stripped, so "30111222" finds "30.111.222" and
+-- "20123456786" finds "20-12345678-6". The page is bounded here.
 SELECT id, full_name, document_number, tax_id, fiscal_condition
 FROM patients
 WHERE is_active
   AND (full_name ILIKE sqlc.arg('pattern')
-       OR document_number ILIKE sqlc.arg('pattern')
-       OR tax_id ILIKE sqlc.arg('pattern'))
+       OR (sqlc.narg('identifier')::text IS NOT NULL
+           AND (strpos(regexp_replace(upper(document_normalized), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0
+                OR strpos(regexp_replace(upper(tax_id), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0)))
 ORDER BY full_name, id
 LIMIT sqlc.arg('lim');

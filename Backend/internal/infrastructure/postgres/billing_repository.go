@@ -22,7 +22,7 @@ const (
 	restrictViolationCode = "23001"
 
 	vouchersPatientFK     = "vouchers_patient_same_tenant"
-	vouchersAppointmentFK = "vouchers_appointment_same_tenant"
+	vouchersAppointmentFK = "vouchers_appointment_of_patient"
 	vouchersIssuerFK      = "vouchers_issuer_same_tenant"
 	vouchersVoiderFK      = "vouchers_voider_same_tenant"
 )
@@ -334,15 +334,23 @@ func (r *BillingRepository) Subject(ctx context.Context, patientID string) (bill
 
 // SearchSubjects returns the active patients a fragment matches, bounded by limit. The
 // fragment is a literal: LIKE wildcards in it are escaped, so "%" finds nothing rather
-// than everything.
+// than everything. It matches the name as typed and the document or tax id without
+// separators, so "30111222" finds a DNI saved as "30.111.222".
 func (r *BillingRepository) SearchSubjects(ctx context.Context, fragment string, limit int32) ([]billing.Subject, error) {
 	queries, err := r.scoped(ctx)
 	if err != nil {
 		return nil, err
 	}
+	// The identifier is NULL for a fragment too short to search documents by: the name
+	// still matches, the roster of documents does not.
+	var identifier *string
+	if reduced := billing.IdentifierFragment(fragment); reduced != "" {
+		identifier = &reduced
+	}
 	rows, err := queries.SearchBillingSubjects(ctx, sqlcgen.SearchBillingSubjectsParams{
-		Pattern: likePattern(fragment),
-		Lim:     limit,
+		Pattern:    likePattern(fragment),
+		Identifier: identifier,
+		Lim:        limit,
 	})
 	if err != nil {
 		return nil, translateBillingError(err)
