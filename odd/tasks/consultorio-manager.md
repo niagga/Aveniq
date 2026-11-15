@@ -121,7 +121,7 @@ en cada transición de tarea.
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
 | T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | `ecc6b81` |
 | T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | `7e83c45` |
-| T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | — |
+| T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | `0941c15` |
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | — |
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | — |
 | T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | — |
@@ -1913,3 +1913,38 @@ Evidence:
 
 Next: T41 (HTTP: list, detail, issue, void, billing subjects without roster; audit in the same
 transaction).
+
+**L50 — T41 committed: HTTP for internal vouchers**
+
+What changed (commit `0941c15`):
+
+- Routes under `/api/v1/billing`: `GET /vouchers` (filters: `from`, `to`, `patientId`, `status`,
+  paging), `GET /vouchers/{id}`, `POST /vouchers` (201), `POST /vouchers/{id}/void`, and
+  `GET /subjects` (billing subjects, not a roster).
+- Permissions: read (`billing:read`) for owner, admin and accountant; issue and void for owner and
+  accountant only. Professional and assistant get 403 on every billing route.
+- Buyer and practice are stamped by the server. The request has no field for them (an extra field
+  is 422), the buyer comes from the patient record and the practice name from the tenant.
+- A patient of another practice and a nonexistent patient both answer 404, so the response does not
+  reveal which patients exist elsewhere.
+- Subject search: fragment of at least 3 characters (trimmed), at most 20 results, active patients
+  of the practice only, returns identity and fiscal data (no contact or clinical fields).
+- Issue and void write `billing.issue` and `billing.void` audit events in the same transaction.
+- Error mapping in `problem()`: validation 422, not found 404, already voided 409, immutable 409.
+- `cmd/api/main.go` wires the five use cases.
+
+Known gaps (for later, not blocking T41):
+
+- `appointmentId` is checked only for the same practice (composite FK), not that it belongs to the
+  given patient.
+- Subject search uses case-insensitive substring match over name, document and tax id; documents are
+  not normalized, so a search by dotted document number may miss.
+
+Evidence:
+
+- `go test ./internal/interfaces/http -count=1`: passes (new `billing_routes_test.go`: role matrix,
+  buyer and practice stamping, 404 for foreign and missing patients, numbering and void rules,
+  subject search rules, history filters, audit trail).
+- `go test ./... -count=1` and `go vet ./...`: green. `gofmt -l` clean on the new files.
+
+Next: T42 (frontend billing screens).
