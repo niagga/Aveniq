@@ -17,6 +17,7 @@ import (
 	"time"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
@@ -97,6 +98,7 @@ func run() error {
 	transactor := postgres.NewTransactor(pool)
 	clinicalGrantRepository := postgres.NewClinicalGrantRepository(pool)
 	careAccess := careapp.NewAccess(patientRepository, clinicalGrantRepository)
+	billingRepository := postgres.NewBillingRepository(pool)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -158,6 +160,11 @@ func run() error {
 		GrantClinical:          careapp.NewGrantClinicalUseCase(clinicalGrantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),
 		ListGrants:             careapp.NewListGrantsUseCase(clinicalGrantRepository, transactor, careAccess),
 		RevokeGrant:            careapp.NewRevokeGrantUseCase(clinicalGrantRepository, transactor, auditLog, clock.New(), careAccess),
+		IssueVoucher:           billingapp.NewIssueUseCase(billingRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
+		VoidVoucher:            billingapp.NewVoidUseCase(billingRepository, transactor, auditLog, clock.New()),
+		GetVoucher:             billingapp.NewGetUseCase(billingRepository, transactor),
+		ListVouchers:           billingapp.NewListUseCase(billingRepository, transactor),
+		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(billingRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),

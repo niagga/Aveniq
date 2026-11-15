@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
@@ -279,6 +280,7 @@ type harness struct {
 
 	invitations *fakeInvitationRepository
 	limiter     *fakeRateLimiter
+	vouchers    *fakeBillingRepository
 }
 
 func newHarness(t *testing.T) *harness {
@@ -312,6 +314,7 @@ func newHarness(t *testing.T) *harness {
 	audit := &fakeAudit{}
 	invitations := newFakeInvitationRepository()
 	limiter := &fakeRateLimiter{hits: map[string]int64{}}
+	vouchers := newFakeBillingRepository(repo)
 
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -343,9 +346,14 @@ func newHarness(t *testing.T) *harness {
 		RevokeInvitation:       invitationapp.NewRevokeUseCase(invitations, scope, audit),
 		PreviewInvitation:      invitationapp.NewPreviewUseCase(invitations, scope, clock),
 		AcceptInvitation:       invitationapp.NewAcceptUseCase(invitations, users, scope, audit, clock, uuidIDs{}, fakeHasher{}),
+		IssueVoucher:           billingapp.NewIssueUseCase(vouchers, tenants, scope, audit, clock, uuidIDs{}),
+		VoidVoucher:            billingapp.NewVoidUseCase(vouchers, scope, audit, clock),
+		GetVoucher:             billingapp.NewGetUseCase(vouchers, scope),
+		ListVouchers:           billingapp.NewListUseCase(vouchers, scope),
+		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter}
+	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the

@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
+	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
@@ -25,6 +26,7 @@ import (
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
+	"github.com/niagga/aveniq/backend/internal/domain/billing"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
@@ -95,6 +97,11 @@ type Deps struct {
 	GrantClinical          *careapp.GrantClinicalUseCase
 	ListGrants             *careapp.ListGrantsUseCase
 	RevokeGrant            *careapp.RevokeGrantUseCase
+	IssueVoucher           *billingapp.IssueUseCase
+	VoidVoucher            *billingapp.VoidUseCase
+	GetVoucher             *billingapp.GetUseCase
+	ListVouchers           *billingapp.ListUseCase
+	SearchSubjects         *billingapp.SearchSubjectsUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -130,6 +137,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerInvitationRoutes(api, deps)
 	registerSignupRoutes(api, deps)
 	registerCareRoutes(api, deps)
+	registerBillingRoutes(api, deps)
 
 	return router
 }
@@ -258,6 +266,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var careValidationErr *care.ValidationError
 	var scheduleValidationErr *schedule.ValidationError
 	var iamValidationErr *iam.ValidationError
+	var billingValidationErr *billing.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -306,6 +315,19 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error404NotFound("The requested appointment does not exist")
 	case errors.Is(err, patient.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
+	case errors.As(err, &billingValidationErr):
+		return huma.Error422UnprocessableEntity(billingValidationErr.Error())
+	case errors.Is(err, billing.ErrNotFound):
+		return huma.Error404NotFound("The requested voucher does not exist")
+	case errors.Is(err, billing.ErrPatientNotVisible):
+		// The patient of another practice answers the same as one that does not exist.
+		return huma.Error404NotFound("The requested patient does not exist")
+	case errors.Is(err, billing.ErrAppointmentNotVisible):
+		return huma.Error404NotFound("The requested appointment does not exist")
+	case errors.Is(err, billing.ErrAlreadyVoided):
+		return huma.Error409Conflict("That voucher is already voided")
+	case errors.Is(err, billing.ErrImmutable):
+		return huma.Error409Conflict("That voucher cannot change in this state")
 	case errors.As(err, &iamValidationErr):
 		return huma.Error422UnprocessableEntity(iamValidationErr.Error())
 	case errors.Is(err, iam.ErrChangeNotAllowed):

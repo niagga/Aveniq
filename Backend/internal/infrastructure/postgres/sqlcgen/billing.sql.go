@@ -95,6 +95,35 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 	return i, err
 }
 
+const getBillingSubject = `-- name: GetBillingSubject :one
+SELECT id, full_name, document_number, tax_id, fiscal_condition
+FROM patients
+WHERE id = $1
+`
+
+type GetBillingSubjectRow struct {
+	ID              pgtype.UUID
+	FullName        string
+	DocumentNumber  *string
+	TaxID           *string
+	FiscalCondition *string
+}
+
+// The billing identity of one patient. Only the fields a receipt prints: the clinical
+// record and the contact details are not selected.
+func (q *Queries) GetBillingSubject(ctx context.Context, id pgtype.UUID) (GetBillingSubjectRow, error) {
+	row := q.db.QueryRow(ctx, getBillingSubject, id)
+	var i GetBillingSubjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.DocumentNumber,
+		&i.TaxID,
+		&i.FiscalCondition,
+	)
+	return i, err
+}
+
 const getVoucher = `-- name: GetVoucher :one
 SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at
 FROM vouchers
@@ -214,6 +243,58 @@ func (q *Queries) NextVoucherNumber(ctx context.Context, tenantID pgtype.UUID) (
 	var last_number int32
 	err := row.Scan(&last_number)
 	return last_number, err
+}
+
+const searchBillingSubjects = `-- name: SearchBillingSubjects :many
+SELECT id, full_name, document_number, tax_id, fiscal_condition
+FROM patients
+WHERE is_active
+  AND (full_name ILIKE $1
+       OR document_number ILIKE $1
+       OR tax_id ILIKE $1)
+ORDER BY full_name, id
+LIMIT $2
+`
+
+type SearchBillingSubjectsParams struct {
+	Pattern string
+	Lim     int32
+}
+
+type SearchBillingSubjectsRow struct {
+	ID              pgtype.UUID
+	FullName        string
+	DocumentNumber  *string
+	TaxID           *string
+	FiscalCondition *string
+}
+
+// Active patients whose name, document or tax id contains the pattern. The caller
+// wraps the fragment in % and escapes the LIKE wildcards; the page is bounded here.
+func (q *Queries) SearchBillingSubjects(ctx context.Context, arg SearchBillingSubjectsParams) ([]SearchBillingSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, searchBillingSubjects, arg.Pattern, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchBillingSubjectsRow{}
+	for rows.Next() {
+		var i SearchBillingSubjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FullName,
+			&i.DocumentNumber,
+			&i.TaxID,
+			&i.FiscalCondition,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const voidVoucher = `-- name: VoidVoucher :one

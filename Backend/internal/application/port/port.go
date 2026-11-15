@@ -263,6 +263,14 @@ type BillingRepository interface {
 	Void(ctx context.Context, voucher billing.Voucher) (billing.Voucher, error)
 	ByID(ctx context.Context, id billing.VoucherID) (billing.Voucher, error)
 	List(ctx context.Context, filter VoucherFilter) ([]billing.Voucher, error)
+	// Subject answers the billing identity of one patient, including inactive ones: a
+	// past session can still owe a receipt. A patient the practice does not hold is
+	// billing.ErrPatientNotVisible.
+	Subject(ctx context.Context, patientID string) (billing.Subject, error)
+	// SearchSubjects finds active patients whose name, document or tax id contains the
+	// fragment. It is not a roster: the caller must send a fragment, and the page is
+	// bounded.
+	SearchSubjects(ctx context.Context, fragment string, limit int32) ([]billing.Subject, error)
 }
 
 // VoucherFilter narrows the history screen: a date window, an optional patient,

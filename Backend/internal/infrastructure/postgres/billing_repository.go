@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -301,4 +302,69 @@ func timestamptzFromTime(value time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{}
 	}
 	return pgtype.Timestamptz{Time: value, Valid: true}
+}
+
+// Subject returns the billing identity of a patient of this practice, or
+// billing.ErrPatientNotVisible: a patient of another practice is indistinguishable from
+// one that does not exist.
+func (r *BillingRepository) Subject(ctx context.Context, patientID string) (billing.Subject, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Subject{}, err
+	}
+	parsed, err := parseBillingUUID(patientID, "patient_id")
+	if err != nil {
+		return billing.Subject{}, err
+	}
+	row, err := queries.GetBillingSubject(ctx, parsed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.Subject{}, billing.ErrPatientNotVisible
+	}
+	if err != nil {
+		return billing.Subject{}, translateBillingError(err)
+	}
+	return billing.Subject{
+		PatientID:       row.ID.String(),
+		FullName:        row.FullName,
+		DocumentNumber:  row.DocumentNumber,
+		TaxID:           row.TaxID,
+		FiscalCondition: row.FiscalCondition,
+	}, nil
+}
+
+// SearchSubjects returns the active patients a fragment matches, bounded by limit. The
+// fragment is a literal: LIKE wildcards in it are escaped, so "%" finds nothing rather
+// than everything.
+func (r *BillingRepository) SearchSubjects(ctx context.Context, fragment string, limit int32) ([]billing.Subject, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries.SearchBillingSubjects(ctx, sqlcgen.SearchBillingSubjectsParams{
+		Pattern: likePattern(fragment),
+		Lim:     limit,
+	})
+	if err != nil {
+		return nil, translateBillingError(err)
+	}
+	out := make([]billing.Subject, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, billing.Subject{
+			PatientID:       row.ID.String(),
+			FullName:        row.FullName,
+			DocumentNumber:  row.DocumentNumber,
+			TaxID:           row.TaxID,
+			FiscalCondition: row.FiscalCondition,
+		})
+	}
+	return out, nil
+}
+
+// likeEscaper escapes the LIKE metacharacters so a fragment is matched literally.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likePattern turns a literal fragment into a contains-pattern with its wildcards escaped.
+func likePattern(fragment string) string {
+	escaped := likeEscaper.Replace(fragment)
+	return "%" + escaped + "%"
 }

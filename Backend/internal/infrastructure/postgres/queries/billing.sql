@@ -50,3 +50,22 @@ WHERE (sqlc.narg('issued_from')::timestamptz IS NULL OR issued_at >= sqlc.narg('
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
 ORDER BY issued_at DESC, number DESC
 LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
+
+-- name: GetBillingSubject :one
+-- The billing identity of one patient. Only the fields a receipt prints: the clinical
+-- record and the contact details are not selected.
+SELECT id, full_name, document_number, tax_id, fiscal_condition
+FROM patients
+WHERE id = $1;
+
+-- name: SearchBillingSubjects :many
+-- Active patients whose name, document or tax id contains the pattern. The caller
+-- wraps the fragment in % and escapes the LIKE wildcards; the page is bounded here.
+SELECT id, full_name, document_number, tax_id, fiscal_condition
+FROM patients
+WHERE is_active
+  AND (full_name ILIKE sqlc.arg('pattern')
+       OR document_number ILIKE sqlc.arg('pattern')
+       OR tax_id ILIKE sqlc.arg('pattern'))
+ORDER BY full_name, id
+LIMIT sqlc.arg('lim');
