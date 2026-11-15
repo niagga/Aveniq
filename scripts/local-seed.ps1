@@ -26,6 +26,15 @@ $ErrorActionPreference = 'Stop'
 # The development password is never written into the repository. It comes from the
 # environment, and the seed hashes it on every run. The E2E reads the same value from
 # E2E_PASSWORD, so set both to one value.
+# When the variable is not in the environment, it is read from the repository's .env (git-ignored).
+# The value is never printed.
+if ([string]::IsNullOrEmpty($env:AVENIQ_SEED_PASSWORD)) {
+    $dotEnv = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
+    if (Test-Path $dotEnv) {
+        $entry = Get-Content $dotEnv | Where-Object { $_ -match '^\s*AVENIQ_SEED_PASSWORD=' } | Select-Object -First 1
+        if ($entry) { $env:AVENIQ_SEED_PASSWORD = $entry.Substring($entry.IndexOf('=') + 1).Trim() }
+    }
+}
 $Password = $env:AVENIQ_SEED_PASSWORD
 if ([string]::IsNullOrEmpty($Password)) {
     throw 'Set AVENIQ_SEED_PASSWORD to the development password first (the E2E reads the same value from E2E_PASSWORD).'
@@ -60,7 +69,8 @@ $env:PGCLIENTENCODING = 'UTF8'
 
 # The argon2id hash of $Password, minted with the production parameters (m=64 MiB, t=3, p=4)
 # so the seeded login exercises the real verification path. The hash is salted, so it differs
-# on every run. Accounts that already exist keep the hash they were created with.
+# on every run. Accounts that already exist are updated to the new hash (and reactivated), so the
+# password in .env is always the one that signs in. This is local-only; no migration does it.
 $PasswordHash = $null
 Push-Location (Join-Path $RepoRoot 'Backend')
 try {
@@ -83,7 +93,8 @@ INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is
 SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
 -- Professionals and front desk for the T38 journeys: a treating professional, a second
 -- professional who must not see the first one's patients, and an assistant who must
@@ -92,33 +103,38 @@ INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is
 SELECT gen_random_uuid(), t.id, 'profesional@aveniq.local', '$PasswordHash', 'Demo Profesional', 'professional', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, 'profesional2@aveniq.local', '$PasswordHash', 'Demo Profesional 2', 'professional', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, 'recepcion@aveniq.local', '$PasswordHash', 'Demo Recepcion', 'assistant', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
 -- The accountant of E4 (S22): bills and voids vouchers, reads nothing clinical.
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, 'contador@aveniq.local', '$PasswordHash', 'Demo Contador', 'accountant', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
 -- The administrator of E4 (L46): reads billing, issues and voids nothing.
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, 'admin@aveniq.local', '$PasswordHash', 'Demo Administracion', 'admin', true, now(), now()
 FROM tenants t
 WHERE t.slug = '$Slug'
-ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO NOTHING;
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 "@
 
 $output = & $Psql "postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable" -v ON_ERROR_STOP=1 -q -c $sql 2>&1

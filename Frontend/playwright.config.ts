@@ -1,4 +1,12 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { defineConfig, devices } from "@playwright/test";
+
+// The development credentials live in the repository's .env (git-ignored), one level above
+// this folder. Node loads it without a dependency and never overrides a variable already set.
+const rootEnv = fileURLToPath(new URL("../.env", import.meta.url));
+if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 /**
  * Browser verification of E2. The tests talk to the same-origin Next proxy, so

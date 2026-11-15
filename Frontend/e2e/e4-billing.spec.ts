@@ -81,7 +81,7 @@ test("the owner reads the same history and sees the voided voucher as voided", a
   const { page, close } = await openAs(browser, ACCOUNTS.owner);
   try {
     await openBilling(page);
-    await expect(page.getByRole("heading", { name: "Emitir comprobante" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Emitir un comprobante" })).toBeVisible();
 
     await expect(rowFor(page, voidedConcept)).toBeVisible({ timeout: 10_000 });
     await expect(rowFor(page, voidedConcept).getByText("Anulado", { exact: true })).toBeVisible();
