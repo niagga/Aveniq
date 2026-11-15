@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
+import { canReadBilling } from "@/entities/billing/model";
 import {
   canManageAccounts,
   canReadPractice,
@@ -90,6 +91,14 @@ function Dashboard() {
               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
             >
               Agenda
+            </Link>
+          ) : null}
+          {canReadBilling(role) ? (
+            <Link
+              href="/facturacion"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Facturación
             </Link>
           ) : null}
           {canManageAccounts(role) ? (

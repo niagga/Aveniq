@@ -193,6 +193,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the patients a voucher can be issued to
+         * @description A search, not the roster: at least 3 characters, at most 20 matches. Only the fields a receipt prints.
+         */
+        get: operations["search-billing-subjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/vouchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the vouchers of the practice
+         * @description The history, newest first. Filters by date window, patient and state.
+         */
+        get: operations["list-vouchers"];
+        put?: never;
+        /**
+         * Issue an internal voucher
+         * @description Takes the next number of the practice. The buyer is the patient's snapshot and the practice name is the tenant's; the request cannot set either. Recorded in the audit trail.
+         */
+        post: operations["issue-voucher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/vouchers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one voucher */
+        get: operations["get-voucher"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/vouchers/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void an issued voucher
+         * @description A void is final and keeps the number. A voucher is never deleted. Recorded in the audit trail.
+         */
+        post: operations["void-voucher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -896,6 +977,29 @@ export interface components {
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
+        IssueVoucherBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IssueVoucherBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Amount in minor units (centavos).
+             */
+            amountMinor: number;
+            /** Format: uuid */
+            appointmentId?: string;
+            concept: string;
+            /** @description ISO 4217 code, for example ARS. */
+            currency: string;
+            /**
+             * Format: uuid
+             * @description Omit for a loose charge with no patient behind it.
+             */
+            patientId?: string;
+        };
         IssuedInvitationBody: {
             /**
              * Format: uri
@@ -952,6 +1056,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["PatientBody"][] | null;
         };
+        ListSubjectsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListSubjectsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SubjectBody"][] | null;
+        };
         ListTenantsOutputBody: {
             /**
              * Format: uri
@@ -969,6 +1082,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["UserBody"][] | null;
+        };
+        ListVouchersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListVouchersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["VoucherBody"][] | null;
         };
         LoginBody: {
             /**
@@ -1244,6 +1366,14 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["DirectoryEntryBody"][] | null;
         };
+        SubjectBody: {
+            documentNumber?: string;
+            fiscalCondition?: string;
+            fullName: string;
+            /** Format: uuid */
+            patientId: string;
+            taxId?: string;
+        };
         TenantBody: {
             /**
              * Format: uri
@@ -1317,6 +1447,60 @@ export interface components {
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
             /** Format: date-time */
             updatedAt: string;
+        };
+        VoidVoucherBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VoidVoucherBody.json
+             */
+            readonly $schema?: string;
+            /** @description Why the voucher is void. Required. */
+            reason: string;
+        };
+        VoucherBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VoucherBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Amount in minor units (centavos).
+             */
+            amountMinor: number;
+            /** Format: uuid */
+            appointmentId?: string;
+            buyerFiscalCondition?: string;
+            /** @description Snapshot of the patient at issue. */
+            buyerName?: string;
+            buyerTaxId?: string;
+            concept: string;
+            /** @description ISO 4217 code. */
+            currency: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: uuid */
+            issuedBy: string;
+            /**
+             * Format: int64
+             * @description Consecutive per practice. A void keeps it.
+             */
+            number: number;
+            /** Format: uuid */
+            patientId?: string;
+            /** @description Stamped from the practice at issue. */
+            practiceName: string;
+            /** @enum {string} */
+            status: "issued" | "voided";
+            voidReason?: string;
+            /** Format: date-time */
+            voidedAt?: string;
+            /** Format: uuid */
+            voidedBy?: string;
         };
     };
     responses: never;
@@ -1676,6 +1860,183 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "search-billing-subjects": {
+        parameters: {
+            query?: {
+                /** @description A fragment of the name, document or tax id. At least 3 characters. */
+                search?: string;
+                /** @description Maximum matches returned. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSubjectsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-vouchers": {
+        parameters: {
+            query?: {
+                /** @description Only vouchers issued at or after this instant. */
+                from?: string;
+                /** @description Only vouchers issued before this instant. */
+                to?: string;
+                /** @description Only vouchers of this patient. */
+                patientId?: string;
+                /** @description Only vouchers in this state. */
+                status?: "issued" | "voided";
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListVouchersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "issue-voucher": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueVoucherBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoucherBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-voucher": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Voucher identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoucherBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "void-voucher": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Voucher identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidVoucherBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoucherBody"];
                 };
             };
             /** @description Error */
