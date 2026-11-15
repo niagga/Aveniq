@@ -122,7 +122,7 @@ en cada transición de tarea.
 | T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | `ecc6b81` |
 | T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | `7e83c45` |
 | T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | `0941c15` |
-| T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | — |
+| T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | `c30e75f` |
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | — |
 | T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | — |
 
@@ -1948,3 +1948,47 @@ Evidence:
 - `go test ./... -count=1` and `go vet ./...`: green. `gofmt -l` clean on the new files.
 
 Next: T42 (frontend billing screens).
+
+**L51 — T42 committed: frontend for internal vouchers**
+
+What changed (commit `c30e75f`):
+
+- `Frontend/src/shared/api/schema.d.ts` regenerated: 361 lines added, none removed. The spec was
+  dumped from the router in a throwaway test (the running API predates T41), then the throwaway
+  test was deleted; the result is the same document `/openapi.json` serves.
+- `entities/billing/model.ts`: wire types from the schema, role helpers (`canReadBilling`:
+  owner, admin, accountant; `canIssueVouchers` and `canVoidVouchers`: owner and accountant),
+  money formatting, and `parseAmount`.
+- `parseAmount` builds minor units from the digits, never from a float, and refuses a
+  thousands separator: "1.500" is ambiguous and a wrong amount on a voucher is worse than a
+  refused one. Up to 10 whole digits and 2 decimals.
+- Screen `/facturacion` (`RoleGate` with `canReadBilling`): history with state and date-range
+  filters (the "to" bound is the start of the next day, because the API's `to` is exclusive) and
+  "load more"; issue form with optional patient picker (subject search, 3 characters minimum);
+  detail with the snapshot of the practice and buyer; void with a mandatory reason and a second
+  confirmation click. Admin sees the history and neither the form nor the void button.
+- The request never carries the buyer or the practice name: the server stamps both.
+- Dashboard: a "Facturación" link for the three roles that read billing. The rest of T43 (what
+  each role lands on, hiding links per role) is still open.
+
+Decisions and limits:
+
+- Currency is fixed to ARS for the MVP; the API accepts any ISO code, so adding one is a screen
+  change.
+- The detail uses the row from the history; the `GET /vouchers/{id}` endpoint is not called by
+  the UI yet (it will matter for a deep link).
+- `appointmentId` is not offered in the form (no appointment picker for the accountant, who holds
+  no schedule permission).
+- Dates are read in the viewer's zone: the accountant holds no `tenant:read`, so the practice
+  zone is unknown to that role.
+
+Evidence:
+
+- `pnpm typecheck`: green, also with the route types regenerated; `pnpm build`: green, `/facturacion`
+  is registered.
+- 22 checks of `parseAmount`, `formatMoney`, `voucherNumber` and `startOfNextDay` run with node:
+  all pass (including the refused ambiguous inputs).
+- NOT verified in a browser against the API: the running API predates T41 and the accountant
+  seed (`contador@aveniq.local`) has not been run on the dev database. That is T44.
+
+Next: T43 (menu and dashboard by role), then T44 (E2E and close of E4).
