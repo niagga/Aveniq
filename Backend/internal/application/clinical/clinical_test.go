@@ -97,7 +97,7 @@ func (g fakeGrants) HasLiveGrant(context.Context, string, string) (bool, error) 
 	return g.live, nil
 }
 func (g fakeGrants) ListByPatient(context.Context, string) ([]care.Grant, error) { return nil, nil }
-func (g fakeGrants) Save(context.Context, care.Grant) error                       { return nil }
+func (g fakeGrants) Save(context.Context, care.Grant) error                      { return nil }
 
 type fixedClock struct{ now time.Time }
 
@@ -205,8 +205,8 @@ func TestOnlyTheTreatingProfessionalReadsTheRecord(t *testing.T) {
 		actor   string
 		wantErr error
 	}{
-		"another professional does not see the patient": {iam.RoleProfessional, uuid.NewString(), patient.ErrNotFound},
-		"the owner sees the patient but not the record": {iam.RoleOwner, uuid.NewString(), care.ErrForbidden},
+		"another professional does not see the patient":     {iam.RoleProfessional, uuid.NewString(), patient.ErrNotFound},
+		"the owner sees the patient but not the record":     {iam.RoleOwner, uuid.NewString(), care.ErrForbidden},
 		"the assistant sees the patient but not the record": {iam.RoleAssistant, uuid.NewString(), care.ErrForbidden},
 	}
 	for name, tc := range cases {

@@ -1,4 +1,4 @@
-﻿package patientapp
+package patientapp
 
 import (
 	"context"

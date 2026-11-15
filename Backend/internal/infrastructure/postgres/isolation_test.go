@@ -170,6 +170,45 @@ func migrate(t *testing.T, dsn string) {
 	}
 }
 
+// migrateDown rolls back one goose version. Used to prove a migration's Down
+// actually undoes its Up, on a scratch database, never on the development one.
+func migrateDown(t *testing.T, dsn string) {
+	t.Helper()
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("cannot open the migration connection: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("cannot set the goose dialect: %v", err)
+	}
+	if err := goose.Down(db, migrationsDir); err != nil {
+		t.Fatalf("cannot roll back one migration: %v", err)
+	}
+}
+
+// gooseVersion is the last applied migration on that database.
+func gooseVersion(t *testing.T, dsn string) int64 {
+	t.Helper()
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("cannot open the migration connection: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("cannot set the goose dialect: %v", err)
+	}
+	version, err := goose.GetDBVersion(db)
+	if err != nil {
+		t.Fatalf("cannot read the goose version: %v", err)
+	}
+	return version
+}
+
 // seed creates two tenants with a user and a session each, and returns the
 // tenant identifiers. Writes go through the tenant context as well, because the
 // policies apply to the migrator too once FORCE is in place.

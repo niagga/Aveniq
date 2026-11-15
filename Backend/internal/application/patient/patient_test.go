@@ -1,4 +1,4 @@
-﻿package patientapp_test
+package patientapp_test
 
 import (
 	"context"
@@ -86,9 +86,9 @@ func (fakeGrants) Create(context.Context, care.Grant) error { return nil }
 func (fakeGrants) ByID(context.Context, string) (care.Grant, error) {
 	return care.Grant{}, care.ErrGrantNotFound
 }
-func (fakeGrants) HasLiveGrant(context.Context, string, string) (bool, error) { return false, nil }
+func (fakeGrants) HasLiveGrant(context.Context, string, string) (bool, error)  { return false, nil }
 func (fakeGrants) ListByPatient(context.Context, string) ([]care.Grant, error) { return nil, nil }
-func (fakeGrants) Save(context.Context, care.Grant) error { return nil }
+func (fakeGrants) Save(context.Context, care.Grant) error                      { return nil }
 
 func newFakeDocumentCatalog() *fakeDocumentCatalog {
 	return &fakeDocumentCatalog{
