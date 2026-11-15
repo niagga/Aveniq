@@ -56,7 +56,7 @@ test("the accountant lands on billing, issues a voucher and voids it", async ({ 
     // The voucher is in the history, and the detail shows what was issued.
     const row = rowFor(page, voidedConcept);
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await row.getByRole("button", { name: /^Ver el comprobante/ }).click();
+    await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
 
     const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
     await expect(detail.getByText("ARS 1.500,00")).toBeVisible();
@@ -101,7 +101,7 @@ test("the admin reads the history and can neither issue nor void", async ({ brow
     // Positive control: the history is there.
     const row = rowFor(page, issuedConcept);
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await row.getByRole("button", { name: /^Ver el comprobante/ }).click();
+    await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
 
     const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
     await expect(detail.getByText("ARS 800,50")).toBeVisible();
@@ -177,6 +177,39 @@ test("the accountant's dashboard shows billing only, and the clinical screens re
     await expect(page.getByText("Esta pantalla es para el titular y la administración")).toBeVisible({
       timeout: 15_000,
     });
+  } finally {
+    await close();
+  }
+});
+
+test("a voucher is reachable by its URL and GET, even after a reload", async ({ browser }) => {
+  const { page, close } = await openAs(browser, ACCOUNTS.accountant);
+  try {
+    await openBilling(page);
+    const row = rowFor(page, issuedConcept);
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    const gotOne = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        /\/api\/v1\/billing\/vouchers\/[0-9a-f-]{36}/i.test(response.url()),
+    );
+    await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
+    expect((await gotOne).ok()).toBeTruthy();
+
+    await expect(page).toHaveURL(/\/facturacion\?voucher=/);
+    const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
+    await expect(detail.getByText("ARS 800,50")).toBeVisible();
+
+    const url = page.url();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(url);
+    await expect(page.getByRole("region", { name: /Detalle del comprobante/ }).getByText("ARS 800,50")).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await page.goto("/facturacion?voucher=00000000-0000-4000-8000-000000000099");
+    await expect(page.getByText("Ese comprobante no está en este consultorio")).toBeVisible({ timeout: 10_000 });
   } finally {
     await close();
   }

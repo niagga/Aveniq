@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense } from "react";
+
 import { canReadBilling } from "@/entities/billing/model";
 import { BillingScreen } from "@/features/billing/components/billing-screen";
 import { RoleGate } from "@/shared/auth/role-gate";
@@ -15,7 +17,9 @@ export default function BillingPage() {
     <main className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-6 py-12">
       <SessionGate>
         <RoleGate allowed={canReadBilling}>
-          <BillingScreen />
+          <Suspense fallback={<p className="text-sm text-ink-muted">Cargando facturación…</p>}>
+            <BillingScreen />
+          </Suspense>
         </RoleGate>
       </SessionGate>
     </main>

@@ -80,17 +80,17 @@ en cada transición de tarea.
 
 | ID | Spec | Etapa | Descripción | Ruta | Commit |
 | --- | --- | --- | --- | --- | --- |
-| T1 | S10, S12 | E0 | Repo propio `Aveniq` y estructura Backend/Frontend/infra/scripts | inline | — |
-| T2 | S4, S9, S11 | E0 | Documento de feature con specs y tareas | inline | — |
-| T3 | S13 | E0 | Toolchain Go local: sqlc, goose, air | inline | — |
-| T4 | S13 | E0 | Postgres y Redis portables en `.local/` con scripts de ciclo de vida | inline | — |
-| T5 | S9, S10, S11 | E0 | Esqueleto Clean Architecture con `cmd/api` y `cmd/worker` | inline | — |
-| T6 | S13 | E0 | Migraciones goose, configuración sqlc y migración inicial `tenants` | inline | — |
-| T7 | S9, S11, S5 | E0 | Vertical slice `tenants`: dominio → caso de uso → adaptador → handler + tests | inline | — |
-| T8 | S10, S12 | E0 | Next.js con pnpm, Tailwind y estructura por features | inline | — |
-| T9 | S11 | E0 | Cliente OpenAPI generado y página que consume la API Go | inline | — |
-| T10 | S8 | E0 | `docker-compose` + Caddy para el camino con Docker | inline | — |
-| T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | — |
+| T1 | S10, S12 | E0 | Repo propio `Aveniq` y estructura Backend/Frontend/infra/scripts | inline | `06f745a` |
+| T2 | S4, S9, S11 | E0 | Documento de feature con specs y tareas | inline | `06f745a` |
+| T3 | S13 | E0 | Toolchain Go local: sqlc, goose, air | inline | `06f745a` |
+| T4 | S13 | E0 | Postgres y Redis portables en `.local/` con scripts de ciclo de vida | inline | `06f745a` |
+| T5 | S9, S10, S11 | E0 | Esqueleto Clean Architecture con `cmd/api` y `cmd/worker` | inline | `06f745a` |
+| T6 | S13 | E0 | Migraciones goose, configuración sqlc y migración inicial `tenants` | inline | `06f745a` |
+| T7 | S9, S11, S5 | E0 | Vertical slice `tenants`: dominio → caso de uso → adaptador → handler + tests | inline | `06f745a` |
+| T8 | S10, S12 | E0 | Next.js con pnpm, Tailwind y estructura por features | inline | `06f745a` |
+| T9 | S11 | E0 | Cliente OpenAPI generado y página que consume la API Go | inline | `06f745a` |
+| T10 | S8 | E0 | `docker-compose` + Caddy para el camino con Docker | inline | `06f745a` |
+| T11 | S13, S11 | E0 | CI, scripts de operación, README/RUNBOOK y verificación end-to-end | inline | `06f745a` |
 | T12 | S5, S3 | E1 | Esquema IAM + RLS forzado + catálogo de roles y permisos + test de aislamiento en base | worker | `a65c581` |
 | T13 | S3, S9 | E1 | Dominio IAM y repositorio sqlc | worker | `13bdc2d`, `970221d` |
 | T14 | S3 | E1 | Auth: argon2id, login/refresh/logout con rotación y detección de reuso, middleware | inline | `6a3f9eb`, `1905de1`, `3b09615`, `5f50e49`, `98f2dd3`, `011d1ca` |
@@ -2065,3 +2065,29 @@ browser run. Not covered by E4 and still open: e-invoicing and sending (out of t
 appointment/patient consistency check on `appointmentId`, document normalization in the subject
 search, the `down` of migration 0014, the `gofmt` drift in older files, and the Snyk scan (needs
 the user to authenticate).
+
+**L55 — T10 and T11 hashes**
+
+E0 shipped as one scaffold commit (`06f745a`). That commit added:
+
+- T10: `infra/docker-compose.yml`, `infra/Caddyfile`, `infra/docker/Dockerfile.{api,web,worker}`
+- T11: `.github/workflows/ci.yml`, `scripts/{bootstrap,local-up,local-down,local-status}.ps1`,
+  `README.md`
+
+There is no separate RUNBOOK file; the runbook lives in `README.md`. Later edits to those paths
+belong to other tasks (T12 `a65c581`, local-stack `3b2a526`, seed `feb56f5`, E2E `e0a48ab`, E4
+`a8b3cd6`), not to T10/T11.
+
+T1–T9 are also in `06f745a`, so their Commit column now shows it too.
+
+**L56 — Deep-link of a voucher: GET /vouchers/{id} from `/facturacion?voucher=`**
+
+The history used to open the detail from the current page of the list, so `GET /api/v1/billing/vouchers/{id}` was unused. The URL is now the source of truth:
+
+- `Ver` is a link to `/facturacion?voucher={id}`.
+- The detail always loads that id with GET. A voucher missing from this page, or from this
+  practice, is 404 (same answer as another practice).
+- Reload keeps the detail. A unknown id shows "Ese comprobante no está en este consultorio".
+
+Evidence: `pnpm typecheck` green. `pnpm exec playwright test e4-billing`: 8 passed, including
+the new journey for the URL and GET. Uncommitted, part of the backlog batch.

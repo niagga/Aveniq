@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 
 import {
+  billingUrl,
   canIssueVouchers,
   canVoidVouchers,
   startOfDay,
@@ -36,6 +38,9 @@ export function BillingScreen() {
   const mayIssue = canIssueVouchers(role);
   const mayVoid = canVoidVouchers(role);
   const prefix = useId();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedID = searchParams.get("voucher");
 
   const [status, setStatus] = useState<StatusFilter>("");
   const [from, setFrom] = useState("");
@@ -44,7 +49,8 @@ export function BillingScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [failedStatus, setFailedStatus] = useState<number | null>(null);
-  const [selectedID, setSelectedID] = useState<string | null>(null);
+  const [opened, setOpened] = useState<Voucher | null>(null);
+  const [openedStatus, setOpenedStatus] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const rangeInvalid = from !== "" && to !== "" && from > to;
@@ -93,6 +99,41 @@ export function BillingScreen() {
     };
   }, [fetchPage, rangeInvalid, refreshKey]);
 
+  // The detail is always GET /vouchers/{id}: a link must open a voucher that is not on
+  // this page of the history, and a missing one must look the same as one of another
+  // practice (404, never a leak).
+  useEffect(() => {
+    if (selectedID === null || selectedID === "") {
+      setOpened(null);
+      setOpenedStatus(null);
+      return;
+    }
+    let active = true;
+    setOpened((current) => (current?.id === selectedID ? current : null));
+    setOpenedStatus(null);
+
+    void (async () => {
+      try {
+        const { data, response } = await browserApi.GET("/api/v1/billing/vouchers/{id}", {
+          params: { path: { id: selectedID } },
+        });
+        if (!active) return;
+        if (!response.ok || !data) {
+          setOpenedStatus(response.status);
+          return;
+        }
+        setOpened(data);
+        setOpenedStatus(null);
+      } catch {
+        if (active) setOpenedStatus(0);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedID, refreshKey]);
+
   async function loadMore() {
     if (vouchers === null) return;
     setLoadingMore(true);
@@ -112,19 +153,22 @@ export function BillingScreen() {
     }
   }
 
+  function openVoucher(id: string) {
+    router.replace(billingUrl(id));
+  }
+
   function handleIssued(voucher: Voucher) {
-    setSelectedID(voucher.id);
+    openVoucher(voucher.id);
     setRefreshKey((key) => key + 1);
   }
 
   function handleVoided(voucher: Voucher) {
+    setOpened(voucher);
     setVouchers((current) =>
       current === null ? current : current.map((item) => (item.id === voucher.id ? voucher : item)),
     );
     setRefreshKey((key) => key + 1);
   }
-
-  const selected = vouchers?.find((voucher) => voucher.id === selectedID) ?? null;
 
   return (
     <>
@@ -205,7 +249,6 @@ export function BillingScreen() {
             <VoucherTable
               vouchers={vouchers}
               selectedID={selectedID}
-              onSelect={setSelectedID}
               filtered={filtered}
             />
             {hasMore ? (
@@ -224,14 +267,35 @@ export function BillingScreen() {
         )}
       </section>
 
-      {selected !== null ? (
-        <VoucherDetail
-          key={`${selected.id}:${selected.status}`}
-          voucher={selected}
-          canVoid={mayVoid}
-          onVoided={handleVoided}
-          onClose={() => setSelectedID(null)}
-        />
+      {selectedID ? (
+        openedStatus !== null ? (
+          <Notice
+            tone={openedStatus === 404 || openedStatus === 422 ? "warning" : "danger"}
+            title={
+              openedStatus === 404 || openedStatus === 422
+                ? "Ese comprobante no está en este consultorio"
+                : "No pudimos leer el comprobante"
+            }
+          >
+            {openedStatus === 0
+              ? "La API no responde. Verificá que el backend esté corriendo en 127.0.0.1:8080."
+              : openedStatus === 404 || openedStatus === 422
+                ? "El enlace no corresponde a un comprobante de esta práctica, o el comprobante no existe."
+                : `La API respondió ${openedStatus}.`}
+          </Notice>
+        ) : opened === null ? (
+          <p role="status" className="text-sm text-ink-muted">
+            Cargando el comprobante…
+          </p>
+        ) : (
+          <VoucherDetail
+            key={`${opened.id}:${opened.status}`}
+            voucher={opened}
+            canVoid={mayVoid}
+            onVoided={handleVoided}
+            onClose={() => router.replace("/facturacion")}
+          />
+        )
       ) : null}
     </>
   );

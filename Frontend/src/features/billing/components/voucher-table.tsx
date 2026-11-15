@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import {
+  billingHref,
   formatDateTime,
   formatMoney,
   voucherNumber,
@@ -14,12 +17,10 @@ import { Notice } from "@/shared/ui/notice";
 export function VoucherTable({
   vouchers,
   selectedID,
-  onSelect,
   filtered,
 }: {
   vouchers: Voucher[];
   selectedID: string | null;
-  onSelect: (id: string) => void;
   /** Whether a filter is on, so an empty list can say why it is empty. */
   filtered: boolean;
 }) {
@@ -76,14 +77,13 @@ export function VoucherTable({
                   <StatusBadge status={voucher.status} />
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(voucher.id)}
+                  <Link
+                    href={billingHref(voucher.id)}
                     aria-label={`Ver el comprobante ${voucherNumber(voucher.number)}`}
                     className="rounded-md border border-border px-2 py-1 text-xs font-medium"
                   >
                     Ver
-                  </button>
+                  </Link>
                 </td>
               </tr>
             );

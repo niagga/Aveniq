@@ -28,6 +28,30 @@ export function canVoidVouchers(role: string | undefined): boolean {
 }
 
 /**
+ * The screen of the history, optionally opened on one voucher. The id rides in the query so
+ * a voucher can be linked without being on the current page of the list; GET /vouchers/{id}
+ * is what loads it. The shape is a Next.js location (pathname + query), not a string: typed
+ * routes only know `/facturacion`.
+ */
+export function billingHref(voucherId: string | null): {
+  pathname: "/facturacion";
+  query?: { voucher: string };
+} {
+  if (voucherId === null || voucherId === "") return { pathname: "/facturacion" };
+  return { pathname: "/facturacion", query: { voucher: voucherId } };
+}
+
+/**
+ * The same location as a string, for `router.replace`. Typed routes only know `/facturacion`,
+ * so the query is asserted onto that path: it is still `/facturacion`, with a search.
+ */
+export function billingUrl(voucherId: string | null): "/facturacion" {
+  const href = billingHref(voucherId);
+  if (href.query === undefined) return href.pathname;
+  return `${href.pathname}?voucher=${encodeURIComponent(href.query.voucher)}` as "/facturacion";
+}
+
+/**
  * The currency of a new voucher. The MVP bills in pesos; the API accepts any ISO 4217 code,
  * so adding a currency later is a screen change, not a contract change.
  */
