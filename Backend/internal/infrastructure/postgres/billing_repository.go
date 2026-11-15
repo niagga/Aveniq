@@ -1,0 +1,304 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres/sqlcgen"
+)
+
+const (
+	restrictViolationCode = "23001"
+
+	vouchersPatientFK     = "vouchers_patient_same_tenant"
+	vouchersAppointmentFK = "vouchers_appointment_same_tenant"
+	vouchersIssuerFK      = "vouchers_issuer_same_tenant"
+	vouchersVoiderFK      = "vouchers_voider_same_tenant"
+)
+
+const defaultVoucherPage = int32(100)
+
+// BillingRepository is the PostgreSQL adapter for port.BillingRepository.
+//
+// The consecutive number is not chosen in Go. NextVoucherNumber locks the
+// practice's counter row inside the open tenant transaction; CreateVoucher
+// uses that value. If the insert fails, the transaction rolls back and the
+// number is never skipped.
+type BillingRepository struct {
+	queries *sqlcgen.Queries
+}
+
+// NewBillingRepository builds the adapter over an existing pool.
+func NewBillingRepository(pool *pgxpool.Pool) *BillingRepository {
+	return &BillingRepository{queries: sqlcgen.New(pool)}
+}
+
+var _ port.BillingRepository = (*BillingRepository)(nil)
+
+func (r *BillingRepository) scoped(ctx context.Context) (*sqlcgen.Queries, error) {
+	tx, ok := tenantTransaction(ctx)
+	if !ok {
+		return nil, billing.ErrTenantScopeMissing
+	}
+	return r.queries.WithTx(tx), nil
+}
+
+// Issue reserves the next number and writes the voucher.
+func (r *BillingRepository) Issue(ctx context.Context, voucher billing.Voucher) (billing.Voucher, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+
+	tenantID, err := toPGUUIDFromTenant(voucher.TenantID)
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+
+	n, err := queries.NextVoucherNumber(ctx, tenantID)
+	if err != nil {
+		return billing.Voucher{}, translateBillingError(err)
+	}
+	numbered, err := voucher.AssignNumber(int(n))
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+
+	params, err := createVoucherParams(numbered)
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+	row, err := queries.CreateVoucher(ctx, params)
+	if err != nil {
+		return billing.Voucher{}, translateBillingError(err)
+	}
+	return voucherToDomain(row)
+}
+
+// Void records the void of an issued voucher. The number stays on the row.
+func (r *BillingRepository) Void(ctx context.Context, voucher billing.Voucher) (billing.Voucher, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+	if voucher.Status != billing.StatusVoided || voucher.VoidedAt == nil || voucher.VoidReason == nil {
+		return billing.Voucher{}, billing.ErrImmutable
+	}
+
+	id, err := parseBillingUUID(string(voucher.ID), "id")
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+	voidedBy, err := parseBillingUUID(voucher.VoidedBy, "voided_by")
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+
+	row, err := queries.VoidVoucher(ctx, sqlcgen.VoidVoucherParams{
+		ID:         id,
+		VoidedBy:   voidedBy,
+		VoidedAt:   pgtype.Timestamptz{Time: *voucher.VoidedAt, Valid: true},
+		VoidReason: voucher.VoidReason,
+		UpdatedAt:  voucher.UpdatedAt,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			existing, getErr := queries.GetVoucher(ctx, id)
+			if getErr != nil {
+				return billing.Voucher{}, translateBillingError(getErr)
+			}
+			if existing.Status == string(billing.StatusVoided) {
+				return billing.Voucher{}, billing.ErrAlreadyVoided
+			}
+			return billing.Voucher{}, billing.ErrImmutable
+		}
+		return billing.Voucher{}, translateBillingError(err)
+	}
+	return voucherToDomain(row)
+}
+
+// ByID returns one voucher, or billing.ErrNotFound.
+func (r *BillingRepository) ByID(ctx context.Context, id billing.VoucherID) (billing.Voucher, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+	parsed, err := parseBillingUUID(string(id), "id")
+	if err != nil {
+		return billing.Voucher{}, err
+	}
+	row, err := queries.GetVoucher(ctx, parsed)
+	if err != nil {
+		return billing.Voucher{}, translateBillingError(err)
+	}
+	return voucherToDomain(row)
+}
+
+// List returns one page of the practice's history, newest first.
+func (r *BillingRepository) List(ctx context.Context, filter port.VoucherFilter) ([]billing.Voucher, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = defaultVoucherPage
+	}
+
+	params := sqlcgen.ListVouchersParams{
+		IssuedFrom: timestamptzFromTime(filter.From),
+		IssuedTo:   timestamptzFromTime(filter.To),
+		PatientID:  optionalID(filter.PatientID),
+		Lim:        limit,
+		Off:        filter.Offset,
+	}
+	if filter.Status != "" {
+		status := filter.Status
+		params.Status = &status
+	}
+
+	rows, err := queries.ListVouchers(ctx, params)
+	if err != nil {
+		return nil, translateBillingError(err)
+	}
+	out := make([]billing.Voucher, 0, len(rows))
+	for _, row := range rows {
+		item, err := voucherToDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func createVoucherParams(voucher billing.Voucher) (sqlcgen.CreateVoucherParams, error) {
+	id, err := parseBillingUUID(string(voucher.ID), "id")
+	if err != nil {
+		return sqlcgen.CreateVoucherParams{}, err
+	}
+	tenantID, err := toPGUUIDFromTenant(voucher.TenantID)
+	if err != nil {
+		return sqlcgen.CreateVoucherParams{}, err
+	}
+	issuedBy, err := parseBillingUUID(voucher.IssuedBy, "issued_by")
+	if err != nil {
+		return sqlcgen.CreateVoucherParams{}, err
+	}
+	return sqlcgen.CreateVoucherParams{
+		ID:                   id,
+		TenantID:             tenantID,
+		Number:               int32(voucher.Number),
+		PatientID:            optionalID(voucher.PatientID),
+		AppointmentID:        optionalID(voucher.AppointmentID),
+		Concept:              voucher.Concept,
+		AmountMinor:          voucher.AmountMinor,
+		Currency:             voucher.Currency,
+		PracticeName:         voucher.PracticeName,
+		BuyerName:            voucher.BuyerName,
+		BuyerTaxID:           voucher.BuyerTaxID,
+		BuyerFiscalCondition: voucher.BuyerFiscalCondition,
+		Status:               string(voucher.Status),
+		IssuedBy:             issuedBy,
+		IssuedAt:             voucher.IssuedAt,
+		CreatedAt:            voucher.CreatedAt,
+		UpdatedAt:            voucher.UpdatedAt,
+	}, nil
+}
+
+func voucherToDomain(row sqlcgen.Voucher) (billing.Voucher, error) {
+	return billing.Reconstitute(
+		billing.VoucherID(row.ID.String()),
+		tenantIDOf(row.TenantID),
+		int(row.Number),
+		uuidText(row.PatientID),
+		uuidText(row.AppointmentID),
+		row.Concept,
+		row.AmountMinor,
+		row.Currency,
+		row.PracticeName,
+		row.BuyerName,
+		row.BuyerTaxID,
+		row.BuyerFiscalCondition,
+		billing.Status(row.Status),
+		row.IssuedBy.String(),
+		row.IssuedAt,
+		uuidText(row.VoidedBy),
+		timestamptzFromPG(row.VoidedAt),
+		row.VoidReason,
+		row.CreatedAt,
+		row.UpdatedAt,
+	)
+}
+
+func translateBillingError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.ErrNotFound
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case foreignKeyViolationCode:
+			switch pgErr.ConstraintName {
+			case vouchersPatientFK:
+				return fmt.Errorf("%w: constraint %s", billing.ErrPatientNotVisible, pgErr.ConstraintName)
+			case vouchersAppointmentFK:
+				return fmt.Errorf("%w: constraint %s", billing.ErrAppointmentNotVisible, pgErr.ConstraintName)
+			case vouchersIssuerFK, vouchersVoiderFK:
+				return fmt.Errorf("%w: constraint %s", billing.ErrActorNotVisible, pgErr.ConstraintName)
+			default:
+				return fmt.Errorf("%w: constraint %s", billing.ErrPatientNotVisible, pgErr.ConstraintName)
+			}
+		case restrictViolationCode:
+			return fmt.Errorf("%w: %s", billing.ErrImmutable, pgErr.Message)
+		case insufficientPrivilegeCode:
+			return err
+		}
+	}
+	return err
+}
+
+func parseBillingUUID(value, field string) (pgtype.UUID, error) {
+	parsed, err := uuid.Parse(value)
+	if err != nil {
+		return pgtype.UUID{}, &billing.ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	return pgtype.UUID{Bytes: parsed, Valid: true}, nil
+}
+
+func optionalID(value string) pgtype.UUID {
+	if value == "" {
+		return pgtype.UUID{}
+	}
+	parsed, err := uuid.Parse(value)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: parsed, Valid: true}
+}
+
+func uuidText(value pgtype.UUID) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String()
+}
+
+func timestamptzFromTime(value time.Time) pgtype.Timestamptz {
+	if value.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: value, Valid: true}
+}

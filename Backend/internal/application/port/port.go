@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/niagga/aveniq/backend/internal/domain/billing"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
@@ -246,4 +247,31 @@ type InvitationRepository interface {
 	// Delete removes a pending invitation. An accepted one stays: it is part of
 	// who joined the practice and when.
 	Delete(ctx context.Context, id iam.InvitationID) error
+}
+
+// BillingRepository persists internal vouchers.
+//
+// Implementations must map their failures onto the billing sentinels
+// (billing.ErrNotFound, billing.ErrAlreadyVoided, billing.ErrPatientNotVisible)
+// so the application layer never sees a driver code. Every call runs inside a
+// tenant scope: see TenantScope.
+//
+// Issue reserves the next number and writes the voucher in the same transaction.
+// Void never returns that number to the counter.
+type BillingRepository interface {
+	Issue(ctx context.Context, voucher billing.Voucher) (billing.Voucher, error)
+	Void(ctx context.Context, voucher billing.Voucher) (billing.Voucher, error)
+	ByID(ctx context.Context, id billing.VoucherID) (billing.Voucher, error)
+	List(ctx context.Context, filter VoucherFilter) ([]billing.Voucher, error)
+}
+
+// VoucherFilter narrows the history screen: a date window, an optional patient,
+// and an optional status. Empty bounds mean unbounded.
+type VoucherFilter struct {
+	From      time.Time
+	To        time.Time
+	PatientID string
+	Status    string
+	Limit     int32
+	Offset    int32
 }
