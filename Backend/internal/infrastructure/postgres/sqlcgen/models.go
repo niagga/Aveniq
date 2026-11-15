@@ -215,3 +215,31 @@ type User struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type Voucher struct {
+	ID                   pgtype.UUID
+	TenantID             pgtype.UUID
+	Number               int32
+	PatientID            pgtype.UUID
+	AppointmentID        pgtype.UUID
+	Concept              string
+	AmountMinor          int64
+	Currency             string
+	PracticeName         string
+	BuyerName            *string
+	BuyerTaxID           *string
+	BuyerFiscalCondition *string
+	Status               string
+	IssuedBy             pgtype.UUID
+	IssuedAt             time.Time
+	VoidedBy             pgtype.UUID
+	VoidedAt             pgtype.Timestamptz
+	VoidReason           *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type VoucherCounter struct {
+	TenantID   pgtype.UUID
+	LastNumber int32
+}
