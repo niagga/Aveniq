@@ -123,7 +123,7 @@ en cada transición de tarea.
 | T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | `7e83c45` |
 | T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | `0941c15` |
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | `c30e75f` |
-| T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | — |
+| T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | `fd0fe24` |
 | T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
@@ -1993,7 +1993,7 @@ Evidence:
 
 Next: T43 (menu and dashboard by role), then T44 (E2E and close of E4).
 
-**L52 — T43 menu and landing by role (uncommitted, pending approval)**
+**L52 — T43 menu and landing by role (committed `fd0fe24`)**
 
 What changed:
 
@@ -2018,3 +2018,28 @@ Evidence:
   (`contador@aveniq.local`), both in T44.
 
 Next: T44 (E2E for E4 and close).
+
+**L53 — T44 E2E for E4 written, not run (uncommitted)**
+
+What changed:
+
+- `e2e/e4-billing.spec.ts` (one file, 13 listed cases; the professional and the assistant have one
+  case each): the accountant lands on billing,
+  issues a voucher and voids it (reason and second click); the owner reads the same history; the
+  admin reads and cannot issue or void; a voucher names a patient through the billing subject
+  search and the buyer is the patient's name; the accountant's dashboard shows only billing and
+  the clinical screens refuse it; the professional and the assistant have no billing link and
+  are refused the screen. Every negative check has a positive control in the same view.
+- Gap found while writing it: the accountant lands on `/facturacion`, the only sign-out button was
+  on the dashboard. `LogoutButton` is now in the billing header.
+- Seed: `admin@aveniq.local` (role admin) added to `scripts/local-seed.ps1`. Before this, no admin
+  account existed in the demo practice, so "admin reads only" could not be tested.
+- `e2e/helpers.ts`: `ACCOUNTS.accountant` and `ACCOUNTS.admin`.
+
+Evidence:
+
+- `pnpm typecheck`: green. `playwright test --list`: 13 tests listed.
+- NOT run: needs the seed run with `AVENIQ_SEED_PASSWORD` (adds `contador` and `admin`; idempotent)
+  and the same value as `E2E_PASSWORD`. E4 is not closed until the run is green.
+
+Next: run the seed and `pnpm e2e e4-billing` with the local API; then close E4 (T44 row and L54).

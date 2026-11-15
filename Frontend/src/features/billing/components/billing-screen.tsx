@@ -15,6 +15,7 @@ import {
 import { IssueForm } from "@/features/billing/components/issue-form";
 import { VoucherDetail } from "@/features/billing/components/voucher-detail";
 import { VoucherTable } from "@/features/billing/components/voucher-table";
+import { LogoutButton } from "@/features/auth/components/logout-button";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
 import { Field, inputClass } from "@/shared/ui/field";
@@ -137,6 +138,8 @@ export function BillingScreen() {
             Comprobantes internos del consultorio: emitidos, anulados y su historial.
           </p>
         </div>
+        {/* The accountant lands here after sign-in and has no other screen to sign out from. */}
+        <LogoutButton />
       </header>
 
       {mayIssue ? (

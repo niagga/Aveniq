@@ -28,6 +28,9 @@ export const ACCOUNTS = {
     name: "Demo Profesional 2",
   },
   assistant: { email: "recepcion@aveniq.local", password: DEMO.password, name: "Demo Recepcion" },
+  // The accountant of E4 (S22) and the administrator who only reads billing (L46).
+  accountant: { email: "contador@aveniq.local", password: DEMO.password, name: "Demo Contador" },
+  admin: { email: "admin@aveniq.local", password: DEMO.password, name: "Demo Administracion" },
 } as const;
 
 export type Account = { email: string; password: string; name: string };
