@@ -119,7 +119,7 @@ en cada transición de tarea.
 | T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | `2b5430a` |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | `f7954ed` |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
-| T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | — |
+| T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | `ecc6b81` |
 | T40 | S2, S7 | E4 | Dominio `billing` + repositorio sqlc: emitir, anular (sin reusar número), snapshot al emitir, tests de aislamiento y de correlatividad | inline | — |
 | T41 | S2, S7, S22 | E4 | HTTP: listar (rango, paciente, estado), detalle, emitir, anular, y sujetos de facturación (sin padrón). Audit en la misma transacción | inline | — |
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | — |
@@ -1827,3 +1827,61 @@ Evidencia:
 
 Pendiente: correr la seed para crear `contador@aveniq.local` en la base de desarrollo. Requiere
 `AVENIQ_SEED_PASSWORD` en la sesión, que hoy no está seteada. T39 se cierra al commitear.
+**L48 — Reconciliation after pulling main from another machine (2026-11-14)**
+
+The work between L28 and L47 happened on a different machine and arrived here as 26 commits
+(`main` = `f8a14a0`). This entry records what was verified from this one, because three things did
+not travel with the git history.
+
+### The local database was six migrations behind
+
+It was at `0008`; main carries `0014`. Applied `0009`–`0014` (schedule, permission matrix, user
+directory, tenant trial, patient care, billing). **A pull is not enough on a second machine**: the
+schema lives in the database, not in the repository, and the running app fails on the first request
+that touches a table the migration has not created yet.
+
+### The API on port 8080 was a stale binary
+
+Its `/openapi.json` had no schedule, user, invitation or signup routes — it predated E3. The new
+build was verified on `8081` and carries them. Same lesson as the schema: pulling the code does not
+restart the process, and a stale API answers 404 for a route that exists in the repository.
+
+### The five development roles were seeded and each one logs in
+
+`local-seed.ps1` now takes the password from `AVENIQ_SEED_PASSWORD` (L44) and creates the accounts
+the T38 and E4 journeys need. Seeded on this machine and verified against the new build:
+
+| Account | Role | Login |
+| --- | --- | --- |
+| `demo@aveniq.local` | owner | 200 |
+| `profesional@aveniq.local` | professional | 200 |
+| `profesional2@aveniq.local` | professional | 200 |
+| `recepcion@aveniq.local` | assistant | 200 |
+| `contador@aveniq.local` | accountant | 200 |
+
+### The permission matrix behaves as designed, and one result deserves to be written down
+
+Probed with the seeded patient that predates E3:
+
+| Role | `/patients` | `/patients/{id}/clinical-record` | `/users` |
+| --- | --- | --- | --- |
+| owner | 200 | **403** | 200 |
+| professional | 200 | 404 | 403 |
+| assistant | 200 | 403 | 403 |
+| accountant | 403 | 403 | 403 |
+
+`403` for the professional's clinical read is not a failure: the patient is not theirs (S18), so the
+`404` is the care model working. `403` for the **owner** is the decision from L6 and S23 taken
+literally: reading clinical history requires a grant from the treating professional, and being the
+owner of the practice does not grant it. It is correct and it is surprising, which is exactly the
+pair of qualities that deserves a line in the log: whoever tests as owner will think clinical is
+broken.
+
+`/vouchers` answers 404 for every role because those routes do not exist yet: E4 has its schema only.
+
+### The board
+
+`T39` was the only row whose commit was missing; now linked to `ecc6b81`. The rest of E3 and E2 rows
+already carried theirs. Remaining: **T40–T44** (billing domain, HTTP, frontend, dashboard by role,
+E4 end-to-end). No `domain/billing` or `application/billing` package exists yet, so T40 is the next
+one, not a formality.
