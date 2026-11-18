@@ -85,9 +85,13 @@ if ($LASTEXITCODE -ne 0 -or -not $PasswordHash.StartsWith('$argon2id$')) {
 Write-Host "`nDevelopment data" -ForegroundColor Green
 
 $sql = @"
-INSERT INTO tenants (id, slug, name, status, country, created_at, updated_at)
-VALUES (gen_random_uuid(), '$Slug', '$Name', 'trial', 'AR', now(), now())
-ON CONFLICT (slug) DO NOTHING;
+-- The demo practice is development data: its trial must not end while the E2E journeys
+-- write (L58). GREATEST keeps the later end, so re-running the seed also moves a practice
+-- created earlier with the default 14 days.
+INSERT INTO tenants (id, slug, name, status, country, created_at, updated_at, trial_ends_at)
+VALUES (gen_random_uuid(), '$Slug', '$Name', 'trial', 'AR', now(), now(), now() + interval '10 years')
+ON CONFLICT (slug) DO UPDATE
+SET trial_ends_at = GREATEST(tenants.trial_ends_at, EXCLUDED.trial_ends_at), updated_at = now();
 
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner', true, now(), now()

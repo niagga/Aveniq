@@ -125,6 +125,10 @@ en cada transición de tarea.
 | T42 | S2, S7, S22 | E4 | Frontend: comprobantes (listado histórico, alta, detalle, anulación), `schema.d.ts` regenerado, RoleGate por rol | inline | `c30e75f` |
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | `fd0fe24` |
 | T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | `00bedc8`, `a8b3cd6` |
+| T45 | S5 | E5 | Decisión: qué pasa al vencer el trial. Opción A: solo lectura (L58) | inline | decisión (L58) |
+| T46 | S5 | E5 | API: consultorio con trial vencido no escribe (POST/PUT/PATCH/DELETE responden 403 `trial_expired`); login, refresh y logout siguen. Seed de desarrollo sin vencimiento | inline | — |
+| T47 | S5 | E5 | Frontend: banner de trial vencido con la fecha y formularios de alta deshabilitados | inline | — |
+| T48 | S5 | E5 | E2E: dentro del trial se escribe; con trial vencido solo se lee | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2114,4 +2118,26 @@ Qué hay que reabrir antes de abrir el registro al público general:
 - Decidir si el login exige email verificado.
 
 Relacionado y todavía abierto: el vencimiento del trial no se aplica (`trial_ends_at` se guarda,
-pero nada lo enforza). Es otro pendiente, no parte de T36.
+pero nada lo enforza). Es otro pendiente, no parte de T36. Se resuelve en E5 (L58).
+
+**L58 — E5 abre con T45: al vencer el trial, solo lectura (decisión del dueño, opción A)**
+
+Decisión: un consultorio cuyo trial venció sigue pudiendo leer todo, pero no escribe. Ningún dato
+se borra ni se bloquea el acceso.
+
+- **Qué bloquea:** cualquier método que escribe (POST, PUT, PATCH, DELETE) de un usuario autenticado
+  cuyo consultorio está en `trial` con `trial_ends_at` vencido. Responde 403 con `code: trial_expired`.
+- **Qué sigue igual:** lectura (GET), login, refresh y logout, para que el owner entre y vea el estado.
+- **Vencido** significa `status = trial` y `now >= trial_ends_at`. Un consultorio `active` no vence.
+  `suspended` no cambia en E5.
+- **Qué no se decide aquí:** pago, conversión a suscripción y borrado. Quedan fuera del MVP.
+
+Riesgos registrados:
+
+- **Seed de desarrollo.** El consultorio demo nace con 14 días. Si vence, las pruebas E2E que
+  escriben fallan. T46 fija un vencimiento lejano para el seed de desarrollo.
+- **Invitaciones aceptadas sin token.** Aceptar una invitación no lleva token de sesión, así que el
+  middleware no la ve. Queda como hueco conocido hasta decidirlo en T46.
+- **Retención de historia clínica.** Confirmar plazos legales antes de cualquier borrado futuro.
+
+Orden: T45 (esta entrada) → T46 (API) → T47 (frontend) → T48 (E2E).

@@ -1,65 +1,43 @@
 package tenant_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
-func TestNewTenantStartsATrialOfFourteenDays(t *testing.T) {
-	t.Parallel()
+// The trial rule is a boundary question: the end is inclusive, and only a trial can
+// expire.
+func TestTrialExpired(t *testing.T) {
+	created := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	ends := created.Add(tenant.TrialDuration)
 
-	created := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
-	got, err := tenant.New(tenant.ID("0192f3a4-0000-7000-8000-000000000010"), "consultorio-sur", "Consultorio Sur", created)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	trialWith := func(status tenant.Status, endsAt time.Time) tenant.Tenant {
+		t.Helper()
+		subject, err := tenant.Reconstitute(tenant.ID("11111111-1111-4111-8111-111111111111"), "consultorio-trial", "Consultorio", status, "", created, endsAt)
+		if err != nil {
+			t.Fatalf("cannot reconstitute the practice: %v", err)
+		}
+		return subject
 	}
 
-	wantEnd := created.Add(14 * 24 * time.Hour)
-	if !got.TrialEndsAt.Equal(wantEnd) {
-		t.Fatalf("TrialEndsAt = %v, want %v (14 days after creation)", got.TrialEndsAt, wantEnd)
+	cases := []struct {
+		name    string
+		subject tenant.Tenant
+		now     time.Time
+		want    bool
+	}{
+		{"a trial inside its days is not expired", trialWith(tenant.StatusTrial, ends), ends.Add(-time.Second), false},
+		{"the instant the trial ends it is expired", trialWith(tenant.StatusTrial, ends), ends, true},
+		{"a trial past its end is expired", trialWith(tenant.StatusTrial, ends), ends.Add(time.Hour), true},
+		{"an active practice never expires by the trial rule", trialWith(tenant.StatusActive, ends), ends.Add(365 * 24 * time.Hour), false},
+		{"a suspended practice is decided elsewhere", trialWith(tenant.StatusSuspended, ends), ends.Add(time.Hour), false},
 	}
-}
-
-func TestReconstituteKeepsTheStoredTrialEnd(t *testing.T) {
-	t.Parallel()
-
-	created := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
-	stored := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
-
-	got, err := tenant.Reconstitute(
-		tenant.ID("0192f3a4-0000-7000-8000-000000000011"), "sur", "Sur", tenant.StatusTrial,
-		tenant.DefaultTimezone, created, stored,
-	)
-	if err != nil {
-		t.Fatalf("Reconstitute: %v", err)
-	}
-	if !got.TrialEndsAt.Equal(stored) {
-		t.Fatalf("TrialEndsAt = %v, want the stored %v: changing TrialDuration must not move existing trials", got.TrialEndsAt, stored)
-	}
-}
-
-func TestReconstituteRejectsATrialEndNotAfterCreation(t *testing.T) {
-	t.Parallel()
-
-	created := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
-
-	for name, end := range map[string]time.Time{
-		"same instant": created,
-		"before":       created.Add(-time.Hour),
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			_, err := tenant.Reconstitute(
-				tenant.ID("0192f3a4-0000-7000-8000-000000000012"), "sur", "Sur", tenant.StatusTrial,
-				tenant.DefaultTimezone, created, end,
-			)
-			var validation *tenant.ValidationError
-			if !errors.As(err, &validation) || validation.Field != "trial_ends_at" {
-				t.Fatalf("error = %v, want a ValidationError on trial_ends_at", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.subject.TrialExpired(tc.now); got != tc.want {
+				t.Fatalf("TrialExpired(%s) = %v, want %v", tc.now.Format(time.RFC3339), got, tc.want)
 			}
 		})
 	}

@@ -1,0 +1,102 @@
+package http
+
+import (
+	"net/http"
+	"strings"
+
+	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
+	"github.com/niagga/aveniq/backend/internal/platform/authn"
+)
+
+// trialExemptPrefixes are the routes that are not a practice's own writes: sign-in and
+// session routes must keep working for an expired practice (so its owner can read it).
+var trialExemptPrefixes = []string{
+	APIPrefix + "/auth/",
+}
+
+// trialExemptPaths are public routes that do not belong to the caller's practice: the
+// signup creates a new practice, and the invitation preview and acceptance are answered
+// to someone who may not hold a session at all. Creating an invitation is NOT here: it is
+// the owner's own write, and an expired practice must not send them.
+var trialExemptPaths = map[string]bool{
+	APIPrefix + "/signup":              true,
+	APIPrefix + "/invitations/preview": true,
+	APIPrefix + "/invitations/accept":  true,
+}
+
+// trialGuard refuses writes from an authenticated caller whose practice has an expired
+// trial (L58). Reads pass. Without a valid bearer token the request passes through, and
+// the route answers 401 as it always did: the guard only decides for a real practice.
+//
+// It runs before the routes, so a refused write never reaches validation or a use case.
+// If the trial cannot be read, the write is refused (503): a practice the guard cannot
+// place is not allowed to write.
+func trialGuard(tokens *authn.AccessTokens, expired *tenantapp.TrialExpiredUseCase) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !isWrite(r.Method) || isTrialExempt(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			token, ok := bearerToken(r.Header.Get("Authorization"))
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			claims, err := tokens.Verify(token)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ended, err := expired.Execute(r.Context(), claims.TenantID)
+			if err != nil {
+				writeProblemJSON(w, http.StatusServiceUnavailable, "trial_unavailable",
+					"The practice's trial could not be read. Try again in a moment.")
+				return
+			}
+			if ended {
+				writeProblemJSON(w, http.StatusForbidden, "trial_expired",
+					"The trial of this practice has ended. It can be read, not changed.")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func isWrite(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func isTrialExempt(path string) bool {
+	if trialExemptPaths[path] {
+		return true
+	}
+	for _, prefix := range trialExemptPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// writeProblemJSON answers in the problem shape the API uses, with a stable code the
+// client can act on.
+func writeProblemJSON(w http.ResponseWriter, status int, code, detail string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = jsonEncoder(w).Encode(map[string]any{
+		"title":  http.StatusText(status),
+		"status": status,
+		"detail": detail,
+		"code":   code,
+	})
+}

@@ -286,7 +286,7 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
-	now := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	now := harnessNow
 	clock := fixedClock{now: now}
 
 	tokens, err := authn.NewAccessTokens([]byte(testSecret), 15*time.Minute, func() time.Time { return now })
@@ -322,6 +322,7 @@ func newHarness(t *testing.T) *harness {
 		Signup:                 signupapp.NewUseCase(tenants, users, scope, audit, clock, uuidIDs{}, fakeHasher{}),
 		RateLimiter:            limiter,
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
+		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenants, clock),
 		CreatePatient:          patientapp.NewCreateUseCase(repo, catalog, scope, clock, uuidIDs{}),
 		UpdatePatient:          patientapp.NewUpdateUseCase(repo, catalog, scope, clock, access),
 		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock, access),

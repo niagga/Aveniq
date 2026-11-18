@@ -63,6 +63,7 @@ type Deps struct {
 	Signup                 *signupapp.UseCase
 	RateLimiter            port.RateLimiter
 	GetTenantByID          *tenantapp.GetByIDUseCase
+	TrialExpired           *tenantapp.TrialExpiredUseCase
 	Login                  *authapp.LoginUseCase
 	Refresh                *authapp.RefreshUseCase
 	Logout                 *authapp.LogoutUseCase
@@ -120,6 +121,13 @@ func NewRouter(deps Deps) http.Handler {
 	router.Use(middleware.Recoverer)
 	router.Use(securityHeaders)
 	router.Use(bodyLimit)
+
+	// The trial guard is required: a router built without it would let an expired practice
+	// write, and nothing would say so. Failing at construction is the loud answer.
+	if deps.TrialExpired == nil {
+		panic("interfaces/http: Deps.TrialExpired is required; without it an expired trial can still write")
+	}
+	router.Use(trialGuard(deps.AccessTokens, deps.TrialExpired))
 
 	router.Get("/healthz", livenessHandler)
 	router.Get("/readyz", readinessHandler(deps.ReadyChecks))

@@ -140,6 +140,7 @@ func run() error {
 		Signup:                 signupapp.NewUseCase(tenantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, hasher),
 		RateLimiter:            redisx.NewRateLimiter(redisClient),
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenantRepository),
+		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenantRepository, clock.New()),
 		Login:                  loginUseCase,
 		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
 		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New(), careAccess),
