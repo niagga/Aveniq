@@ -2142,6 +2142,17 @@ Riesgos registrados:
 
 Orden: T45 (esta entrada) → T46 (API) → T47 (frontend) → T48 (E2E).
 
+**L60 — T48: E2E del trial (cierra E5 salvo la aceptación de invitaciones, L58)**
+
+- `scripts/local-seed.ps1` crea `demo-vencido` (owner `vencido@aveniq.local`) con el trial
+  vencido ayer. La práctica nace hace 30 días porque el esquema exige `trial_ends_at > created_at`.
+- `Frontend/e2e/e5-trial.spec.ts` (5 casos): la práctica demo sigue dentro del trial; dentro del
+  trial se crea un paciente; con trial vencido se lee la lista y "Nuevo paciente" queda
+  deshabilitado; la API responde 403 `trial_expired` al alta y 200 a la lectura; facturación
+  muestra el historial sin "Emitir".
+- Suite completa de Playwright en verde: 19 casos (E2, E3, E4 y E5).
+- Pendiente de decisión: commit y push de T48 y del seed (solo cuando se pida).
+
 **L59 — T47: el frontend lee GET /tenants y bloquea las escrituras en pantalla**
 
 La pantalla no es la autoridad: la API sigue respondiendo 403 `trial_expired`. El frontend

@@ -93,6 +93,21 @@ VALUES (gen_random_uuid(), '$Slug', '$Name', 'trial', 'AR', now(), now(), now() 
 ON CONFLICT (slug) DO UPDATE
 SET trial_ends_at = GREATEST(tenants.trial_ends_at, EXCLUDED.trial_ends_at), updated_at = now();
 
+-- A practice whose trial has already ended (T48): it is read-only, and the E2E journey checks
+-- that. Its end is set to the past on every run, so the test does not depend on the day it runs.
+-- The creation date stays in the past too, because the schema requires trial_ends_at > created_at.
+INSERT INTO tenants (id, slug, name, status, country, created_at, updated_at, trial_ends_at)
+VALUES (gen_random_uuid(), 'demo-vencido', 'Consultorio Vencido', 'trial', 'AR', now() - interval '30 days', now(), now() - interval '1 day')
+ON CONFLICT (slug) DO UPDATE
+SET trial_ends_at = EXCLUDED.trial_ends_at, status = 'trial', updated_at = now();
+
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'vencido@aveniq.local', '$PasswordHash', 'Demo Vencido', 'owner', true, now(), now()
+FROM tenants t
+WHERE t.slug = 'demo-vencido'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
+
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner', true, now(), now()
 FROM tenants t
@@ -147,6 +162,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Ok "practice '$Slug' and owner '$Email' are in place"
+Write-Ok "practice 'demo-vencido' (trial ended, read-only) and owner 'vencido@aveniq.local' are in place"
 Write-Host "`nSign in with:" -ForegroundColor Green
 Write-Host "  consultorio  $Slug"
 Write-Host "  email        $Email"

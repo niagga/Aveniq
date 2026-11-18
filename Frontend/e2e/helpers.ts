@@ -35,10 +35,19 @@ export const ACCOUNTS = {
 
 export type Account = { email: string; password: string; name: string };
 
+/**
+ * The practice whose trial has ended (T48). The seed sets its end in the past on every run.
+ * Its owner can read everything and write nothing.
+ */
+export const EXPIRED = {
+  tenant: "demo-vencido",
+  owner: { email: "vencido@aveniq.local", password: DEMO.password, name: "Demo Vencido" },
+} as const;
+
 /** Signs in as the given account through the product form and waits for the dashboard. */
-export async function signInAs(page: Page, account: Account): Promise<void> {
+export async function signInAs(page: Page, account: Account, tenant: string = DEMO.tenant): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Consultorio").fill(DEMO.tenant);
+  await page.getByLabel("Consultorio").fill(tenant);
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("Contraseña").fill(account.password);
   await page.getByRole("button", { name: "Entrar" }).click();
