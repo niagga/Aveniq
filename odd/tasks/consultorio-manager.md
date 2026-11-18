@@ -116,7 +116,7 @@ en cada transición de tarea.
 | T33 | S3, S18, S19, S21, S22, S23 | E3 | Matriz de permisos por dominio (owner, admin, professional, assistant, accountant) que reemplaza el guard grueso de L14 | inline | ab7c605 |
 | T34 | S3, S19 | E3 | Usuarios del consultorio: listado, detalle, directorio de autores, cambio de papel, baja y reactivación con reglas de autorización. Sin alta (ver T35) | inline | 942812c |
 | T35 | S3, S20 | E3 | Invitaciones: token de uso único con vencimiento, enlace generado por el owner. La aceptación crea la cuenta con contraseña (el alta) | inline | 0cb1918 |
-| T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting; verificación por email pendiente de proveedor | inline | `2b5430a` |
+| T36 | S3, S5 | E3 | Alta de consultorio en trial: signup público con rate limiting. Verificación por email fuera del MVP (L57) | inline | `2b5430a` |
 | T37 | S3, S12 | E3 | Frontend: usuarios, invitación, aceptación y signup público | inline | `f7954ed` |
 | T38 | S18, S19 | E3 | Gates por permiso en frontend y tests E2E de aislamiento (un professional no ve pacientes ajenos, assistant no ve historia clínica) | inline | 82a9e79 |
 | T39 | S2, S7 | E4 | Migración `0014`: comprobantes internos con numeración correlativa sin huecos por consultorio, estados emitido y anulado, snapshot del paciente y del consultorio, inmutables salvo la anulación, nunca se borran, RLS forzado | inline | `ecc6b81` |
@@ -2090,4 +2090,28 @@ The history used to open the detail from the current page of the list, so `GET /
 - Reload keeps the detail. A unknown id shows "Ese comprobante no está en este consultorio".
 
 Evidence: `pnpm typecheck` green. `pnpm exec playwright test e4-billing`: 8 passed, including
-the new journey for the URL and GET. Uncommitted, part of the backlog batch.
+the new journey for the URL and GET.
+
+Committed in `2153086` (frontend), as part of the backlog batch with `8608802` (backend: 0015 and
+subject search) and `ae52cb8` (tests: down of 0014 and 0015).
+
+**L57 — T36: verificación por email fuera del MVP (decisión del dueño)**
+
+Decisión: el alta pública en trial no verifica el email en el MVP. No hay proveedor de correo
+ni envío de email en el backend, y un flujo de verificación sin envío no llega a nadie.
+
+Qué queda como está:
+
+- El alta crea el consultorio y el owner con `emailVerified: false`. El login no lo exige.
+- La protección del alta pública es el rate limit (5 intentos por hora por cliente, con 503 si
+  Redis no responde).
+- Las invitaciones siguen sin email automático (S20).
+
+Qué hay que reabrir antes de abrir el registro al público general:
+
+- Elegir proveedor (Resend, SES, Postmark o SMTP), con su clave en `.env`, nunca en el chat.
+- Token de verificación con vencimiento y endpoint de confirmación.
+- Decidir si el login exige email verificado.
+
+Relacionado y todavía abierto: el vencimiento del trial no se aplica (`trial_ends_at` se guarda,
+pero nada lo enforza). Es otro pendiente, no parte de T36.
