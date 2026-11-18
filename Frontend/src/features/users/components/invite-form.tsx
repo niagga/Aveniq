@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 
 import { invitationPath, roleLabel, ROLES, type Role } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Field, inputClass } from "@/shared/ui/field";
 
 type IssuedLink = { email: string; url: string };
@@ -27,11 +28,13 @@ export function InviteForm({
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedLink | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const writesLocked = useWritesLocked();
 
   const prefix = useId();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (writesLocked) return;
     setError(null);
     setIssued(null);
 
@@ -81,6 +84,7 @@ export function InviteForm({
             onChange={(event) => setEmail(event.target.value)}
             maxLength={320}
             placeholder="persona@consultorio.test"
+            disabled={writesLocked}
             className={inputClass}
           />
         </Field>
@@ -90,6 +94,7 @@ export function InviteForm({
             id={`${prefix}-role`}
             value={role}
             onChange={(event) => setRole(event.target.value as Role)}
+            disabled={writesLocked}
             className={inputClass}
           >
             {ROLES.map((code) => (
@@ -102,7 +107,7 @@ export function InviteForm({
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || writesLocked}
           className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
         >
           {isSubmitting ? "Generando…" : "Generar enlace"}

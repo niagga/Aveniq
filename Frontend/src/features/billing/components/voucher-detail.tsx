@@ -10,6 +10,7 @@ import {
   type Voucher,
 } from "@/entities/billing/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Field, inputClass } from "@/shared/ui/field";
 
 /** The API's limit for the reason (1 to 500 characters). */
@@ -35,6 +36,7 @@ export function VoucherDetail({
   onClose: () => void;
 }) {
   const prefix = useId();
+  const writesLocked = useWritesLocked();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +116,7 @@ export function VoucherDetail({
             El comprobante conserva su número. No se reutiliza.
           </p>
         </div>
-      ) : canVoid ? (
+      ) : canVoid && !writesLocked ? (
         confirming ? (
           <form onSubmit={handleVoid} noValidate className="mt-4 grid gap-3">
             <Field

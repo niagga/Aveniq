@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { PracticeProvider } from "@/shared/auth/practice";
 import { ensureSession, startSessionChannel } from "@/shared/auth/session";
 
 type Status = "checking" | "authenticated" | "anonymous";
@@ -54,5 +55,5 @@ export function SessionGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <PracticeProvider>{children}</PracticeProvider>;
 }

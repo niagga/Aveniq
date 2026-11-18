@@ -16,6 +16,7 @@ import {
   type Appointment,
 } from "@/entities/schedule/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
 
 const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
@@ -224,9 +225,11 @@ function BookingForms({
   const [duration, setDuration] = useState(45);
   const [seriesUntil, setSeriesUntil] = useState("");
   const [busy, setBusy] = useState(false);
+  const writesLocked = useWritesLocked();
 
   async function bookOne(event: React.FormEvent) {
     event.preventDefault();
+    if (writesLocked) return;
     onError(null);
     const start = dateTimeLocalToRFC3339(startsAt);
     if (!start || patientId === "") {
@@ -253,6 +256,7 @@ function BookingForms({
 
   async function bookSeries(event: React.FormEvent) {
     event.preventDefault();
+    if (writesLocked) return;
     onError(null);
     const start = dateTimeLocalToRFC3339(startsAt);
     if (!start || patientId === "" || seriesUntil === "") {
@@ -291,20 +295,26 @@ function BookingForms({
       <form onSubmit={(event) => void bookOne(event)} className="space-y-3">
         <h2 className="text-sm font-semibold">Nuevo turno</h2>
         {notice ? <p className="text-xs text-ink-muted">{notice}</p> : null}
-        <PatientSelect patients={patients} value={patientId} onChange={setPatientId} />
+        <PatientSelect
+          patients={patients}
+          value={patientId}
+          onChange={setPatientId}
+          disabled={writesLocked}
+        />
         <label className="block text-xs font-medium text-ink-muted">
           Inicio
           <input
             type="datetime-local"
             value={startsAt}
             onChange={(event) => setStartsAt(event.target.value)}
-            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+            disabled={writesLocked}
+            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
           />
         </label>
-        <DurationField value={duration} onChange={setDuration} />
+        <DurationField value={duration} onChange={setDuration} disabled={writesLocked} />
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || writesLocked}
           className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
         >
           {busy ? "Guardando…" : "Reservar"}
@@ -323,12 +333,13 @@ function BookingForms({
             type="date"
             value={seriesUntil}
             onChange={(event) => setSeriesUntil(event.target.value)}
-            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+            disabled={writesLocked}
+            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
           />
         </label>
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || writesLocked}
           className="rounded-md border border-border px-4 py-2 text-sm font-medium disabled:opacity-60"
         >
           {busy ? "Guardando…" : "Crear serie"}
@@ -355,6 +366,7 @@ function AppointmentActions({
 }) {
   const [busy, setBusy] = useState(false);
   const scheduled = appointment.status === "scheduled";
+  const writesLocked = useWritesLocked();
 
   async function transition(path: "attend" | "cancel") {
     onError(null);
@@ -398,7 +410,7 @@ function AppointmentActions({
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || writesLocked}
             onClick={() => void transition("attend")}
             className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-brand-ink disabled:opacity-60"
           >
@@ -406,7 +418,7 @@ function AppointmentActions({
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || writesLocked}
             onClick={() => void transition("cancel")}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
           >
@@ -422,10 +434,12 @@ function PatientSelect({
   patients,
   value,
   onChange,
+  disabled = false,
 }: {
   patients: Patient[];
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="block text-xs font-medium text-ink-muted">
@@ -433,7 +447,8 @@ function PatientSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+        disabled={disabled}
+        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
         required
       >
         <option value="">Elegí un paciente</option>
@@ -447,7 +462,15 @@ function PatientSelect({
   );
 }
 
-function DurationField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function DurationField({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
   return (
     <label className="block text-xs font-medium text-ink-muted">
       Duración (minutos)
@@ -457,7 +480,8 @@ function DurationField({ value, onChange }: { value: number; onChange: (value: n
         max={480}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+        disabled={disabled}
+        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
       />
     </label>
   );

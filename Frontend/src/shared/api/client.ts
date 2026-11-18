@@ -46,7 +46,10 @@ export const CONNECTION_ERROR_MESSAGE =
 export function apiErrorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
-    const candidate = error as { detail?: unknown; title?: unknown };
+    const candidate = error as { code?: unknown; detail?: unknown; title?: unknown };
+    if (candidate.code === "trial_expired") {
+      return "La prueba de este consultorio venció. Podés seguir leyendo, no se puede cambiar nada.";
+    }
     if (typeof candidate.detail === "string" && candidate.detail.length > 0) {
       return candidate.detail;
     }

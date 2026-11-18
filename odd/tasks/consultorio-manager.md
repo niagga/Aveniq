@@ -2141,3 +2141,17 @@ Riesgos registrados:
 - **Retención de historia clínica.** Confirmar plazos legales antes de cualquier borrado futuro.
 
 Orden: T45 (esta entrada) → T46 (API) → T47 (frontend) → T48 (E2E).
+
+**L59 — T47: el frontend lee GET /tenants y bloquea las escrituras en pantalla**
+
+La pantalla no es la autoridad: la API sigue respondiendo 403 `trial_expired`. El frontend
+solo deja de ofrecer lo que el servidor va a rechazar.
+
+- **Fuente.** `PracticeProvider` (dentro de `SessionGate`) pide GET `/api/v1/tenants` y aplica
+  la misma regla que el dominio: `status = trial` y `now >= trialEndsAt`.
+- **Banner.** Aviso con la fecha de `trialEndsAt` (es-AR) en cada pantalla autenticada.
+- **Formularios.** Alta, edición, anulación, invitaciones, agenda y HC se deshabilitan cuando
+  el trial está vencido. Login, refresh y logout no pasan por este provider.
+- **Contador.** No tiene `tenant:read`, así que no ve el banner con fecha. Un write suyo sigue
+  cayendo en 403. Cerrar el hueco implica publicar `status` y `trialEndsAt` en una ruta que el
+  contador pueda leer (por ejemplo `/auth/me`); no se hizo aquí para no cambiar el contrato.

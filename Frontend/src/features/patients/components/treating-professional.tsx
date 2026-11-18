@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import type { Patient } from "@/entities/patient/model";
 import { careFailureMessage } from "@/entities/care/model";
 import { browserApi } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { staffName, type StaffMember } from "@/features/patients/staff";
 
 /**
@@ -31,7 +32,8 @@ export function TreatingProfessional({
   const [error, setError] = useState<string | null>(null);
 
   const current = patient.treatingProfessionalId;
-  const canSubmit = choice !== "" && choice !== current && !busy;
+  const writesLocked = useWritesLocked();
+  const canSubmit = choice !== "" && choice !== current && !busy && !writesLocked;
 
   async function reassign() {
     setError(null);
@@ -58,7 +60,7 @@ export function TreatingProfessional({
     <div className="space-y-2">
       <p>{current ? staffName(staff, current) : "Sin asignar"}</p>
 
-      {canAssign ? (
+      {canAssign && !writesLocked ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();

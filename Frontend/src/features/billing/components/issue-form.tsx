@@ -12,6 +12,7 @@ import {
 } from "@/entities/billing/model";
 import { SubjectPicker } from "@/features/billing/components/subject-picker";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Field, inputClass } from "@/shared/ui/field";
 
 /** The API's limit for the concept (1 to 200 characters). */
@@ -27,6 +28,7 @@ const CONCEPT_MAX = 200;
  */
 export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }) {
   const prefix = useId();
+  const writesLocked = useWritesLocked();
   const [subject, setSubject] = useState<Subject | null>(null);
   const [concept, setConcept] = useState("");
   const [amount, setAmount] = useState("");
@@ -36,6 +38,7 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (writesLocked) return;
     setError(null);
     setIssued(null);
 
@@ -87,7 +90,7 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
       </p>
 
       <form onSubmit={handleSubmit} noValidate className="mt-4 grid gap-4">
-        <SubjectPicker value={subject} onChange={setSubject} />
+        <SubjectPicker value={subject} onChange={setSubject} disabled={writesLocked} />
 
         <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
           <Field label="Concepto" htmlFor={`${prefix}-concept`}>
@@ -97,6 +100,7 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
               onChange={(event) => setConcept(event.target.value)}
               maxLength={CONCEPT_MAX}
               placeholder="Sesión de psicoterapia individual"
+              disabled={writesLocked}
               className={inputClass}
             />
           </Field>
@@ -112,6 +116,7 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
               onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"
               autoComplete="off"
+              disabled={writesLocked}
               className={inputClass}
             />
           </Field>
@@ -120,7 +125,7 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
         <div>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || writesLocked}
             className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
           >
             {isSubmitting ? "Emitiendo…" : "Emitir comprobante"}

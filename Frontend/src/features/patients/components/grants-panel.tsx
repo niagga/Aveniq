@@ -9,6 +9,7 @@ import {
 } from "@/entities/care/model";
 import type { Patient } from "@/entities/patient/model";
 import { browserApi } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { staffName, type StaffMember } from "@/features/patients/staff";
 
 /**
@@ -37,6 +38,7 @@ export function GrantsPanel({
   const [error, setError] = useState<string | null>(null);
 
   const canGrant = canGrantClinicalRecord(role, patient, userId);
+  const writesLocked = useWritesLocked();
   const live = (grants ?? []).filter((grant) => !grant.revokedAt);
   const eligible = staff.filter(
     (member) =>
@@ -129,7 +131,7 @@ export function GrantsPanel({
                 <span>{name}</span>
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || writesLocked}
                   onClick={() => void revoke(grant.id)}
                   aria-label={`Revocar acceso de ${name}`}
                   className="rounded-md border border-border px-3 py-1 text-xs font-medium disabled:opacity-60"
@@ -142,7 +144,7 @@ export function GrantsPanel({
         </ul>
       )}
 
-      {canGrant ? (
+      {canGrant && !writesLocked ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();

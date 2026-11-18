@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { formatDate, roleLabel, type Invitation } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -55,6 +56,7 @@ function InvitationRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const writesLocked = useWritesLocked();
 
   async function revoke() {
     setBusy(true);
@@ -84,7 +86,7 @@ function InvitationRow({
         <button
           type="button"
           onClick={() => void revoke()}
-          disabled={busy}
+          disabled={busy || writesLocked}
           className="rounded-md border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
         >
           {busy ? "Retirando…" : "Retirar invitación"}

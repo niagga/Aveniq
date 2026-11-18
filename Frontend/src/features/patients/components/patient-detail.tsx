@@ -20,6 +20,7 @@ import { GrantsPanel } from "@/features/patients/components/grants-panel";
 import { TreatingProfessional } from "@/features/patients/components/treating-professional";
 import { useStaff } from "@/features/patients/staff";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
 import { Notice } from "@/shared/ui/notice";
 
@@ -50,6 +51,7 @@ export function PatientDetail({
   const role = viewer?.role;
   const userId = viewer?.id ?? "";
   const staff = useStaff(role);
+  const writesLocked = useWritesLocked();
 
   useEffect(() => {
     setTab("admin");
@@ -92,14 +94,15 @@ export function PatientDetail({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            disabled={writesLocked}
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
           >
             Editar
           </button>
           <button
             type="button"
             onClick={toggleActive}
-            disabled={isBusy}
+            disabled={isBusy || writesLocked}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
           >
             {isBusy ? "Guardando…" : patient.isActive ? "Dar de baja" : "Reactivar"}
@@ -136,7 +139,7 @@ export function PatientDetail({
         <ClinicalPanel
           key={patient.id}
           patientID={patient.id}
-          readOnly={!canWriteClinicalRecord(role, patient, userId)}
+          readOnly={writesLocked || !canWriteClinicalRecord(role, patient, userId)}
         />
       ) : null}
 

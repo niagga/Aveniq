@@ -19,9 +19,11 @@ const SEARCH_DELAY_MS = 300;
 export function SubjectPicker({
   value,
   onChange,
+  disabled = false,
 }: {
   value: Subject | null;
   onChange: (subject: Subject | null) => void;
+  disabled?: boolean;
 }) {
   const prefix = useId();
   const [query, setQuery] = useState("");
@@ -30,7 +32,7 @@ export function SubjectPicker({
   const [searching, setSearching] = useState(false);
 
   const fragment = query.trim();
-  const searchable = value === null && fragment.length >= SUBJECT_SEARCH_MIN;
+  const searchable = !disabled && value === null && fragment.length >= SUBJECT_SEARCH_MIN;
 
   useEffect(() => {
     if (!searchable) return;
@@ -86,7 +88,8 @@ export function SubjectPicker({
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="rounded-md border border-border px-2 py-1 text-xs font-medium"
+            disabled={disabled}
+            className="rounded-md border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
           >
             Quitar
           </button>
@@ -109,6 +112,7 @@ export function SubjectPicker({
           onChange={(event) => setQuery(event.target.value)}
           autoComplete="off"
           maxLength={100}
+          disabled={disabled}
           className={inputClass}
         />
       </Field>

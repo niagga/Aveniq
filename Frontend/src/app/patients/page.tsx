@@ -9,6 +9,7 @@ import { PatientForm } from "@/features/patients/components/patient-form";
 import { PatientTable } from "@/features/patients/components/patient-table";
 import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { RoleGate } from "@/shared/auth/role-gate";
 import { SessionGate } from "@/shared/auth/session-gate";
 
@@ -40,6 +41,7 @@ function PatientsScreen() {
 
   const [selected, setSelected] = useState<Patient | null>(null);
   const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
+  const writesLocked = useWritesLocked();
 
   const load = useCallback(async () => {
     const { data, response } = await browserApi.GET("/api/v1/patients", {
@@ -97,15 +99,18 @@ function PatientsScreen() {
         <button
           type="button"
           onClick={() => setMode((current) => (current === "create" ? "idle" : "create"))}
-          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink"
+          disabled={writesLocked}
+          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
         >
           {mode === "create" ? "Cerrar formulario" : "Nuevo paciente"}
         </button>
       </header>
 
-      {mode === "create" ? <PatientForm onSaved={afterSave} onCancel={() => setMode("idle")} /> : null}
+      {mode === "create" && !writesLocked ? (
+        <PatientForm onSaved={afterSave} onCancel={() => setMode("idle")} />
+      ) : null}
 
-      {mode === "edit" && selected ? (
+      {mode === "edit" && selected && !writesLocked ? (
         <PatientForm
           patient={selected}
           onSaved={afterSave}

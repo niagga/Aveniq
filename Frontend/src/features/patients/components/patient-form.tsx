@@ -14,6 +14,7 @@ import {
 } from "@/entities/patient/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
+import { useWritesLocked } from "@/shared/auth/practice";
 
 type PatientProfile = components["schemas"]["PatientProfileBody"];
 
@@ -73,6 +74,7 @@ export function PatientForm({
   const [fields, setFields] = useState<Fields>(() => fieldsFrom(patient));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const writesLocked = useWritesLocked();
 
   const prefix = useId();
   const id = (name: keyof Fields) => `${prefix}-${name}`;
@@ -120,6 +122,7 @@ export function PatientForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (writesLocked) return;
     setError(null);
 
     const problem = validate();
@@ -353,7 +356,7 @@ export function PatientForm({
       <div className="mt-5 flex items-center gap-3">
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || writesLocked}
           className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
         >
           {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear paciente"}

@@ -10,6 +10,7 @@ import {
   type User,
 } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -83,9 +84,12 @@ function UserRow({
   const [role, setRole] = useState<Role>(user.role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const writesLocked = useWritesLocked();
 
   const isSelf = user.id === viewerID;
-  const lockReason = isSelf
+  const lockReason = writesLocked
+    ? "La prueba de este consultorio venció."
+    : isSelf
     ? "No podés cambiar tu propio acceso."
     : !mayGrant(viewerRole, user.role)
       ? "Solo el titular cambia cuentas con rol titular."
