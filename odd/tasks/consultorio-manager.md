@@ -132,7 +132,7 @@ en cada transición de tarea.
 | T49 | S2, S5 | E6 | Registrar el plan de tarifas, cobertura e informes en el tablero (L61) | inline | — |
 | T50 | S16, S2 | E6 | Migración `0016`: catálogo de mutuales por consultorio; cobertura del paciente (particular o mutual con número de afiliado); moneda de cobro (ARS, EUR, USD) obligatoria en el esquema, con backfill a ARS para los pacientes existentes. RLS forzado | inline | `4b8615d` |
 | T51 | S16, S2 | E6 | Contrato: dominio, HTTP y pantallas de mutuales y del paciente con cobertura y moneda. La moneda es obligatoria en la API (cambio de contrato confirmado) | inline | `1e32399` |
-| T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | — |
+| T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | `5cad1d8` |
 | T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | — |
 | T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | — |
 | T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | — |
@@ -2316,4 +2316,5 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `go vet ./...` limpio, `gofmt` sin diferencias, `go test ./...` completo en verde
   con las bases de test. `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e` 22 de 22 contra la API
   nueva (`127.0.0.1:8080`, reiniciada con este build).
-- **Pendiente.** Commit solo cuando se pida. T53 es el siguiente.
+- **Commit.** `5cad1d8`. El registro del hash va en un commit aparte, como en T51.
+- **Pendiente.** T53 es el siguiente.
