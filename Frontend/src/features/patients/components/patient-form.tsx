@@ -1,6 +1,14 @@
 "use client";
 
-import { useId, useState } from "react";
+import {
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+  useId,
+  useState,
+  type ReactElement,
+} from "react";
 
 import {
   COUNTRIES,
@@ -18,7 +26,8 @@ import type { Insurer } from "@/entities/insurer/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { useWritesLocked } from "@/shared/auth/practice";
-import { inputClass } from "@/shared/ui/field";
+import { Button } from "@/shared/ui/button";
+import { Field as BaseField, fieldErrorId, inputClass } from "@/shared/ui/field";
 
 type PatientProfile = components["schemas"]["PatientProfileBody"];
 
@@ -95,6 +104,71 @@ function birthDateCeiling(): string {
   return local.toISOString().slice(0, 10);
 }
 
+type FieldErrors = Partial<Record<keyof Fields, string>>;
+
+/** The order a user reads the form, so "the first problem" means the first one on screen. */
+const FIELD_ORDER: readonly (keyof Fields)[] = [
+  "fullName",
+  "birthDate",
+  "documentKind",
+  "documentNumber",
+  "billingCurrency",
+  "insurerId",
+  "memberNumber",
+  "taxIdKind",
+  "taxIdNumber",
+];
+
+const FieldErrorsContext = createContext<FieldErrors>({});
+
+/**
+ * Every problem of the form, keyed by the field that has it.
+ *
+ * It used to be a single string, so the user learned that *something* was wrong and had to
+ * guess what. The pairs are symmetrical on purpose: choosing a document type without a
+ * number is a problem on the number, and typing a number without a type is a problem on the
+ * type. Neither is acceptable, and neither is a form-level message.
+ */
+function collectErrors(values: Fields, insured: boolean): FieldErrors {
+  const errors: FieldErrors = {};
+
+  if (values.fullName.trim() === "") {
+    errors.fullName = "El nombre es obligatorio.";
+  }
+  if (values.birthDate !== "" && values.birthDate > birthDateCeiling()) {
+    errors.birthDate = "La fecha tiene que ser anterior a hoy.";
+  }
+  if (values.documentKind !== "" && values.documentNumber.trim() === "") {
+    errors.documentNumber = "Elegiste un tipo de documento sin número.";
+  }
+  if (values.documentKind === "" && values.documentNumber.trim() !== "") {
+    errors.documentKind = "Elegí el tipo del documento que cargaste.";
+  }
+  if (values.taxIdKind !== "" && values.taxIdNumber.trim() === "") {
+    errors.taxIdNumber = "Elegiste un identificador fiscal sin número.";
+  }
+  if (values.taxIdKind === "" && values.taxIdNumber.trim() !== "") {
+    errors.taxIdKind = "Elegí el tipo del identificador fiscal.";
+  }
+  if (values.billingCurrency === "") {
+    errors.billingCurrency = "Elegí la moneda de facturación.";
+  }
+  if (insured && values.insurerId === "") {
+    errors.insurerId = "Elegí la mutual que cubre al paciente.";
+  }
+  if (insured && values.memberNumber.trim() === "") {
+    errors.memberNumber = "Cargá el número de afiliado de la mutual.";
+  }
+
+  return errors;
+}
+
+/** Recovers the field name from a control id, which is always `${prefix}-${name}`. */
+function fieldNameOf(htmlFor: string): keyof Fields | null {
+  const names = Object.keys(fieldsFrom(undefined)) as (keyof Fields)[];
+  return names.find((name) => htmlFor.endsWith(`-${name}`)) ?? null;
+}
+
 export function PatientForm({
   patient,
   insurers,
@@ -108,6 +182,7 @@ export function PatientForm({
 }) {
   const [fields, setFields] = useState<Fields>(() => fieldsFrom(patient));
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const writesLocked = useWritesLocked();
 
@@ -128,6 +203,13 @@ export function PatientForm({
 
   function set<K extends keyof Fields>(name: K, value: Fields[K]) {
     setFields((current) => ({ ...current, [name]: value }));
+    // The error describes the value being replaced, so it clears as the user types.
+    setFieldErrors((current) => {
+      if (!(name in current)) return current;
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
   }
 
   // A particular patient carries no mutual and no member number: clearing them here
@@ -156,33 +238,19 @@ export function PatientForm({
     }));
   }
 
-  function validate(): string | null {
-    if (fields.fullName.trim() === "") return "El nombre es obligatorio.";
-    if (fields.birthDate !== "" && fields.birthDate > birthDateCeiling()) {
-      return "La fecha de nacimiento tiene que ser anterior a hoy.";
-    }
-    if (fields.documentKind !== "" && fields.documentNumber.trim() === "") {
-      return "Elegiste un tipo de documento sin número.";
-    }
-    if (fields.documentKind === "" && fields.documentNumber.trim() !== "") {
-      return "Cargaste un número de documento sin elegir el tipo.";
-    }
-    if (fields.taxIdKind !== "" && fields.taxIdNumber.trim() === "") {
-      return "Elegiste un identificador fiscal sin número.";
-    }
-    if (fields.taxIdKind === "" && fields.taxIdNumber.trim() !== "") {
-      return "Cargaste un identificador fiscal sin elegir el tipo.";
-    }
-    if (fields.billingCurrency === "") {
-      return "Elegí la moneda de facturación.";
-    }
-    if (isInsured && fields.insurerId === "") {
-      return "Elegí la mutual que cubre al paciente.";
-    }
-    if (isInsured && fields.memberNumber.trim() === "") {
-      return "Cargá el número de afiliado de la mutual.";
-    }
-    return null;
+  // Validation runs on blur and on submit, never on every keystroke: a field that turns red
+  // after the first character is noise, and one that only complains after the trip is worse.
+  function checkOnBlur(event: React.FocusEvent<HTMLFormElement>) {
+    const name = fieldNameOf((event.target as HTMLElement).id);
+    if (name === null) return;
+
+    const errors = collectErrors(fields, isInsured);
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (errors[name] === undefined) delete next[name];
+      else next[name] = errors[name];
+      return next;
+    });
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -190,9 +258,13 @@ export function PatientForm({
     if (writesLocked) return;
     setError(null);
 
-    const problem = validate();
-    if (problem !== null) {
-      setError(problem);
+    const errors = collectErrors(fields, isInsured);
+    setFieldErrors(errors);
+
+    const first = FIELD_ORDER.find((name) => errors[name] !== undefined);
+    if (first !== undefined) {
+      // The message sits next to its field now, but a keyboard user still has to be taken there.
+      document.getElementById(id(first))?.focus();
       return;
     }
 
@@ -245,6 +317,7 @@ export function PatientForm({
   return (
     <form
       onSubmit={handleSubmit}
+      onBlur={checkOnBlur}
       className="rounded-[var(--radius-panel)] border border-border bg-surface p-5"
       noValidate
     >
@@ -252,7 +325,8 @@ export function PatientForm({
         {isEditing ? "Editar paciente" : "Nuevo paciente"}
       </h2>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <FieldErrorsContext.Provider value={fieldErrors}>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label="Nombre y apellido" htmlFor={id("fullName")}>
           <input
             id={id("fullName")}
@@ -476,6 +550,8 @@ export function PatientForm({
         </Field>
       </div>
 
+      </FieldErrorsContext.Provider>
+
       {error ? (
         <p role="alert" className="mt-4 text-sm text-danger">
           {error}
@@ -483,28 +559,27 @@ export function PatientForm({
       ) : null}
 
       <div className="mt-5 flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={isSubmitting || writesLocked}
-          className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
-        >
+        <Button type="submit" variant="primary" busy={isSubmitting} disabled={writesLocked}>
           {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear paciente"}
-        </button>
+        </Button>
 
         {onCancel ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-border px-3 py-2 text-sm text-ink-muted"
-          >
+          <Button variant="ghost" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         ) : null}
       </div>
     </form>
   );
 }
 
+/**
+ * One labelled control of the patient form.
+ *
+ * It wires the error for the whole grid from one place: the error text comes from the shared
+ * Field, and the control inside receives `aria-invalid` plus `aria-describedby` pointing at
+ * that text, so the two cannot drift apart.
+ */
 function Field({
   label,
   htmlFor,
@@ -516,12 +591,29 @@ function Field({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  const errors = useContext(FieldErrorsContext);
+  const name = fieldNameOf(htmlFor);
+  const error = name === null ? undefined : errors[name];
+
+  const described = error === undefined ? undefined : fieldErrorId(htmlFor);
+  const control = isValidElement(children)
+    ? cloneElement(
+        children as ReactElement<{
+          "aria-invalid"?: boolean;
+          "aria-describedby"?: string;
+        }>,
+        {
+          "aria-invalid": error === undefined ? undefined : true,
+          "aria-describedby": described,
+        },
+      )
+    : children;
+
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
-      <label htmlFor={htmlFor} className="block text-xs font-medium text-ink-muted">
-        {label}
-      </label>
-      {children}
+      <BaseField label={label} htmlFor={htmlFor} error={error}>
+        {control}
+      </BaseField>
     </div>
   );
 }
