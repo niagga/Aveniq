@@ -24,6 +24,7 @@ import { useStaff } from "@/features/patients/staff";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -49,6 +50,8 @@ export function PatientDetail({
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [tab, setTab] = useState<"admin" | "clinical">("admin");
+  // Deactivating is the destructive half: it asks first. Reactivating does not.
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
 
   // The viewer decides what this screen offers; the API decides what is allowed.
   const viewer = getSessionUser();
@@ -87,6 +90,19 @@ export function PatientDetail({
 
   return (
     <section className="rounded-[var(--radius-panel)] border border-border bg-surface p-5">
+      <ConfirmDialog
+        open={confirmingDeactivate}
+        title={`¿Dar de baja a ${patient.fullName}?`}
+        description="El paciente deja de aparecer en la agenda y no se le pueden emitir comprobantes nuevos. La ficha y su historia clínica se conservan: se puede reactivar en cualquier momento."
+        confirmLabel="Dar de baja"
+        tone="danger"
+        busy={isBusy}
+        onCancel={() => setConfirmingDeactivate(false)}
+        onConfirm={() => {
+          setConfirmingDeactivate(false);
+          void toggleActive();
+        }}
+      />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">{patient.fullName}</h2>
@@ -105,9 +121,12 @@ export function PatientDetail({
           </button>
           <button
             type="button"
-            onClick={toggleActive}
+            onClick={() => {
+              if (patient.isActive) setConfirmingDeactivate(true);
+              else void toggleActive();
+            }}
             disabled={isBusy || writesLocked}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
+            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
           >
             {isBusy ? "Guardando…" : patient.isActive ? "Dar de baja" : "Reactivar"}
           </button>

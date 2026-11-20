@@ -11,6 +11,7 @@ import type { Patient } from "@/entities/patient/model";
 import { browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { staffName, type StaffMember } from "@/features/patients/staff";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 /**
  * Who else can read this patient's clinical record (S23, T38).
@@ -84,6 +85,10 @@ export function GrantsPanel({
     }
   }
 
+  const [confirmingRevoke, setConfirmingRevoke] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+
   async function revoke(grantID: string) {
     setError(null);
     setBusy(true);
@@ -105,6 +110,20 @@ export function GrantsPanel({
 
   return (
     <section className="mt-6 space-y-3 border-t border-border pt-5">
+      <ConfirmDialog
+        open={confirmingRevoke !== null}
+        title={`¿Revocar el acceso de ${confirmingRevoke?.name ?? "este profesional"}?`}
+        description="Deja de poder leer la ficha y la historia clínica de este paciente. Se le puede volver a dar acceso cuando haga falta."
+        confirmLabel="Revocar acceso"
+        tone="danger"
+        busy={busy}
+        onCancel={() => setConfirmingRevoke(null)}
+        onConfirm={() => {
+          const target = confirmingRevoke;
+          setConfirmingRevoke(null);
+          if (target !== null) void revoke(target.id);
+        }}
+      />
       <div>
         <h3 className="text-sm font-semibold">Acceso a la historia clínica</h3>
         <p className="mt-0.5 text-xs text-ink-muted">
@@ -132,9 +151,9 @@ export function GrantsPanel({
                 <button
                   type="button"
                   disabled={busy || writesLocked}
-                  onClick={() => void revoke(grant.id)}
+                  onClick={() => setConfirmingRevoke({ id: grant.id, name })}
                   aria-label={`Revocar acceso de ${name}`}
-                  className="rounded-md border border-border px-3 py-1 text-xs font-medium disabled:opacity-60"
+                  className="rounded-control border border-border px-3 py-1 text-xs font-medium disabled:opacity-60"
                 >
                   Revocar acceso
                 </button>
