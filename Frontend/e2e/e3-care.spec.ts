@@ -130,6 +130,11 @@ test("a granted professional reads the record, cannot write or book it, and lose
   await professional
     .getByRole("button", { name: `Revocar acceso de ${ACCOUNTS.otherProfessional.name}` })
     .click();
+
+  // Clinical access is the most sensitive thing on the screen, so the revoke asks first.
+  const revokeDialog = professional.getByRole("dialog");
+  await expect(revokeDialog).toBeVisible();
+  await revokeDialog.getByRole("button", { name: "Revocar acceso", exact: true }).click();
   await expect(professional.getByText("Ningún otro profesional tiene acceso.")).toBeVisible({
     timeout: 10_000,
   });

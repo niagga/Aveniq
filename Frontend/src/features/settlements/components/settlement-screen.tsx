@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -55,10 +54,7 @@ export function SettlementScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Liquidaciones</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Liquidaciones</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Cobro mensual a las mutuales: las sesiones atendidas de sus pacientes, valuadas con el
             tarifario. Una sesión se liquida una sola vez.

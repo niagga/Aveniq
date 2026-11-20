@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq · Shell 01 — Rail lateral fijo</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      :root {
+        --surface: #ffffff;
+        --surface-muted: #f6f7f9;
+        --border: #e3e6ea;
+        --ink: #16181d;
+        --ink-muted: #5c6472;
+        --brand: #2f5d8a;
+        --brand-ink: #ffffff;
+        --success: #1f7a4d;
+        --warning: #8a5a00;
+        --danger: #a4232b;
+        --panel: 0.75rem;
+        --control: 0.375rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--surface-muted);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .board {
+        width: 1440px;
+        padding: 24px 40px 40px;
+      }
+
+      /* ---------- annotation ---------- */
+      .anno {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 32px;
+        padding-bottom: 16px;
+      }
+
+      .anno h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .anno h1 span {
+        color: var(--ink-muted);
+        font-weight: 400;
+      }
+
+      .anno p {
+        margin: 0;
+        max-width: 74ch;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .tag {
+        display: inline-block;
+        border: 1px solid color-mix(in srgb, var(--warning) 30%, white);
+        background: color-mix(in srgb, var(--warning) 5%, white);
+        color: var(--warning);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      /* ---------- app frame ---------- */
+      .app {
+        display: grid;
+        grid-template-columns: 248px 1fr;
+        height: 724px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+      }
+
+      /* ---------- sidebar ---------- */
+      .rail {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .practice {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--control);
+        background: var(--brand);
+        color: var(--brand-ink);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+        flex: none;
+      }
+
+      .practice strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .practice small {
+        display: block;
+        font-size: 11px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .nav {
+        padding: 12px 8px;
+        overflow: hidden auto;
+        flex: 1;
+      }
+
+      .nav h2 {
+        margin: 0;
+        padding: 10px 8px 6px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+
+      .nav a {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: var(--control);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 13px;
+      }
+
+      .nav a:hover {
+        background: var(--surface-muted);
+      }
+
+      .nav a svg {
+        flex: none;
+        color: var(--ink-muted);
+      }
+
+      .nav a[aria-current="page"] {
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        font-weight: 600;
+      }
+
+      .nav a[aria-current="page"] svg {
+        color: var(--brand);
+      }
+
+      .nav a[aria-current="page"]::before {
+        content: "";
+        position: absolute;
+        left: -8px;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 2px;
+        background: var(--brand);
+      }
+
+      .count {
+        margin-left: auto;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, white);
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        color: var(--brand);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 7px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .rail-foot {
+        border-top: 1px solid var(--border);
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .trial {
+        border: 1px solid color-mix(in srgb, var(--warning) 30%, white);
+        background: color-mix(in srgb, var(--warning) 5%, white);
+        color: var(--warning);
+        border-radius: var(--control);
+        padding: 8px 10px;
+        font-size: 11px;
+      }
+
+      .trial strong {
+        display: block;
+        font-weight: 600;
+      }
+
+      .trial a {
+        color: inherit;
+        font-weight: 600;
+      }
+
+      .me {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px;
+        border-radius: var(--control);
+      }
+
+      .me:hover {
+        background: var(--surface-muted);
+      }
+
+      .me .avatar {
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--ink-muted);
+        border: 1px solid var(--border);
+      }
+
+      .me strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .me small {
+        display: block;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+
+      /* ---------- main ---------- */
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 16px 24px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .topbar h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .topbar p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn {
+        border-radius: var(--control);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 500;
+        padding: 7px 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: var(--brand-ink);
+        font-size: 13px;
+        padding: 8px 14px;
+      }
+
+      .content {
+        padding: 20px 24px 24px;
+        display: grid;
+        gap: 16px;
+        overflow: hidden;
+        align-content: start;
+      }
+
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+
+      .fact {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 12px 14px;
+      }
+
+      .fact span {
+        display: block;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+
+      .fact strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 18px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+
+      .fact em {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        font-style: normal;
+        color: var(--ink-muted);
+      }
+
+      .filterbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .chip {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        padding: 5px 12px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .chip[aria-pressed="true"] {
+        border-color: var(--brand);
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        color: var(--brand);
+        font-weight: 600;
+      }
+
+      .table-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+      }
+
+      .table-panel header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .table-panel header strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .table-panel header small {
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      thead {
+        background: var(--surface-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+      }
+
+      th {
+        padding: 9px 16px;
+        font-weight: 500;
+        text-align: left;
+      }
+
+      td {
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        vertical-align: middle;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .amount {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        background: var(--surface-muted);
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+
+      .badge-warn {
+        border-color: color-mix(in srgb, var(--warning) 30%, white);
+        background: color-mix(in srgb, var(--warning) 5%, white);
+        color: var(--warning);
+      }
+
+      .rowaction {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: var(--control);
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        color: var(--ink);
+      }
+
+      /* ---------- narrow band ---------- */
+      .narrow {
+        margin-top: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .narrow-caption {
+        max-width: 260px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .narrow-caption strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      .phone {
+        width: 320px;
+        height: 470px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .phone-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .phone-top strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .menu-btn {
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        background: var(--surface);
+        padding: 4px 7px;
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .phone-body {
+        flex: 1;
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        background: var(--surface-muted);
+      }
+
+      .phone-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        padding: 10px 12px;
+        font-size: 12px;
+        display: grid;
+        gap: 2px;
+      }
+
+      .phone-card small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .tabs a {
+        padding: 8px 4px 10px;
+        text-align: center;
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-decoration: none;
+        display: grid;
+        gap: 3px;
+        justify-items: center;
+      }
+
+      .tabs a[aria-current="page"] {
+        color: var(--brand);
+        font-weight: 600;
+      }
+
+      .notes {
+        flex: 1;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 16px 18px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .notes strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .notes ul {
+        margin: 0;
+        padding-left: 16px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .notes code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <div class="anno">
+        <h1>01 — Rail lateral fijo <span>· 248 px</span></h1>
+        <p>
+          <strong>Tradeoff:</strong> orientación máxima, secciones siempre visibles y badges que
+          muestran trabajo pendiente sin entrar a la pantalla. Cuesta 248 px de ancho horizontal —
+          justo lo que la grilla semanal y el tarifario de 9 columnas necesitan.
+        </p>
+        <span class="tag">Orientado a orientación</span>
+      </div>
+
+      <div class="app">
+        <aside class="rail">
+          <div class="practice">
+            <div class="avatar">SM</div>
+            <div style="min-width: 0">
+              <strong>Consultorio San Martín</strong>
+              <small>Plan Profesional · 4 profesionales</small>
+            </div>
+          </div>
+
+          <nav class="nav" aria-label="Secciones del consultorio">
+            <h2>Día a día</h2>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z" />
+              </svg>
+              Inicio
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <rect x="2" y="3" width="12" height="11" rx="1" /><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" />
+              </svg>
+              Agenda
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" />
+              </svg>
+              Pacientes
+            </a>
+
+            <h2>Administración</h2>
+            <a href="#" aria-current="page">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12M5 10h3" />
+              </svg>
+              Facturación
+              <span class="count" aria-label="7 sesiones sin facturar">7</span>
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M2.5 4h11M2.5 8h11M2.5 12h6" /><circle cx="12.5" cy="12" r="1.6" />
+              </svg>
+              Tarifario
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M8 2.5 13.5 5v3.2c0 2.6-2.2 4.6-5.5 5.3-3.3-.7-5.5-2.7-5.5-5.3V5L8 2.5Z" />
+              </svg>
+              Mutuales
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <circle cx="6" cy="5.5" r="2.2" /><path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" /><path d="M11 5.5h3M12.5 4v3" />
+              </svg>
+              Usuarios
+            </a>
+          </nav>
+
+          <div class="rail-foot">
+            <div class="trial">
+              <strong>El trial vence en 3 días</strong>
+              Después el consultorio queda en sólo lectura. <a href="#">Elegir plan</a>
+            </div>
+            <div class="me">
+              <div class="avatar">MF</div>
+              <div style="min-width: 0">
+                <strong>Dra. Mariana Ferreyra</strong>
+                <small>Dueña del consultorio</small>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h2>Facturación</h2>
+              <p>Sesión del 18 al 24 de noviembre · 7 sesiones esperando voucher</p>
+            </div>
+            <div class="actions">
+              <button class="btn">Exportar</button>
+              <button class="btn btn-primary">Emitir voucher</button>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="facts">
+              <div class="fact">
+                <span>Sin facturar</span>
+                <strong>7</strong>
+                <em>4 de esta semana</em>
+              </div>
+              <div class="fact">
+                <span>Pendiente de cobro</span>
+                <strong>$ 312.000</strong>
+                <em>incluye copagos</em>
+              </div>
+              <div class="fact">
+                <span>Emitidos hoy</span>
+                <strong>3</strong>
+                <em>último a las 11:42</em>
+              </div>
+            </div>
+
+            <div class="filterbar" role="group" aria-label="Filtros de la lista">
+              <span class="chip" aria-pressed="true">Sin facturar</span>
+              <span class="chip" aria-pressed="false">Emitidos</span>
+              <span class="chip" aria-pressed="false">Anulados</span>
+              <span style="margin-left: auto; font-size: 11px; color: var(--ink-muted)">
+                Filtros guardados en la URL: <span class="mono">?estado=sin-facturar&amp;desde=2026-11-18</span>
+              </span>
+            </div>
+
+            <div class="table-panel">
+              <header>
+                <strong>Sesiones sin facturar</strong>
+                <small>Ordenadas por fecha de atención</small>
+              </header>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Fecha</th>
+                    <th scope="col">Paciente</th>
+                    <th scope="col">Profesional</th>
+                    <th scope="col">Cobertura</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col" style="text-align: right">Monto</th>
+                    <th scope="col"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">18/11</td>
+                    <td>Lucía Bermúdez</td>
+                    <td style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                    <td style="color: var(--ink-muted)">OSDE 210 · titular</td>
+                    <td><span class="badge">Sin voucher</span></td>
+                    <td class="amount">$ 48.000</td>
+                    <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">18/11</td>
+                    <td>Ramiro Ocampo</td>
+                    <td style="color: var(--ink-muted)">Dr. Sosa</td>
+                    <td style="color: var(--ink-muted)">Swiss Medical · adherente</td>
+                    <td><span class="badge">Sin voucher</span></td>
+                    <td class="amount">$ 36.000</td>
+                    <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">17/11</td>
+                    <td>Estela Quiroga</td>
+                    <td style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                    <td style="color: var(--ink-muted)">Particular</td>
+                    <td><span class="badge badge-warn">Vence hoy</span></td>
+                    <td class="amount">$ 52.000</td>
+                    <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">16/11</td>
+                    <td>Julián Arriaga</td>
+                    <td style="color: var(--ink-muted)">Lic. Peralta</td>
+                    <td style="color: var(--ink-muted)">IOMA · titular</td>
+                    <td><span class="badge">Sin voucher</span></td>
+                    <td class="amount">$ 29.500</td>
+                    <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style="margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--ink-muted)">
+                Mostrando 4 de 7 · paginado real, no un tope silencioso
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="narrow">
+        <div class="narrow-caption">
+          <strong>Estrecho (≤ 640 px)</strong>
+          El rail se convierte en barra inferior con 4 destinos y una hoja "Más" para Tarifario,
+          Mutuales y Usuarios. La sección activa se mantiene visible; el badge de Facturación viaja
+          como punto en el ícono.
+        </div>
+
+        <div class="phone">
+          <div class="phone-top">
+            <button class="menu-btn" aria-label="Abrir menú">☰</button>
+            <strong>Facturación</strong>
+            <span class="badge badge-warn" style="margin-left: auto">Trial · 3 días</span>
+          </div>
+          <div class="phone-body">
+            <div class="phone-card">
+              <strong>Lucía Bermúdez</strong>
+              <small>18/11 · OSDE 210 · $ 48.000</small>
+            </div>
+            <div class="phone-card">
+              <strong>Ramiro Ocampo</strong>
+              <small>18/11 · Swiss Medical · $ 36.000</small>
+            </div>
+            <div class="phone-card">
+              <strong>Estela Quiroga</strong>
+              <small>17/11 · Particular · vence hoy</small>
+            </div>
+          </div>
+          <nav class="tabs" aria-label="Secciones">
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z" /></svg>
+              Inicio
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1" /><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" /></svg>
+              Agenda
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" /></svg>
+              Pacientes
+            </a>
+            <a href="#" aria-current="page">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12M5 10h3" /></svg>
+              Facturar
+            </a>
+          </nav>
+        </div>
+
+        <div class="notes">
+          <strong>Lo que este shell resuelve del diagnóstico</strong>
+          <ul>
+            <li>Mata los 5 botones <code>← Volver al consultorio</code>: la navegación es una sola y vive en el layout.</li>
+            <li>El trial deja de ser un banner inyectado globalmente: es estado del consultorio, en un solo lugar.</li>
+            <li>El badge <code>7</code> convierte "hay trabajo pendiente" en información visible sin abrir Facturación.</li>
+            <li>Foco visible con <code>:focus-visible</code> en todo control, incluido el rail.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -151,7 +151,7 @@ function IssuedLinkPanel({ email, url }: { email: string; url: string }) {
           aria-label="Enlace de invitación"
           value={url}
           onFocus={(event) => event.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs outline-none"
+          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs"
         />
         <button
           type="button"

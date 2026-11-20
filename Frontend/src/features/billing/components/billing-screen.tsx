@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 
@@ -11,6 +10,7 @@ import {
   startOfDay,
   startOfNextDay,
   VOUCHER_PAGE_SIZE,
+  type BillingFilters,
   type Voucher,
   type VoucherStatus,
 } from "@/entities/billing/model";
@@ -20,10 +20,25 @@ import { VoucherTable } from "@/features/billing/components/voucher-table";
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
+import { Button } from "@/shared/ui/button";
+import { useUnbilledCount, unbilledLabel } from "@/features/billing/use-unbilled";
 import { Field, inputClass } from "@/shared/ui/field";
 import { Notice } from "@/shared/ui/notice";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
+import { LoadingState } from "@/shared/ui/states";
 
 type StatusFilter = "" | VoucherStatus;
+
+/**
+ * The saved views of the contextual panel. They carry no counts on purpose: the API exposes
+ * sessions per patient but no unbilled aggregate, and pinning a number in the UI would be
+ * inventing data. A real counter needs the endpoint tracked as T10.
+ */
+const VIEWS: readonly { status: StatusFilter; label: string }[] = [
+  { status: "", label: "Todos" },
+  { status: "issued", label: "Emitidos" },
+  { status: "voided", label: "Anulados" },
+];
 
 /**
  * Internal vouchers of the practice (T42): the history, the issue form, the detail and the
@@ -42,9 +57,15 @@ export function BillingScreen() {
   const searchParams = useSearchParams();
   const selectedID = searchParams.get("voucher");
 
-  const [status, setStatus] = useState<StatusFilter>("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // The filters live in the URL, not in component state: a filtered view has to survive a
+  // reload and be shareable, and the open voucher rides along with them.
+  const statusParam = searchParams.get("estado");
+  const status: StatusFilter =
+    statusParam === "issued" || statusParam === "voided" ? statusParam : "";
+  const from = searchParams.get("desde") ?? "";
+  const to = searchParams.get("hasta") ?? "";
+  const filters: BillingFilters = { status, from, to };
+  const unbilled = unbilledLabel(useUnbilledCount(true));
   const [vouchers, setVouchers] = useState<Voucher[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -153,8 +174,12 @@ export function BillingScreen() {
     }
   }
 
+  function applyFilters(next: BillingFilters) {
+    router.replace(billingUrl(selectedID, next));
+  }
+
   function openVoucher(id: string) {
-    router.replace(billingUrl(id));
+    router.replace(billingUrl(id, filters));
   }
 
   function handleIssued(voucher: Voucher) {
@@ -170,14 +195,83 @@ export function BillingScreen() {
     setRefreshKey((key) => key + 1);
   }
 
+  // The screen owns the frame because the panel's content is the screen's own state.
+  const panel = (
+    <aside
+      aria-label="Vistas de facturación"
+      className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex"
+    >
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Sin facturar</h2>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          {unbilled === ""
+            ? "Ninguna sesión atendida quedó sin comprobante en los últimos 30 días."
+            : `${unbilled} ${unbilled === "1" ? "sesión atendida" : "sesiones atendidas"} sin comprobante en los últimos 30 días.`}
+        </p>
+      </div>
+
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Vistas</h2>
+        <p className="mt-0.5 text-xs text-ink-muted">Los filtros viven en la URL</p>
+      </div>
+
+      <ul className="grid gap-0.5 p-2">
+        {VIEWS.map((view) => {
+          const active = status === view.status;
+          return (
+            <li key={view.status || "todos"}>
+              <button
+                type="button"
+                aria-current={active ? "true" : undefined}
+                onClick={() => applyFilters({ ...filters, status: view.status })}
+                className={`w-full rounded-control border-l-2 px-3 py-1.5 text-left text-sm ${
+                  active
+                    ? "border-brand bg-brand/10 font-semibold text-brand"
+                    : "border-transparent text-ink hover:bg-surface-muted"
+                }`}
+              >
+                {view.label}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="mt-auto grid gap-3 border-t border-border p-3">
+        <Field label="Desde" htmlFor={`${prefix}-panel-from`}>
+          <input
+            id={`${prefix}-panel-from`}
+            type="date"
+            value={from}
+            onChange={(event) => applyFilters({ ...filters, from: event.target.value })}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="Hasta (inclusive)" htmlFor={`${prefix}-panel-to`}>
+          <input
+            id={`${prefix}-panel-to`}
+            type="date"
+            value={to}
+            onChange={(event) => applyFilters({ ...filters, to: event.target.value })}
+            className={inputClass}
+          />
+        </Field>
+        <Button
+          size="sm"
+          onClick={() => applyFilters({ status: "", from: "", to: "" })}
+          disabled={!filtered}
+        >
+          Limpiar filtros
+        </Button>
+      </div>
+    </aside>
+  );
+
   return (
-    <>
+    <ScreenFrame panel={panel}>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Facturación</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Facturación</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Comprobantes internos del consultorio: emitidos, anulados y su historial.
           </p>
@@ -197,38 +291,48 @@ export function BillingScreen() {
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold">Historial</h2>
 
-        <div className="grid gap-4 rounded-[var(--radius-panel)] border border-border bg-surface p-4 sm:grid-cols-3">
-          <Field label="Estado" htmlFor={`${prefix}-status`}>
-            <select
-              id={`${prefix}-status`}
-              value={status}
-              onChange={(event) => setStatus(event.target.value as StatusFilter)}
-              className={inputClass}
+        {/* Under md the panel is hidden, so the same views stay reachable here. */}
+        <div className="flex flex-wrap gap-2 md:hidden">
+          {VIEWS.map((view) => (
+            <button
+              key={view.status || "todos"}
+              type="button"
+              aria-current={status === view.status ? "true" : undefined}
+              onClick={() => applyFilters({ ...filters, status: view.status })}
+              className={`rounded-full border px-3 py-1 text-xs ${
+                status === view.status
+                  ? "border-brand bg-brand/10 font-semibold text-brand"
+                  : "border-border bg-surface text-ink-muted"
+              }`}
             >
-              <option value="">Todos</option>
-              <option value="issued">Emitidos</option>
-              <option value="voided">Anulados</option>
-            </select>
-          </Field>
-          <Field label="Desde" htmlFor={`${prefix}-from`}>
-            <input
-              id={`${prefix}-from`}
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Hasta (inclusive)" htmlFor={`${prefix}-to`}>
-            <input
-              id={`${prefix}-to`}
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className={inputClass}
-            />
-          </Field>
+              {view.label}
+            </button>
+          ))}
         </div>
+
+        <details className="rounded-control border border-border bg-surface p-3 md:hidden">
+          <summary className="cursor-pointer text-sm font-medium">Rango de fechas</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Desde" htmlFor={`${prefix}-mobile-from`}>
+              <input
+                id={`${prefix}-mobile-from`}
+                type="date"
+                value={from}
+                onChange={(event) => applyFilters({ ...filters, from: event.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Hasta (inclusive)" htmlFor={`${prefix}-mobile-to`}>
+              <input
+                id={`${prefix}-mobile-to`}
+                type="date"
+                value={to}
+                onChange={(event) => applyFilters({ ...filters, to: event.target.value })}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </details>
 
         {rangeInvalid ? (
           <Notice tone="warning" title="El rango de fechas está al revés">
@@ -241,26 +345,20 @@ export function BillingScreen() {
               : `La API respondió ${failedStatus}.`}
           </Notice>
         ) : vouchers === null ? (
-          <p role="status" className="text-sm text-ink-muted">
-            Cargando comprobantes…
-          </p>
+          <LoadingState label="Cargando comprobantes…" />
         ) : (
           <>
             <VoucherTable
               vouchers={vouchers}
               selectedID={selectedID}
               filtered={filtered}
+              filters={filters}
             />
             {hasMore ? (
               <div>
-                <button
-                  type="button"
-                  onClick={() => void loadMore()}
-                  disabled={loadingMore}
-                  className="rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-60"
-                >
+                <Button size="sm" onClick={() => void loadMore()} busy={loadingMore}>
                   {loadingMore ? "Cargando…" : "Cargar más"}
-                </button>
+                </Button>
               </div>
             ) : null}
           </>
@@ -284,19 +382,17 @@ export function BillingScreen() {
                 : `La API respondió ${openedStatus}.`}
           </Notice>
         ) : opened === null ? (
-          <p role="status" className="text-sm text-ink-muted">
-            Cargando el comprobante…
-          </p>
+          <LoadingState label="Cargando el comprobante…" rows={2} />
         ) : (
           <VoucherDetail
             key={`${opened.id}:${opened.status}`}
             voucher={opened}
             canVoid={mayVoid}
             onVoided={handleVoided}
-            onClose={() => router.replace("/facturacion")}
+            onClose={() => router.replace(billingUrl(null, filters))}
           />
         )
       ) : null}
-    </>
+    </ScreenFrame>
   );
 }

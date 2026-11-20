@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -82,6 +83,47 @@ func (r *fakeBillingRepository) Appointment(ctx context.Context, appointmentID s
 }
 
 // PatientAppointments answers the newest sessions first, the way the adapter orders them.
+// UnbilledSessions mirrors the query: attended sessions inside the window that no issued
+// voucher bills, oldest first. The fake holds no patient names, so the row carries the id only.
+func (r *fakeBillingRepository) UnbilledSessions(
+	ctx context.Context,
+	from, to time.Time,
+	limit int32,
+) ([]billing.UnbilledSession, error) {
+	tenantID, ok := scopedTenant(ctx)
+	if !ok {
+		return nil, billing.ErrTenantScopeMissing
+	}
+
+	var matches []billing.UnbilledSession
+	for _, session := range r.sessions[tenantID] {
+		if session.Status != "attended" {
+			continue
+		}
+		if session.StartsAt.Before(from) || !session.StartsAt.Before(to) {
+			continue
+		}
+		if r.billedBy(tenantID, session.ID) != "" {
+			continue
+		}
+		matches = append(matches, billing.UnbilledSession{
+			ID:               session.ID,
+			PatientID:        session.PatientID,
+			ProfessionalID:   session.ProfessionalID,
+			ProfessionalName: session.ProfessionalName,
+			Modality:         session.Modality,
+			StartsAt:         session.StartsAt,
+			Status:           session.Status,
+		})
+	}
+
+	sort.Slice(matches, func(i, j int) bool { return matches[i].StartsAt.Before(matches[j].StartsAt) })
+	if int32(len(matches)) > limit {
+		matches = matches[:limit]
+	}
+	return matches, nil
+}
+
 func (r *fakeBillingRepository) PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error) {
 	tenantID, ok := scopedTenant(ctx)
 	if !ok {

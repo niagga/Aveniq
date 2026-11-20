@@ -11,6 +11,7 @@ import {
   type ClinicalRecord,
 } from "@/entities/clinical/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
+import { Field as BaseField, inputClass } from "@/shared/ui/field";
 
 /**
  * Historia clínica of one patient: the treatment frame and the encounters.
@@ -207,7 +208,7 @@ function RecordForm({
           onChange={(event) => setChiefComplaint(event.target.value)}
           maxLength={4000}
           rows={3}
-          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+          className={inputClass}
         />
       </Field>
       <Field id={`${prefix}-background`} label="Antecedentes">
@@ -217,7 +218,7 @@ function RecordForm({
           onChange={(event) => setBackground(event.target.value)}
           maxLength={8000}
           rows={4}
-          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+          className={inputClass}
         />
       </Field>
       <Field id={`${prefix}-objectives`} label="Objetivos">
@@ -227,7 +228,7 @@ function RecordForm({
           onChange={(event) => setObjectives(event.target.value)}
           maxLength={4000}
           rows={3}
-          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+          className={inputClass}
         />
       </Field>
 
@@ -361,7 +362,7 @@ function NotesSection({
             max={toDateTimeLocalValue(new Date())}
             onChange={(event) => setEncounteredAt(event.target.value)}
             required
-            className="mt-1 rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </Field>
         <Field id={`${prefix}-content`} label="Nota">
@@ -372,7 +373,7 @@ function NotesSection({
             maxLength={20000}
             rows={5}
             required
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </Field>
         <button
@@ -425,12 +426,10 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
+  // Delegates to the shared field: one label style, and one place to add an inline error.
   return (
-    <div>
-      <label htmlFor={id} className="block text-xs font-medium text-ink-muted">
-        {label}
-      </label>
+    <BaseField label={label} htmlFor={id}>
       {children}
-    </div>
+    </BaseField>
   );
 }

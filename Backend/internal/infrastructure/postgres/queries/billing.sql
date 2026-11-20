@@ -145,3 +145,34 @@ FROM users
 WHERE role_code = 'professional'
   AND is_active
 ORDER BY lower(full_name), id;
+
+-- name: ListUnbilledSessions :many
+-- Attended sessions of the practice with no issued voucher: the worklist the billing screen
+-- exists for. A cancelled or still-scheduled session is not owed a receipt, and a voided
+-- voucher bills nothing, so its session belongs back in this list. Ordered oldest first,
+-- because the oldest is the one most likely to be forgotten.
+SELECT a.id,
+       a.patient_id,
+       p.full_name AS patient_name,
+       a.professional_user_id,
+       u.full_name AS professional_name,
+       a.modality,
+       a.starts_at,
+       a.status
+FROM appointments a
+JOIN users u
+  ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
+JOIN patients p
+  ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+WHERE a.status = 'attended'
+  AND a.starts_at >= sqlc.arg('from_at')
+  AND a.starts_at < sqlc.arg('to_at')
+  AND NOT EXISTS (
+    SELECT 1
+      FROM vouchers v
+     WHERE v.tenant_id = a.tenant_id
+       AND v.appointment_id = a.id
+       AND v.status = 'issued'
+  )
+ORDER BY a.starts_at ASC, a.id
+LIMIT sqlc.arg('lim');

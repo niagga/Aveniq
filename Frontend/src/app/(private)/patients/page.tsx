@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Patient } from "@/entities/patient/model";
@@ -12,24 +11,25 @@ import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { RoleGate } from "@/shared/auth/role-gate";
-import { SessionGate } from "@/shared/auth/session-gate";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
+import { Button } from "@/shared/ui/button";
+import { inputClass } from "@/shared/ui/field";
+import { LoadingState } from "@/shared/ui/states";
 
 /**
  * Patient roster.
  *
- * A Client Component inside SessionGate, like the dashboard: the access token lives
+ * A Client Component, like the dashboard: the access token lives
  * in browser memory, so the server has no credential to fetch with on the user's
- * behalf (T19).
+ * behalf (T19). The auth gate and the shell come from the private layout.
  */
 export default function PatientsPage() {
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-6 py-12">
-      <SessionGate>
-        <RoleGate allowed={canSeePatients}>
-          <PatientsScreen />
-        </RoleGate>
-      </SessionGate>
-    </main>
+    <ScreenFrame>
+      <RoleGate allowed={canSeePatients}>
+        <PatientsScreen />
+      </RoleGate>
+    </ScreenFrame>
   );
 }
 
@@ -37,7 +37,16 @@ function PatientsScreen() {
   const [patients, setPatients] = useState<Patient[] | null>(null);
   const [failedStatus, setFailedStatus] = useState<number | null>(null);
 
+  const [draftSearch, setDraftSearch] = useState("");
   const [search, setSearch] = useState("");
+
+  // One request per pause, not one per keystroke. The list used to reload on every
+  // character, which is what the redundant submit button was working around.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(draftSearch.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [draftSearch]);
+
   const [activeOnly, setActiveOnly] = useState(true);
 
   const [selected, setSelected] = useState<Patient | null>(null);
@@ -92,26 +101,18 @@ function PatientsScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          {" · "}
-          <Link href="/agenda" className="text-xs text-ink-muted underline">
-            Agenda
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pacientes</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Pacientes</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Ficha del paciente con sus datos fiscales y la historia clínica.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => setMode((current) => (current === "create" ? "idle" : "create"))}
           disabled={writesLocked}
-          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
         >
           {mode === "create" ? "Cerrar formulario" : "Nuevo paciente"}
-        </button>
+        </Button>
       </header>
 
       {mode === "create" && !writesLocked ? (
@@ -134,7 +135,8 @@ function PatientsScreen() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void load();
+          // Enter applies the text at once instead of waiting for the debounce.
+          setSearch(draftSearch.trim());
         }}
         className="flex flex-wrap items-end gap-3"
       >
@@ -144,10 +146,10 @@ function PatientsScreen() {
           </label>
           <input
             id="patient-search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            value={draftSearch}
+            onChange={(event) => setDraftSearch(event.target.value)}
             placeholder="Nombre o documento exacto"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
 
@@ -160,20 +162,13 @@ function PatientsScreen() {
           Incluir dados de baja
         </label>
 
-        <button
-          type="submit"
-          className="rounded-md border border-border px-3 py-2 text-sm font-medium"
-        >
-          Buscar
-        </button>
+        <Button type="submit">Buscar</Button>
       </form>
 
       {failedStatus !== null ? (
         <PatientLoadError status={failedStatus} />
       ) : patients === null ? (
-        <p role="status" className="text-sm text-ink-muted">
-          Cargando pacientes…
-        </p>
+        <LoadingState label="Cargando pacientes…" />
       ) : (
         <PatientTable
           patients={patients}

@@ -228,8 +228,13 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		}
 	}
 
-	if draft.BirthDate != nil && draft.BirthDate.After(now) {
-		return Patient{}, &ValidationError{Field: "birth_date", Message: "must not be in the future"}
+	// A birth date is a date of birth, not a date of appointment: today describes a person zero
+	// days old, which this practice does not register. The bound is the start of today in UTC,
+	// which is how a date-only value arrives from the API. The screen applies the same rule, so
+	// the two cannot disagree about a patient either one would accept.
+	today := now.UTC().Truncate(24 * time.Hour)
+	if draft.BirthDate != nil && !draft.BirthDate.UTC().Before(today) {
+		return Patient{}, &ValidationError{Field: "birth_date", Message: "must be before today"}
 	}
 
 	if !ValidCurrency(draft.BillingCurrency) {

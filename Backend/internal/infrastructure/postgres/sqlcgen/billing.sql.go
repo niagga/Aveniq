@@ -390,6 +390,84 @@ func (q *Queries) ListPatientAppointments(ctx context.Context, arg ListPatientAp
 	return items, nil
 }
 
+const listUnbilledSessions = `-- name: ListUnbilledSessions :many
+SELECT a.id,
+       a.patient_id,
+       p.full_name AS patient_name,
+       a.professional_user_id,
+       u.full_name AS professional_name,
+       a.modality,
+       a.starts_at,
+       a.status
+FROM appointments a
+JOIN users u
+  ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
+JOIN patients p
+  ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+WHERE a.status = 'attended'
+  AND a.starts_at >= $1
+  AND a.starts_at < $2
+  AND NOT EXISTS (
+    SELECT 1
+      FROM vouchers v
+     WHERE v.tenant_id = a.tenant_id
+       AND v.appointment_id = a.id
+       AND v.status = 'issued'
+  )
+ORDER BY a.starts_at ASC, a.id
+LIMIT $3
+`
+
+type ListUnbilledSessionsParams struct {
+	FromAt time.Time
+	ToAt   time.Time
+	Lim    int32
+}
+
+type ListUnbilledSessionsRow struct {
+	ID                 pgtype.UUID
+	PatientID          pgtype.UUID
+	PatientName        string
+	ProfessionalUserID pgtype.UUID
+	ProfessionalName   string
+	Modality           string
+	StartsAt           time.Time
+	Status             string
+}
+
+// Attended sessions of the practice with no issued voucher: the worklist the billing screen
+// exists for. A cancelled or still-scheduled session is not owed a receipt, and a voided
+// voucher bills nothing, so its session belongs back in this list. Ordered oldest first,
+// because the oldest is the one most likely to be forgotten.
+func (q *Queries) ListUnbilledSessions(ctx context.Context, arg ListUnbilledSessionsParams) ([]ListUnbilledSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listUnbilledSessions, arg.FromAt, arg.ToAt, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnbilledSessionsRow{}
+	for rows.Next() {
+		var i ListUnbilledSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.PatientName,
+			&i.ProfessionalUserID,
+			&i.ProfessionalName,
+			&i.Modality,
+			&i.StartsAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVouchers = `-- name: ListVouchers :many
 SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
 FROM vouchers

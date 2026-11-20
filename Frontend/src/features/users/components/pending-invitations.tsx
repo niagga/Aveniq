@@ -5,6 +5,7 @@ import { useState } from "react";
 import { formatDate, roleLabel, type Invitation } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -27,14 +28,14 @@ export function PendingInvitations({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
           <tr>
-            <th className="px-4 py-3 font-medium">Email</th>
-            <th className="px-4 py-3 font-medium">Rol</th>
-            <th className="px-4 py-3 font-medium">Vence</th>
-            <th className="px-4 py-3 font-medium">Acciones</th>
+            <th scope="col" className="px-4 py-3 font-medium">Email</th>
+            <th scope="col" className="px-4 py-3 font-medium">Rol</th>
+            <th scope="col" className="px-4 py-3 font-medium">Vence</th>
+            <th scope="col" className="px-4 py-3 font-medium">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -56,6 +57,7 @@ function InvitationRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingRevoke, setConfirmingRevoke] = useState(false);
   const writesLocked = useWritesLocked();
 
   async function revoke() {
@@ -85,12 +87,25 @@ function InvitationRow({
       <td className="px-4 py-3">
         <button
           type="button"
-          onClick={() => void revoke()}
+          onClick={() => setConfirmingRevoke(true)}
           disabled={busy || writesLocked}
-          className="rounded-md border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
+          className="rounded-control border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
         >
           {busy ? "Retirando…" : "Retirar invitación"}
         </button>
+        <ConfirmDialog
+          open={confirmingRevoke}
+          title={`¿Retirar la invitación de ${invitation.email}?`}
+          description="El enlace que se envió deja de funcionar y la persona no puede crear su cuenta con él. Se puede invitar de nuevo."
+          confirmLabel="Retirar invitación"
+          tone="danger"
+          busy={busy}
+          onCancel={() => setConfirmingRevoke(false)}
+          onConfirm={() => {
+            setConfirmingRevoke(false);
+            void revoke();
+          }}
+        />
         {error ? (
           <p role="alert" className="mt-2 text-xs text-danger">
             {error}

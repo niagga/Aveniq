@@ -181,6 +181,7 @@ func run() error {
 		ListVouchers:           billingapp.NewListUseCase(billingRepository, transactor),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(billingRepository, transactor),
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(billingRepository, tariffRepository, tenantRepository, transactor),
+		UnbilledSessions:       billingapp.NewUnbilledUseCase(billingRepository, transactor),
 		Professionals:          billingapp.NewProfessionalsUseCase(billingRepository, transactor),
 		SettlementInsurers:     billingapp.NewSettlementInsurersUseCase(settlementRepository, transactor),
 		PreviewSettlement:      billingapp.NewSettlementPreviewUseCase(settlementRepository, tariffRepository, tenantRepository, transactor),

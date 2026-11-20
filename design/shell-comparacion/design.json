@@ -1,0 +1,27 @@
+{
+  "title": "Shell de navegación — misma pantalla, tres estructuras (claro/oscuro, responsive)",
+  "brief": "Pass sistémico de UI. Las tres direcciones muestran la MISMA pantalla (Facturación del consultorio) con idéntico contenido, filas y estados; sólo cambia la estructura del shell. Cada tablero trae toggle de tema claro/oscuro y toggle de ancho 1360/768/390 resuelto con container queries. Modo oscuro propuesto, no existe en globals.css.",
+  "artboards": [
+    {
+      "file": "01-a-rail-lateral.html",
+      "title": "A — Rail lateral fijo (248 px)",
+      "tradeoff": "Orientación máxima y badge de trabajo pendiente siempre visible; cuesta 248 px de ancho útil en escritorio, lo que la tabla ancha y la grilla semanal pagan en scroll.",
+      "width": 1440,
+      "height": 1090
+    },
+    {
+      "file": "02-b-topbar-tabs.html",
+      "title": "B — Topbar con tabs (0 px de chrome lateral)",
+      "tradeoff": "Todo el ancho para el contenido y barra contextual propia por pantalla; siete secciones en una fila que desborda al sumar Reportes o el dashboard de T59.",
+      "width": 1440,
+      "height": 1090
+    },
+    {
+      "file": "03-c-rail-dos-niveles.html",
+      "title": "C — Rail de iconos + panel contextual (64 + 300 px)",
+      "tradeoff": "Segundo nivel de navegación propio de la pantalla (vistas guardadas, listas, fichas); 364 px de chrome antes del contenido y tres columnas que mantener.",
+      "width": 1440,
+      "height": 1090
+    }
+  ]
+}

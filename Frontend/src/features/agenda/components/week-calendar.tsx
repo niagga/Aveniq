@@ -21,11 +21,14 @@ import {
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
+import { loadStaff, type StaffMember } from "@/features/patients/staff";
+import { LoadingState } from "@/shared/ui/states";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
 
 /**
- * Weekly agenda of one professional.
+ * Weekly agenda of one professional, or of every professional at once.
  *
  * The window is Monday–Sunday in the practice timezone. Appointments are stored
  * as UTC instants; this screen is where they become civil times again.
@@ -33,14 +36,30 @@ const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
 export function WeekCalendar({ timeZone }: { timeZone: string }) {
   const zone = timeZone || DEFAULT_ZONE;
   const viewer = getSessionUser();
-  const professionalId = viewer?.id ?? "";
+  const viewerId = viewer?.id ?? "";
   const role = viewer?.role;
+  // A professional opens their own week. The roles that run the practice open every
+  // professional's, because an empty calendar of a person with no agenda is not their day.
+  const seesEveryone = role !== "professional";
 
   const [anchor, setAnchor] = useState(() => new Date());
+  const [professionalFilter, setProfessionalFilter] = useState<string>(() =>
+    seesEveryone ? "" : viewerId,
+  );
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Appointment | null>(null);
+
+  const professionals = useMemo(
+    () => staff.filter((member) => member.role === "professional"),
+    [staff],
+  );
+
+  // Booking always needs one concrete professional; the filter above may be "todos".
+  const bookingProfessional =
+    professionalFilter !== "" ? professionalFilter : professionals[0]?.id ?? viewerId;
 
   const weekStart = useMemo(() => startOfWeek(anchor, zone), [anchor, zone]);
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
@@ -48,12 +67,16 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
 
   const load = useCallback(async () => {
     setError(null);
+    // Back to loading instead of leaving the previous week on screen: a stale grid under a
+    // new date range claims the user is looking at this week when they are not.
+    setAppointments(null);
     const { data, error, response } = await browserApi.GET("/api/v1/appointments", {
       params: {
         query: {
           from: weekStart.toISOString(),
           to: weekEnd.toISOString(),
-          professionalId: professionalId || undefined,
+          // Omitted means every professional, which is what the practice-wide view shows.
+          professionalId: professionalFilter || undefined,
         },
       },
     });
@@ -62,7 +85,7 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
       return;
     }
     setAppointments(data?.items ?? []);
-  }, [weekStart, weekEnd, professionalId]);
+  }, [weekStart, weekEnd, professionalFilter]);
 
   useEffect(() => {
     void load();
@@ -76,6 +99,13 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
       setPatients(data?.items ?? []);
     })();
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const list = await loadStaff(role);
+      setStaff(list ?? []);
+    })();
+  }, [role]);
 
   const byDay = useMemo(() => {
     const buckets: Appointment[][] = Array.from({ length: 7 }, () => []);
@@ -98,11 +128,16 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
     return patients.find((patient) => patient.id === id)?.fullName ?? "Paciente";
   }
 
+  function staffName(id: string | undefined): string {
+    if (!id) return "";
+    return staff.find((member) => member.id === id)?.fullName ?? "";
+  }
+
   // A professional books only with the patients it treats (T38). The roster it reads can
   // also carry granted patients, which it may read but not book, so they are left out here.
   const bookable = useMemo(
-    () => patients.filter((patient) => canBookWith(role, patient, professionalId)),
-    [patients, role, professionalId],
+    () => patients.filter((patient) => canBookWith(role, patient, bookingProfessional)),
+    [patients, role, bookingProfessional],
   );
   const bookingNotice =
     role === "professional" && bookable.length === 0
@@ -116,25 +151,46 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
           <button
             type="button"
             onClick={() => setAnchor(addDays(weekStart, -7))}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
           >
             Semana anterior
           </button>
           <button
             type="button"
             onClick={() => setAnchor(new Date())}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
           >
             Hoy
           </button>
           <button
             type="button"
             onClick={() => setAnchor(addDays(weekStart, 7))}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
           >
             Semana siguiente
           </button>
         </div>
+
+        {seesEveryone ? (
+          <label className="flex items-center gap-2 text-xs text-ink-muted">
+            Profesional
+            <select
+              value={professionalFilter}
+              onChange={(event) => {
+                setSelected(null);
+                setProfessionalFilter(event.target.value);
+              }}
+              className="rounded-control border border-border-strong bg-surface px-2 py-1.5 text-sm text-ink"
+            >
+              <option value="">Todos</option>
+              {professionals.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <p className="text-sm text-ink-muted">
           {formatDayHeading(weekStart, zone)} — {formatDayHeading(addDays(weekStart, 6), zone)}
         </p>
@@ -147,7 +203,7 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
       ) : null}
 
       <BookingForms
-        professionalId={professionalId}
+        professionalId={bookingProfessional}
         patients={bookable}
         notice={bookingNotice}
         zone={zone}
@@ -155,7 +211,10 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
         onError={setError}
       />
 
-      <div className="grid gap-3 md:grid-cols-7">
+      {error !== null ? null : appointments === null ? (
+        <LoadingState label="Cargando la semana…" rows={7} />
+      ) : (
+        <div className="grid gap-3 md:grid-cols-7">
         {days.map((day, index) => (
           <section key={day.toISOString()} className="min-h-48 rounded-[var(--radius-panel)] border border-border bg-surface p-3">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -182,6 +241,11 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
                         {formatSlotTime(slot.startsAt, zone)}–{formatSlotTime(slot.endsAt, zone)}
                       </span>
                       <span className="block">{patientName(slot.patientId)}</span>
+                      {professionalFilter === "" ? (
+                        <span className="block text-ink-muted">
+                          {staffName(slot.professionalUserId)}
+                        </span>
+                      ) : null}
                       <span className="block text-ink-muted">{modalityLabel(slot.modality)}</span>
                     </button>
                   </li>
@@ -190,7 +254,8 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
             </ul>
           </section>
         ))}
-      </div>
+        </div>
+      )}
 
       {selected ? (
         <AppointmentActions
@@ -389,6 +454,7 @@ function AppointmentActions({
   const [busy, setBusy] = useState(false);
   const scheduled = appointment.status === "scheduled";
   const writesLocked = useWritesLocked();
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   async function transition(path: "attend" | "cancel") {
     onError(null);
@@ -441,11 +507,25 @@ function AppointmentActions({
           <button
             type="button"
             disabled={busy || writesLocked}
-            onClick={() => void transition("cancel")}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+            onClick={() => setConfirmingCancel(true)}
+            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
           >
             Cancelar turno
           </button>
+          <ConfirmDialog
+            open={confirmingCancel}
+            title={`¿Cancelar el turno de ${patientName}?`}
+            description="El horario queda libre y el turno pasa a cancelado. No se borra: sigue en la semana, tachado, para que el hueco tenga explicación."
+            confirmLabel="Cancelar turno"
+            cancelLabel="Volver"
+            tone="danger"
+            busy={busy}
+            onCancel={() => setConfirmingCancel(false)}
+            onConfirm={() => {
+              setConfirmingCancel(false);
+              void transition("cancel");
+            }}
+          />
         </div>
       ) : null}
     </aside>

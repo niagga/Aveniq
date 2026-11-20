@@ -370,6 +370,7 @@ func newHarness(t *testing.T) *harness {
 		ListVouchers:           billingapp.NewListUseCase(vouchers, scope),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(vouchers, tariffs, tenants, scope),
+		UnbilledSessions:       billingapp.NewUnbilledUseCase(vouchers, scope),
 		Professionals:          billingapp.NewProfessionalsUseCase(vouchers, scope),
 		SettlementInsurers:     billingapp.NewSettlementInsurersUseCase(settlements, scope),
 		PreviewSettlement:      billingapp.NewSettlementPreviewUseCase(settlements, tariffs, tenants, scope),

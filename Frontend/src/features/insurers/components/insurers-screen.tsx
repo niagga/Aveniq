@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import type { Insurer } from "@/entities/insurer/model";
@@ -8,6 +7,7 @@ import { InsurerForm } from "@/features/insurers/components/insurer-form";
 import { useInsurers } from "@/features/insurers/use-insurers";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -26,6 +26,7 @@ export function InsurersScreen() {
   const [editing, setEditing] = useState<Insurer | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<string | null>(null);
+  const [confirmingDowngrade, setConfirmingDowngrade] = useState<Insurer | null>(null);
 
   function startEdit(insurer: Insurer) {
     setEditing(insurer);
@@ -74,10 +75,7 @@ export function InsurersScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Mutuales</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mutuales</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Las mutuales que atiende el consultorio. Cada paciente con cobertura de mutual
             se asocia a una de ellas.
@@ -121,7 +119,7 @@ export function InsurersScreen() {
           eligen de esta lista.
         </Notice>
       ) : (
-        <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+        <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
           {actionError ? (
             <p role="alert" className="border-b border-border px-4 py-2 text-sm text-danger">
               {actionError}
@@ -130,10 +128,10 @@ export function InsurersScreen() {
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
               <tr>
-                <th className="px-4 py-3 font-medium">Mutual</th>
-                <th className="px-4 py-3 font-medium">CUIT</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">
+                <th scope="col" className="px-4 py-3 font-medium">Mutual</th>
+                <th scope="col" className="px-4 py-3 font-medium">CUIT</th>
+                <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                <th scope="col" className="px-4 py-3 font-medium">
                   <span className="sr-only">Acciones</span>
                 </th>
               </tr>
@@ -166,9 +164,12 @@ export function InsurersScreen() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void toggleActive(insurer)}
+                        onClick={() => {
+                          if (insurer.isActive) setConfirmingDowngrade(insurer);
+                          else void toggleActive(insurer);
+                        }}
                         disabled={busyID === insurer.id || writesLocked}
-                        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
+                        className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
                       >
                         {busyID === insurer.id
                           ? "Guardando…"
@@ -176,6 +177,20 @@ export function InsurersScreen() {
                             ? "Dar de baja"
                             : "Reactivar"}
                       </button>
+                      <ConfirmDialog
+                        open={confirmingDowngrade?.id === insurer.id}
+                        title={`¿Dar de baja ${insurer.name}?`}
+                        description="Deja de ofrecerse en las altas y en el tarifario. Los pacientes que ya la tienen siguen cubiertos, y se puede reactivar cuando haga falta."
+                        confirmLabel="Dar de baja"
+                        tone="danger"
+                        busy={busyID === insurer.id}
+                        onCancel={() => setConfirmingDowngrade(null)}
+                        onConfirm={() => {
+                          const target = confirmingDowngrade;
+                          setConfirmingDowngrade(null);
+                          if (target !== null) void toggleActive(target);
+                        }}
+                      />
                     </div>
                   </td>
                 </tr>

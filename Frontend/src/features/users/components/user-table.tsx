@@ -11,6 +11,7 @@ import {
 } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -40,15 +41,15 @@ export function UserTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
           <tr>
-            <th className="px-4 py-3 font-medium">Cuenta</th>
-            <th className="px-4 py-3 font-medium">Email</th>
-            <th className="px-4 py-3 font-medium">Rol</th>
-            <th className="px-4 py-3 font-medium">Estado</th>
-            <th className="px-4 py-3 font-medium">Acciones</th>
+            <th scope="col" className="px-4 py-3 font-medium">Cuenta</th>
+            <th scope="col" className="px-4 py-3 font-medium">Email</th>
+            <th scope="col" className="px-4 py-3 font-medium">Rol</th>
+            <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+            <th scope="col" className="px-4 py-3 font-medium">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -84,6 +85,7 @@ function UserRow({
   const [role, setRole] = useState<Role>(user.role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
   const writesLocked = useWritesLocked();
 
   const isSelf = user.id === viewerID;
@@ -152,7 +154,7 @@ function UserRow({
             disabled={lockReason !== null || busy}
             title={lockReason ?? undefined}
             onChange={(event) => setRole(event.target.value as Role)}
-            className="rounded-md border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-brand disabled:opacity-60"
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand disabled:opacity-60"
           >
             {ROLES.map((code) => (
               <option key={code} value={code} disabled={code === "owner" && viewerRole !== "owner"}>
@@ -186,13 +188,29 @@ function UserRow({
       <td className="px-4 py-3">
         <button
           type="button"
-          onClick={() => void toggleAccess()}
+          onClick={() => {
+            if (user.isActive) setConfirmingDeactivate(true);
+            else void toggleAccess();
+          }}
           disabled={lockReason !== null || busy}
           title={lockReason ?? undefined}
-          className="rounded-md border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
+          className="rounded-control border border-border px-2 py-1 text-xs font-medium disabled:opacity-60"
         >
           {user.isActive ? "Dar de baja" : "Reactivar"}
         </button>
+        <ConfirmDialog
+          open={confirmingDeactivate}
+          title={`¿Dar de baja a ${user.fullName}?`}
+          description="Deja de poder entrar al consultorio en el acto. La cuenta y su historial de trabajo se conservan: se puede reactivar cuando haga falta."
+          confirmLabel="Dar de baja"
+          tone="danger"
+          busy={busy}
+          onCancel={() => setConfirmingDeactivate(false)}
+          onConfirm={() => {
+            setConfirmingDeactivate(false);
+            void toggleAccess();
+          }}
+        />
         {error ? (
           <p role="alert" className="mt-2 text-xs text-danger">
             {error}

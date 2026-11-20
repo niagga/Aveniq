@@ -82,6 +82,14 @@ func TestNewPatientValidation(t *testing.T) {
 			when := now.Add(24 * time.Hour)
 			d.BirthDate = &when
 		}, "birth_date"},
+		"birth date is today": {func(d *patient.Draft) {
+			when := now.UTC().Truncate(24 * time.Hour)
+			d.BirthDate = &when
+		}, "birth_date"},
+		"birth date yesterday is accepted": {func(d *patient.Draft) {
+			when := now.UTC().Truncate(24 * time.Hour).Add(-24 * time.Hour)
+			d.BirthDate = &when
+		}, ""},
 		"billing currency missing": {func(d *patient.Draft) {
 			d.BillingCurrency = ""
 		}, "billing_currency"},

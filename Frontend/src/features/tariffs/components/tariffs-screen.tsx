@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { formatMoney } from "@/entities/billing/model";
@@ -16,6 +15,7 @@ import { useTariffs } from "@/features/tariffs/use-tariffs";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -35,6 +35,9 @@ export function TariffsScreen() {
   const [editing, setEditing] = useState<Tariff | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<string | null>(null);
+  // The removal used window.confirm: the one destructive action in the app that asked, with
+  // an idiom that cannot be styled, translated or tested like the rest.
+  const [confirming, setConfirming] = useState<Tariff | null>(null);
 
   function startEdit(tariff: Tariff) {
     setEditing(tariff);
@@ -56,11 +59,6 @@ export function TariffsScreen() {
   }
 
   async function remove(tariff: Tariff) {
-    const confirmed = window.confirm(
-      "¿Quitar este valor del tarifario? Los comprobantes ya emitidos conservan el importe con el que se emitieron.",
-    );
-    if (!confirmed) return;
-
     setActionError(null);
     setBusyID(tariff.id);
     try {
@@ -84,10 +82,7 @@ export function TariffsScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Tarifario</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Tarifario</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Cuánto vale una sesión por profesional, cobertura, modalidad y moneda, desde cada día de
             vigencia. Una mutual tiene dos partes: lo que paga la mutual y el copago del paciente.
@@ -146,14 +141,14 @@ export function TariffsScreen() {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Profesional</th>
-                  <th className="px-4 py-3 font-medium">Cobertura</th>
-                  <th className="px-4 py-3 font-medium">Modalidad</th>
-                  <th className="px-4 py-3 font-medium">Moneda</th>
-                  <th className="px-4 py-3 font-medium">Vigente desde</th>
-                  <th className="px-4 py-3 text-right font-medium">Paga la mutual</th>
-                  <th className="px-4 py-3 text-right font-medium">Paga el paciente</th>
-                  <th className="px-4 py-3 text-right font-medium">Total</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Profesional</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Cobertura</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Modalidad</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Moneda</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Vigente desde</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Paga la mutual</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Paga el paciente</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">
                     <span className="sr-only">Acciones</span>
                   </th>
@@ -191,12 +186,26 @@ export function TariffsScreen() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void remove(tariff)}
+                            onClick={() => setConfirming(tariff)}
                             disabled={busyID === tariff.id || writesLocked}
-                            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
+                            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
                           >
                             {busyID === tariff.id ? "Quitando…" : "Quitar"}
                           </button>
+                          <ConfirmDialog
+                            open={confirming?.id === tariff.id}
+                            title="¿Quitar este valor del tarifario?"
+                            description="Deja de ofrecerse en las altas nuevas. Los comprobantes ya emitidos conservan el importe con el que se emitieron."
+                            confirmLabel="Quitar del tarifario"
+                            tone="danger"
+                            busy={busyID === tariff.id}
+                            onCancel={() => setConfirming(null)}
+                            onConfirm={() => {
+                              const target = confirming;
+                              setConfirming(null);
+                              if (target !== null) void remove(target);
+                            }}
+                          />
                         </div>
                       ) : null}
                     </td>

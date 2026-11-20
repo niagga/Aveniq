@@ -331,6 +331,9 @@ type BillingRepository interface {
 	Appointment(ctx context.Context, appointmentID string) (billing.Appointment, error)
 	// PatientAppointments returns the newest sessions of one patient, bounded by limit.
 	PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error)
+	// UnbilledSessions lists the attended sessions in [from, to) that no issued voucher bills,
+	// oldest first. A voided voucher bills nothing, so its session is listed again.
+	UnbilledSessions(ctx context.Context, from, to time.Time, limit int32) ([]billing.UnbilledSession, error)
 	// Professional returns an active professional of the practice, or
 	// billing.ErrProfessionalNotVisible.
 	Professional(ctx context.Context, userID string) (billing.Professional, error)

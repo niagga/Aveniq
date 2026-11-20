@@ -26,9 +26,9 @@ import { useStaff } from "@/features/patients/staff";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
+import { inputClass as FIELD } from "@/shared/ui/field";
 
 const LABEL = "block text-xs font-medium text-ink-muted";
-const FIELD = "mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 type Amounts = { insurerMinor: number; patientMinor: number };
