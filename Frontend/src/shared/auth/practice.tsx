@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 import type { Tenant } from "@/entities/tenant/model";
 import { trialExpired } from "@/entities/tenant/trial";
-import { TrialExpiredBanner } from "@/features/tenants/components/trial-expired-banner";
 import { canReadPractice } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
@@ -53,11 +52,19 @@ export function PracticeProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ practice, expired }), [practice, expired]);
 
   return (
-    <PracticeContext.Provider value={value}>
-      {expired && practice ? <TrialExpiredBanner trialEndsAt={practice.trialEndsAt} /> : null}
-      {children}
-    </PracticeContext.Provider>
+    <PracticeContext.Provider value={value}>{children}</PracticeContext.Provider>
   );
+}
+
+/**
+ * The current practice, for the shell that shows it.
+ *
+ * The banner used to render here, above every screen and above the rail: it sat outside the
+ * shell's layout because the provider wraps it. The shell renders it now, inside the content
+ * column, where a notice about the practice belongs.
+ */
+export function usePractice(): PracticeState {
+  return useContext(PracticeContext);
 }
 
 /** Whether write controls must be disabled because the trial has ended. */

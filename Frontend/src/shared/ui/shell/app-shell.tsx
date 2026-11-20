@@ -15,6 +15,9 @@ import {
 import { canManageInsurers } from "@/entities/insurer/model";
 import { canReadTariffs } from "@/entities/tariff/model";
 import { getSessionUser } from "@/shared/auth/session";
+import { usePractice } from "@/shared/auth/practice";
+import { TrialExpiredBanner } from "@/features/tenants/components/trial-expired-banner";
+import { Notice } from "@/shared/ui/notice";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
 
 /**
@@ -87,6 +90,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const user = getSessionUser();
   const visible = SECTIONS.filter((section) => section.allow(user?.role));
+  const { practice, expired } = usePractice();
+
+  // The trial belongs to the practice, so the shell states it once instead of every screen
+  // guessing, and it no longer renders above the rail: it renders inside the content column.
+  const trialDaysLeft =
+    practice !== null && practice.status === "trial" && !expired
+      ? Math.max(
+          0,
+          Math.ceil((new Date(practice.trialEndsAt).getTime() - Date.now()) / 86_400_000),
+        )
+      : null;
+  const trialLabel =
+    expired
+      ? "La prueba del consultorio venció"
+      : trialDaysLeft === null
+        ? null
+        : `La prueba vence en ${trialDaysLeft} día${trialDaysLeft === 1 ? "" : "s"}`;
 
   return (
     <div className="flex min-h-full flex-col md:flex-row">
@@ -138,6 +158,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         </ul>
 
         <div className="ml-1 flex items-center gap-1 md:ml-0 md:mt-auto md:flex-col md:gap-2">
+          {trialLabel === null ? null : (
+            <span
+              title={trialLabel}
+              aria-label={trialLabel}
+              className={`grid h-8 w-8 place-items-center rounded-control border ${
+                expired
+                  ? "border-danger/40 bg-danger/5 text-danger"
+                  : "border-warning/30 bg-warning/5 text-warning"
+              }`}
+            >
+              <ClockIcon />
+            </span>
+          )}
           <ThemeToggle />
           <span
             title={user ? roleLabel(user.role) : "Sin sesión"}
@@ -149,7 +182,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </nav>
 
-      <div className="order-1 flex min-w-0 flex-1 flex-col md:order-2">{children}</div>
+      <div className="order-1 flex min-w-0 flex-1 flex-col md:order-2">
+        {expired && practice !== null ? (
+          <div className="px-6 pt-4 max-md:px-4">
+            <TrialExpiredBanner trialEndsAt={practice.trialEndsAt} />
+          </div>
+        ) : trialDaysLeft !== null && trialDaysLeft <= 7 ? (
+          <div className="px-6 pt-4 max-md:px-4">
+            <Notice tone="warning" title={trialLabel ?? ""}>
+              Pasada esa fecha el consultorio queda en sólo lectura.
+            </Notice>
+          </div>
+        ) : null}
+        {children}
+      </div>
     </div>
   );
 }
@@ -237,6 +283,15 @@ function UsersIcon() {
       <circle cx="6" cy="5.5" r="2.2" />
       <path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" />
       <path d="M11 5.5h3M12.5 4v3" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M8 4.8V8l2.2 1.4" />
     </svg>
   );
 }
