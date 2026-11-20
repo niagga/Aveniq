@@ -53,6 +53,9 @@ export function PatientDetail({
   // Deactivating is the destructive half: it asks first. Reactivating does not.
   const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
 
+  const tabID = (name: "admin" | "clinical") => `${patient.id}-tab-${name}`;
+  const panelID = (name: "admin" | "clinical") => `${patient.id}-panel-${name}`;
+
   // The viewer decides what this screen offers; the API decides what is allowed.
   const viewer = getSessionUser();
   const role = viewer?.role;
@@ -147,26 +150,58 @@ export function PatientDetail({
         </p>
       ) : null}
 
-      <div className="mt-4 flex gap-1 border-b border-border" role="tablist" aria-label="Ficha del paciente">
-        <TabButton active={tab === "admin"} onClick={() => setTab("admin")}>
+      <div
+        className="mt-4 flex gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Ficha del paciente"
+        onKeyDown={(event) => {
+          // The arrow keys belong to the tabs: declaring role=tab without them leaves a
+          // keyboard user tabbing through controls that announce a pattern they cannot use.
+          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+          if (!canOpenClinicalRecord(role)) return;
+          event.preventDefault();
+          const next = tab === "admin" ? "clinical" : "admin";
+          setTab(next);
+          document.getElementById(tabID(next))?.focus();
+        }}
+      >
+        <TabButton
+          id={tabID("admin")}
+          controls={panelID("admin")}
+          active={tab === "admin"}
+          onClick={() => setTab("admin")}
+        >
           Datos
         </TabButton>
         {canOpenClinicalRecord(role) ? (
-          <TabButton active={tab === "clinical"} onClick={() => setTab("clinical")}>
+          <TabButton
+            id={tabID("clinical")}
+            controls={panelID("clinical")}
+            active={tab === "clinical"}
+            onClick={() => setTab("clinical")}
+          >
             Historia clínica
           </TabButton>
         ) : null}
       </div>
 
       {tab === "clinical" && canOpenClinicalRecord(role) ? (
-        <ClinicalPanel
-          key={patient.id}
-          patientID={patient.id}
-          readOnly={writesLocked || !canWriteClinicalRecord(role, patient, userId)}
-        />
+        <div
+          role="tabpanel"
+          id={panelID("clinical")}
+          aria-labelledby={tabID("clinical")}
+          tabIndex={0}
+        >
+          <ClinicalPanel
+            key={patient.id}
+            patientID={patient.id}
+            readOnly={writesLocked || !canWriteClinicalRecord(role, patient, userId)}
+          />
+        </div>
       ) : null}
 
       {tab === "admin" ? (
+      <div role="tabpanel" id={panelID("admin")} aria-labelledby={tabID("admin")} tabIndex={0}>
       <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
         <Row label="Documento">
           {patient.document
@@ -207,20 +242,25 @@ export function PatientDetail({
           />
         </Row>
       </dl>
-      ) : null}
 
-      {tab === "admin" && canManageGrants(role, patient, userId) ? (
+      {canManageGrants(role, patient, userId) ? (
         <GrantsPanel patient={patient} role={role} userId={userId} staff={staff} />
+      ) : null}
+      </div>
       ) : null}
     </section>
   );
 }
 
 function TabButton({
+  id,
+  controls,
   active,
   onClick,
   children,
 }: {
+  id: string;
+  controls: string;
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
@@ -229,7 +269,10 @@ function TabButton({
     <button
       type="button"
       role="tab"
+      id={id}
+      aria-controls={controls}
       aria-selected={active}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
       className={`-mb-px border-b-2 px-3 py-2 text-sm ${
         active
