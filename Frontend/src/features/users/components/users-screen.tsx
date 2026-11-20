@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { canManageAccounts, type Invitation, type User } from "@/entities/iam/model";
@@ -84,10 +83,7 @@ export function UsersScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Usuarios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Cuentas del consultorio, sus roles y el acceso de cada una.
           </p>

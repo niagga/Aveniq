@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import type { Insurer } from "@/entities/insurer/model";
@@ -74,10 +73,7 @@ export function InsurersScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Mutuales</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mutuales</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Las mutuales que atiende el consultorio. Cada paciente con cobertura de mutual
             se asocia a una de ellas.

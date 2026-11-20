@@ -1,24 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
-import { canReadBilling } from "@/entities/billing/model";
-import { canManageInsurers } from "@/entities/insurer/model";
-import { canReadTariffs } from "@/entities/tariff/model";
-import {
-  canManageAccounts,
-  canReadPractice,
-  canSeePatients,
-  canUseAgenda,
-} from "@/entities/iam/model";
+import { canReadPractice } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { getSessionUser } from "@/shared/auth/session";
-import { SessionGate } from "@/shared/auth/session-gate";
 import { Notice } from "@/shared/ui/notice";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 type TenantBody = components["schemas"]["TenantBody"];
 
@@ -30,14 +21,15 @@ type TenantBody = components["schemas"]["TenantBody"];
  *
  * What keeps the token out of the server bundle is unchanged: the API origin is
  * still server-only, and every call goes through the same-origin proxy.
+ *
+ * The row of section links that used to live in the header is gone: the rail in the
+ * private layout owns navigation now, and the links were only a way back to the menu.
  */
 export default function DashboardPage() {
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 px-6 py-12">
-      <SessionGate>
-        <Dashboard />
-      </SessionGate>
-    </main>
+    <ScreenFrame>
+      <Dashboard />
+    </ScreenFrame>
   );
 }
 
@@ -78,57 +70,7 @@ function Dashboard() {
             Gestión de consultorios: pacientes, agenda y facturación.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {canSeePatients(role) ? (
-            <Link
-              href="/patients"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Pacientes
-            </Link>
-          ) : null}
-          {canUseAgenda(role) ? (
-            <Link
-              href="/agenda"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Agenda
-            </Link>
-          ) : null}
-          {canReadBilling(role) ? (
-            <Link
-              href="/facturacion"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Facturación
-            </Link>
-          ) : null}
-          {canReadTariffs(role) ? (
-            <Link
-              href="/tarifario"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Tarifario
-            </Link>
-          ) : null}
-          {canManageAccounts(role) ? (
-            <Link
-              href="/usuarios"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Usuarios
-            </Link>
-          ) : null}
-          {canManageInsurers(role) ? (
-            <Link
-              href="/mutuales"
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
-            >
-              Mutuales
-            </Link>
-          ) : null}
-          <LogoutButton />
-        </div>
+        <LogoutButton />
       </header>
 
       {!showPractice ? null : failedStatus !== null ? (

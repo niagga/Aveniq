@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 
@@ -174,10 +173,7 @@ export function BillingScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Facturación</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Facturación</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Comprobantes internos del consultorio: emitidos, anulados y su historial.
           </p>

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Patient } from "@/entities/patient/model";
@@ -12,24 +11,22 @@ import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { RoleGate } from "@/shared/auth/role-gate";
-import { SessionGate } from "@/shared/auth/session-gate";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 /**
  * Patient roster.
  *
- * A Client Component inside SessionGate, like the dashboard: the access token lives
+ * A Client Component, like the dashboard: the access token lives
  * in browser memory, so the server has no credential to fetch with on the user's
- * behalf (T19).
+ * behalf (T19). The auth gate and the shell come from the private layout.
  */
 export default function PatientsPage() {
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-6 py-12">
-      <SessionGate>
-        <RoleGate allowed={canSeePatients}>
-          <PatientsScreen />
-        </RoleGate>
-      </SessionGate>
-    </main>
+    <ScreenFrame>
+      <RoleGate allowed={canSeePatients}>
+        <PatientsScreen />
+      </RoleGate>
+    </ScreenFrame>
   );
 }
 
@@ -92,14 +89,7 @@ function PatientsScreen() {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-ink-muted underline">
-            ← Volver al consultorio
-          </Link>
-          {" · "}
-          <Link href="/agenda" className="text-xs text-ink-muted underline">
-            Agenda
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pacientes</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Pacientes</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Ficha del paciente con sus datos fiscales y la historia clínica.
           </p>
