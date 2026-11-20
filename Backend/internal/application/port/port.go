@@ -17,6 +17,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
+	"github.com/niagga/aveniq/backend/internal/domain/pricing"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
@@ -88,6 +89,29 @@ type InsurerRepository interface {
 	// which the patient forms offer for new coverage.
 	List(ctx context.Context, activeOnly bool) ([]insurer.Insurer, error)
 	Update(ctx context.Context, subject insurer.Insurer) error
+}
+
+// TariffListItem is a tariff with the names the screen shows for it. The names are read
+// in the same statement, so the reader needs no permission over the staff directory or
+// the catalog to see them.
+type TariffListItem struct {
+	Tariff           pricing.Tariff
+	ProfessionalName string
+	// InsurerName is empty for a particular tariff.
+	InsurerName string
+}
+
+// TariffRepository persists the fee schedule of a practice. Like the other repositories it
+// runs inside a tenant scope, and it maps its failures onto pricing.ErrNotFound,
+// pricing.ErrValidityTaken and the validation errors of the references it cannot resolve.
+type TariffRepository interface {
+	Create(ctx context.Context, subject pricing.Tariff) error
+	ByID(ctx context.Context, id pricing.ID) (pricing.Tariff, error)
+	// List returns every tariff of the practice, ordered for reading by professional.
+	List(ctx context.Context) ([]TariffListItem, error)
+	// Update persists the amounts of a tariff. Its key is never rewritten.
+	Update(ctx context.Context, subject pricing.Tariff) error
+	Delete(ctx context.Context, id pricing.ID) error
 }
 
 // PatientFilter narrows a listing. Search matches a fragment of the name or the

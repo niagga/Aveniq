@@ -58,6 +58,11 @@ test("inside the trial the owner writes: a patient is created and no banner show
     await page.getByLabel("Fecha de nacimiento").fill("1988-03-04");
     await page.getByLabel("Moneda de facturación").selectOption("ARS");
     await page.getByRole("button", { name: "Crear paciente" }).click();
+
+    // The roster shows 50 patients by name and the development database keeps growing, so the
+    // new patient is found by its exact name, not by its place in the list.
+    await page.getByLabel("Buscar", { exact: true }).fill(patientInsideTrial);
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
     await expect(page.getByRole("cell", { name: patientInsideTrial })).toBeVisible({ timeout: 10_000 });
   } finally {
     await context.close();

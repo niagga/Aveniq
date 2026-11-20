@@ -21,6 +21,7 @@ import (
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
@@ -283,6 +284,7 @@ type harness struct {
 	invitations *fakeInvitationRepository
 	limiter     *fakeRateLimiter
 	vouchers    *fakeBillingRepository
+	tariffs     *fakeTariffRepository
 }
 
 func newHarness(t *testing.T) *harness {
@@ -298,6 +300,7 @@ func newHarness(t *testing.T) *harness {
 
 	repo := newFakePatientRepository()
 	insurers := newFakeInsurerRepository()
+	tariffs := newFakeTariffRepository(insurers)
 	catalog := fakeCatalog{}
 	scope := fakeScope{}
 	grants := newFakeGrantRepository()
@@ -333,6 +336,10 @@ func newHarness(t *testing.T) *harness {
 		UpdateInsurer:          insurerapp.NewUpdateUseCase(insurers, scope, clock),
 		DeactivateInsurer:      insurerapp.NewDeactivateUseCase(insurers, scope, clock),
 		ActivateInsurer:        insurerapp.NewActivateUseCase(insurers, scope, clock),
+		ListTariffs:            pricingapp.NewListUseCase(tariffs, scope),
+		CreateTariff:           pricingapp.NewCreateUseCase(tariffs, insurers, scope, clock, uuidIDs{}),
+		UpdateTariff:           pricingapp.NewUpdateUseCase(tariffs, scope, clock),
+		DeleteTariff:           pricingapp.NewDeleteUseCase(tariffs, scope),
 		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock, access),
 		ActivatePatient:        patientapp.NewActivateUseCase(repo, scope, clock, access),
 		GetPatient:             patientapp.NewGetUseCase(scope, access),
@@ -362,7 +369,7 @@ func newHarness(t *testing.T) *harness {
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers}
+	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the

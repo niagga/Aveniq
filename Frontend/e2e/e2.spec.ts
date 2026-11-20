@@ -40,6 +40,10 @@ test("two tabs can refresh at once without killing the session", async ({ contex
 });
 
 test("a professional registers a patient, keeps its clinical record, and books it", async ({ page }) => {
+  // The booking loop walks the hours of tomorrow past the appointments earlier runs left in the
+  // development database, each one costing a short wait. 30 seconds is not enough for that walk.
+  test.setTimeout(120_000);
+
   // Only a professional opens the clinical record, and registering a patient makes that
   // professional its treating one (T38). The owner has no clinical tab.
   await signInAs(page, ACCOUNTS.professional);

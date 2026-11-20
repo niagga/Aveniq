@@ -23,6 +23,7 @@ import (
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
+	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
@@ -93,6 +94,7 @@ func run() error {
 	sessionRepository := postgres.NewSessionRepository(pool)
 	patientRepository := postgres.NewPatientRepository(pool)
 	insurerRepository := postgres.NewInsurerRepository(pool)
+	tariffRepository := postgres.NewTariffRepository(pool)
 	patientCatalog := postgres.NewPatientCatalog(pool)
 	clinicalRepository := postgres.NewClinicalRepository(pool)
 	scheduleRepository := postgres.NewScheduleRepository(pool)
@@ -151,6 +153,10 @@ func run() error {
 		UpdateInsurer:          insurerapp.NewUpdateUseCase(insurerRepository, transactor, clock.New()),
 		DeactivateInsurer:      insurerapp.NewDeactivateUseCase(insurerRepository, transactor, clock.New()),
 		ActivateInsurer:        insurerapp.NewActivateUseCase(insurerRepository, transactor, clock.New()),
+		ListTariffs:            pricingapp.NewListUseCase(tariffRepository, transactor),
+		CreateTariff:           pricingapp.NewCreateUseCase(tariffRepository, insurerRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdateTariff:           pricingapp.NewUpdateUseCase(tariffRepository, transactor, clock.New()),
+		DeleteTariff:           pricingapp.NewDeleteUseCase(tariffRepository, transactor),
 		DeactivatePatient:      patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New(), careAccess),
 		ActivatePatient:        patientapp.NewActivateUseCase(patientRepository, transactor, clock.New(), careAccess),
 		GetPatient:             patientapp.NewGetUseCase(transactor, careAccess),

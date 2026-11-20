@@ -191,6 +191,21 @@ type Session struct {
 	ReplacedBy  pgtype.UUID
 }
 
+type Tariff struct {
+	ID                 pgtype.UUID
+	TenantID           pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	Coverage           string
+	InsurerID          pgtype.UUID
+	Modality           string
+	BillingCurrency    string
+	ValidFrom          pgtype.Date
+	InsurerMinor       int64
+	PatientMinor       int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type TaxIDKind struct {
 	CountryCode string
 	Code        string

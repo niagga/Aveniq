@@ -650,6 +650,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the fee schedule
+         * @description Every price of the practice, ordered for reading by professional. A combination without a price has no row: nothing is proposed for it.
+         */
+        get: operations["list-tariffs"];
+        put?: never;
+        /**
+         * Add a price to the fee schedule
+         * @description Starts a price on validFrom for one professional, coverage, modality and currency. A price already in force keeps the sessions before that day.
+         */
+        post: operations["create-tariff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tariffs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a price
+         * @description Removes one price. Vouchers already issued keep the value they were issued with.
+         */
+        delete: operations["delete-tariff"];
+        options?: never;
+        head?: never;
+        /**
+         * Change the amounts of a price
+         * @description Replaces the split of a price. Its professional, coverage, modality, currency and start day do not change: to move one, remove it and create it again.
+         */
+        patch: operations["update-tariff"];
+        trace?: never;
+    };
     "/api/v1/tenants": {
         parameters: {
             query?: never;
@@ -1538,6 +1586,134 @@ export interface components {
             /** Format: uuid */
             patientId: string;
             taxId?: string;
+        };
+        TariffAmountsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TariffAmountsBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            insurerMinor: number;
+            /** Format: int64 */
+            patientMinor: number;
+        };
+        TariffBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TariffBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Currency the amounts are in.
+             * @enum {string}
+             */
+            billingCurrency: "ARS" | "EUR" | "USD";
+            /**
+             * @description private for a particular patient, insurer for a mutual.
+             * @enum {string}
+             */
+            coverage: "private" | "insurer";
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: uuid
+             * @description Tariff identifier.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Mutual of a mutual price. Absent for a particular one.
+             */
+            insurerId?: string;
+            /**
+             * Format: int64
+             * @description What the mutual pays per session, in minor units. Zero for a particular price.
+             */
+            insurerMinor: number;
+            /** @description Name of the mutual. Absent for a particular price. */
+            insurerName?: string;
+            /**
+             * @description Where the session happens.
+             * @enum {string}
+             */
+            modality: "online" | "presencial";
+            /**
+             * Format: int64
+             * @description What the patient pays per session, in minor units. The whole fee for a particular price.
+             */
+            patientMinor: number;
+            /** @description Name of the professional, as the practice has it. */
+            professionalName: string;
+            /**
+             * Format: uuid
+             * @description Professional the price is for.
+             */
+            professionalUserId: string;
+            /**
+             * Format: uuid
+             * @description Practice the tariff belongs to.
+             */
+            tenantId: string;
+            /**
+             * Format: int64
+             * @description What one session is worth: insurerMinor plus patientMinor.
+             */
+            totalMinor: number;
+            /** Format: date-time */
+            updatedAt: string;
+            /**
+             * Format: date
+             * @description First day the price applies. A later price for the same combination supersedes it from its own day.
+             */
+            validFrom: string;
+        };
+        TariffCreateBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TariffCreateBody.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            billingCurrency: "ARS" | "EUR" | "USD";
+            /** @enum {string} */
+            coverage: "private" | "insurer";
+            /**
+             * Format: uuid
+             * @description Required for a mutual price, absent for a particular one.
+             */
+            insurerId?: string;
+            /**
+             * Format: int64
+             * @description Zero for a particular price.
+             */
+            insurerMinor: number;
+            /** @enum {string} */
+            modality: "online" | "presencial";
+            /**
+             * Format: int64
+             * @description The whole fee for a particular price.
+             */
+            patientMinor: number;
+            /** Format: uuid */
+            professionalUserId: string;
+            /**
+             * Format: date
+             * @description YYYY-MM-DD.
+             */
+            validFrom: string;
+        };
+        TariffListOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TariffListOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["TariffBody"][] | null;
         };
         TenantBody: {
             /**
@@ -3045,6 +3221,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignupBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TariffListOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TariffCreateBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TariffBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tariff identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tariff identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TariffAmountsBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TariffBody"];
                 };
             };
             /** @description Error */

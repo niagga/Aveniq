@@ -23,6 +23,7 @@ import (
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
@@ -33,6 +34,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
+	"github.com/niagga/aveniq/backend/internal/domain/pricing"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/platform/authn"
@@ -110,6 +112,10 @@ type Deps struct {
 	UpdateInsurer          *insurerapp.UpdateUseCase
 	DeactivateInsurer      *insurerapp.LifecycleUseCase
 	ActivateInsurer        *insurerapp.LifecycleUseCase
+	ListTariffs            *pricingapp.ListUseCase
+	CreateTariff           *pricingapp.CreateUseCase
+	UpdateTariff           *pricingapp.UpdateUseCase
+	DeleteTariff           *pricingapp.DeleteUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -147,6 +153,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerAuthRoutes(api, deps)
 	registerPatientRoutes(api, deps)
 	registerInsurerRoutes(api, deps)
+	registerTariffRoutes(api, deps)
 	registerClinicalRoutes(api, deps)
 	registerScheduleRoutes(api, deps)
 	registerUserRoutes(api, deps)
@@ -284,6 +291,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var iamValidationErr *iam.ValidationError
 	var billingValidationErr *billing.ValidationError
 	var insurerValidationErr *insurer.ValidationError
+	var pricingValidationErr *pricing.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -308,6 +316,12 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("A mutual with that name already exists in this practice")
 	case errors.Is(err, insurer.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
+	case errors.As(err, &pricingValidationErr):
+		return huma.Error422UnprocessableEntity(pricingValidationErr.Error())
+	case errors.Is(err, pricing.ErrNotFound):
+		return huma.Error404NotFound("The requested tariff does not exist")
+	case errors.Is(err, pricing.ErrValidityTaken):
+		return huma.Error409Conflict("The practice already has a price for that professional, coverage, modality and currency starting that day")
 	case errors.Is(err, care.ErrGrantNotFound):
 		return huma.Error404NotFound("The requested clinical grant does not exist")
 	case errors.Is(err, care.ErrForbidden):
