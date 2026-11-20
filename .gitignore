@@ -8,7 +8,8 @@ Backend/tmp/
 *.exe~
 *.test
 *.out
-coverage.*
+coverage.out
+coverage.html
 *.coverprofile
 
 # ─── Node / Next.js ───
