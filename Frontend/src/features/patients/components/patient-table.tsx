@@ -7,7 +7,8 @@ import {
   formatBirthDate,
   type Patient,
 } from "@/entities/patient/model";
-import { Notice } from "@/shared/ui/notice";
+import { Badge } from "@/shared/ui/badge";
+import { EmptyState } from "@/shared/ui/states";
 
 /**
  * The patient roster.
@@ -28,24 +29,27 @@ export function PatientTable({
 }) {
   if (patients.length === 0) {
     return (
-      <Notice tone="info" title="Todavía no hay pacientes">
-        Cargá el primero con el formulario de arriba.
-      </Notice>
+      <EmptyState
+        title="Todavía no hay pacientes"
+        description="Cargá el primero con el formulario de arriba."
+      />
     );
   }
 
+  // overflow-x-auto and not overflow-hidden: the roster has seven columns and hidden
+  // overflow crops them on a narrow screen instead of letting the table scroll.
   return (
-    <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
           <tr>
-            <th className="px-4 py-3 font-medium">Paciente</th>
-            <th className="px-4 py-3 font-medium">Documento</th>
-            <th className="px-4 py-3 font-medium">Nacimiento</th>
-            <th className="px-4 py-3 font-medium">Contacto</th>
-            <th className="px-4 py-3 font-medium">Cobertura</th>
-            <th className="px-4 py-3 font-medium">Moneda</th>
-            <th className="px-4 py-3 font-medium">Estado</th>
+            <th scope="col" className="px-4 py-3 font-medium">Paciente</th>
+            <th scope="col" className="px-4 py-3 font-medium">Documento</th>
+            <th scope="col" className="px-4 py-3 font-medium">Nacimiento</th>
+            <th scope="col" className="px-4 py-3 font-medium">Contacto</th>
+            <th scope="col" className="px-4 py-3 font-medium">Cobertura</th>
+            <th scope="col" className="px-4 py-3 font-medium">Moneda</th>
+            <th scope="col" className="px-4 py-3 font-medium">Estado</th>
           </tr>
         </thead>
         <tbody>
@@ -57,7 +61,17 @@ export function PatientTable({
                 selectedID === patient.id ? "bg-brand/5" : ""
               }`}
             >
-              <td className="px-4 py-3 font-medium">{patient.fullName}</td>
+              <td className="px-4 py-3 font-medium">
+                {/* A row that is only clickable is unreachable without a mouse: the name is
+                    the control, and the row keeps the click as a convenience. */}
+                <button
+                  type="button"
+                  onClick={() => onSelect(patient.id)}
+                  className="text-left hover:underline"
+                >
+                  {patient.fullName}
+                </button>
+              </td>
               <td className="px-4 py-3 font-mono text-xs">
                 {patient.document
                   ? `${documentKindLabel(patient.document.kind)} ${patient.document.number}`
@@ -75,15 +89,9 @@ export function PatientTable({
                 {patient.billingCurrency || "—"}
               </td>
               <td className="px-4 py-3">
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-xs ${
-                    patient.isActive
-                      ? "border-success/30 bg-success/5 text-success"
-                      : "border-border bg-surface-muted text-ink-muted"
-                  }`}
-                >
+                <Badge tone={patient.isActive ? "success" : "neutral"}>
                   {patient.isActive ? "Activo" : "Inactivo"}
-                </span>
+                </Badge>
               </td>
             </tr>
           ))}
