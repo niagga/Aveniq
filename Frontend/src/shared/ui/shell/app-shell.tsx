@@ -65,6 +65,12 @@ const SECTIONS: readonly Section[] = [
     allow: canReadBilling,
   },
   {
+    href: "/liquidaciones",
+    label: "Liquidaciones",
+    icon: <SettlementsIcon />,
+    allow: canReadBilling,
+  },
+  {
     href: "/tarifario",
     label: "Tarifario",
     icon: <TariffIcon />,
@@ -271,6 +277,15 @@ function BillingIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <rect x="2" y="3.5" width="12" height="9" rx="1" />
       <path d="M2 6.5h12M5 10h3" />
+    </svg>
+  );
+}
+
+function SettlementsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M3 2.5h10v11l-2.5-1.6L8 13.5l-2.5-1.6L3 13.5v-11Z" />
+      <path d="M5.5 6h5M5.5 8.5h5" />
     </svg>
   );
 }

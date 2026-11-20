@@ -5,23 +5,22 @@ import { Suspense } from "react";
 import { canReadBilling } from "@/entities/billing/model";
 import { SettlementScreen } from "@/features/settlements/components/settlement-screen";
 import { RoleGate } from "@/shared/auth/role-gate";
-import { SessionGate } from "@/shared/auth/session-gate";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 /**
- * Monthly settlements to the mutuales (T55). A Client Component inside SessionGate, like the other
- * screens: the access token lives in browser memory. RoleGate keeps the clinical roles off a screen
- * that can only answer 403.
+ * Monthly settlements to the mutuales (T55).
+ *
+ * A Client Component, like the other screens: the access token lives in browser memory. The
+ * auth gate and the shell come from the private layout, so this file only says who may see it.
  */
 export default function SettlementsPage() {
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-6 py-12">
-      <SessionGate>
-        <RoleGate allowed={canReadBilling}>
-          <Suspense fallback={<p className="text-sm text-ink-muted">Cargando liquidaciones…</p>}>
-            <SettlementScreen />
-          </Suspense>
-        </RoleGate>
-      </SessionGate>
-    </main>
+    <ScreenFrame>
+      <RoleGate allowed={canReadBilling}>
+        <Suspense fallback={<p className="text-sm text-ink-muted">Cargando liquidaciones…</p>}>
+          <SettlementScreen />
+        </Suspense>
+      </RoleGate>
+    </ScreenFrame>
   );
 }

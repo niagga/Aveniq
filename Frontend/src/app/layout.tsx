@@ -20,7 +20,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es">
+    // The theme script writes data-theme before React hydrates, so the server markup and the
+    // first client render differ by that one attribute. Suppressing it is the documented
+    // exception for a pre-paint theme: without this, every visit logs a mismatch it cannot fix.
+    <html lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>

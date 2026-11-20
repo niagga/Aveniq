@@ -213,6 +213,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/settlement-insurers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the mutuales that can be settled
+         * @description The active mutuales of the practice, by name. Settlable is false for a mutual without its CUIT.
+         */
+        get: operations["list-settlement-insurers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the settlements of the practice
+         * @description Newest first, optionally of one mutual. Each one with its sessions and its totals per currency.
+         */
+        get: operations["list-settlements"];
+        put?: never;
+        /**
+         * Issue the settlement of a mutual for a month
+         * @description Values the attended sessions of the mutual's patients in the month and writes the settlement with them. A session already in an active settlement answers 409. Recorded in the audit trail.
+         */
+        post: operations["issue-settlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/settlements/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview the settlement of a mutual for a month
+         * @description What the settlement would contain, valued the way it is issued. Writes nothing. Sessions the tariff does not price are listed as unvalued.
+         */
+        get: operations["preview-settlement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one settlement */
+        get: operations["get-settlement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/settlements/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void an issued settlement
+         * @description A void is final and releases its sessions, which can be settled again. A settlement is never deleted. Recorded in the audit trail.
+         */
+        post: operations["void-settlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/subjects": {
         parameters: {
             query?: never;
@@ -1054,6 +1155,13 @@ export interface components {
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
+        CurrencyTotalBody: {
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** Format: int64 */
+            sessions: number;
+        };
         DirectoryEntryBody: {
             /** @description Name to show next to an entry. */
             fullName: string;
@@ -1208,6 +1316,21 @@ export interface components {
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
+        IssueSettlementBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IssueSettlementBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: uuid
+             * @description The mutual to settle with. It needs its CUIT.
+             */
+            insurerId: string;
+            /** @description The month of the sessions, YYYY-MM. The server values the sessions; the request carries none. */
+            period: string;
+        };
         IssueVoucherBody: {
             /**
              * Format: uri
@@ -1321,6 +1444,24 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["ProfessionalBody"][] | null;
+        };
+        ListSettlementInsurersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListSettlementInsurersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SettlementInsurerBody"][] | null;
+        };
+        ListSettlementsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListSettlementsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SettlementBody"][] | null;
         };
         ListSubjectsOutputBody: {
             /**
@@ -1679,6 +1820,89 @@ export interface components {
              */
             tenantId: string;
         };
+        SettlementBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SettlementBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            insurerId: string;
+            /** @description Snapshot of the mutual at issue. */
+            insurerName: string;
+            /** @description Snapshot of the mutual's CUIT at issue. */
+            insurerTaxId: string;
+            items: components["schemas"]["SettlementItemBody"][] | null;
+            /** @description The month the sessions were attended in, YYYY-MM. */
+            period: string;
+            /** @description Snapshot of the practice at issue. */
+            practiceName: string;
+            /** @enum {string} */
+            status: "issued" | "voided";
+            totals: components["schemas"]["CurrencyTotalBody"][] | null;
+            voidReason?: string;
+            /** Format: date-time */
+            voidedAt?: string;
+            /** Format: uuid */
+            voidedBy?: string;
+        };
+        SettlementInsurerBody: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            settlable: boolean;
+            /** @description The mutual's CUIT, 11 digits. A settlement needs it. */
+            taxId?: string;
+        };
+        SettlementItemBody: {
+            /**
+             * Format: int64
+             * @description The mutual's share in minor units (centavos).
+             */
+            amountMinor: number;
+            /** Format: uuid */
+            appointmentId: string;
+            /**
+             * Format: int64
+             * @description The patient's copago in minor units. Shown on the settlement, never summed into its totals.
+             */
+            copagoMinor: number;
+            currency: string;
+            memberNumber: string;
+            /** @enum {string} */
+            modality: "online" | "presencial";
+            patientName: string;
+            professionalName: string;
+            /**
+             * Format: date-time
+             * @description Set when the settlement is voided: the session can be settled again.
+             */
+            releasedAt?: string;
+            /** Format: date-time */
+            startsAt: string;
+        };
+        SettlementPreviewBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SettlementPreviewBody.json
+             */
+            readonly $schema?: string;
+            /** Format: uuid */
+            insurerId: string;
+            insurerName: string;
+            period: string;
+            sessions: components["schemas"]["SettlementItemBody"][] | null;
+            totals: components["schemas"]["CurrencyTotalBody"][] | null;
+            unvalued: components["schemas"]["UnvaluedSessionBody"][] | null;
+        };
         SignupBody: {
             /**
              * Format: uri
@@ -1921,6 +2145,14 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["UnbilledSessionBody"][] | null;
         };
+        UnvaluedSessionBody: {
+            /** Format: uuid */
+            appointmentId: string;
+            currency: string;
+            patientName: string;
+            /** Format: date-time */
+            startsAt: string;
+        };
         UserBody: {
             /**
              * Format: uri
@@ -1948,6 +2180,16 @@ export interface components {
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
             /** Format: date-time */
             updatedAt: string;
+        };
+        VoidSettlementBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VoidSettlementBody.json
+             */
+            readonly $schema?: string;
+            /** @description Why the settlement is void. Required. */
+            reason: string;
         };
         VoidVoucherBody: {
             /**
@@ -2392,6 +2634,206 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListProfessionalsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-settlement-insurers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSettlementInsurersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-settlements": {
+        parameters: {
+            query?: {
+                /** @description Only the settlements of this mutual. */
+                insurerId?: string;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSettlementsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "issue-settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueSettlementBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "preview-settlement": {
+        parameters: {
+            query: {
+                /** @description The mutual to settle with. */
+                insurerId: string;
+                /** @description The month, YYYY-MM. */
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementPreviewBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Settlement identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "void-settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Settlement identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidSettlementBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementBody"];
                 };
             };
             /** @description Error */
