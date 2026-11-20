@@ -16,6 +16,7 @@ import { canManageInsurers } from "@/entities/insurer/model";
 import { canReadTariffs } from "@/entities/tariff/model";
 import { getSessionUser } from "@/shared/auth/session";
 import { usePractice } from "@/shared/auth/practice";
+import { canCountUnbilled, unbilledLabel, useUnbilledCount } from "@/features/billing/use-unbilled";
 import { TrialExpiredBanner } from "@/features/tenants/components/trial-expired-banner";
 import { Notice } from "@/shared/ui/notice";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
@@ -91,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const user = getSessionUser();
   const visible = SECTIONS.filter((section) => section.allow(user?.role));
   const { practice, expired } = usePractice();
+  const unbilled = unbilledLabel(useUnbilledCount(canCountUnbilled(user?.role)));
 
   // The trial belongs to the practice, so the shell states it once instead of every screen
   // guessing, and it no longer renders above the rail: it renders inside the content column.
@@ -137,6 +139,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={section.href}
                   title={section.label}
                   aria-current={active ? "page" : undefined}
+                  aria-label={
+                    section.href === "/facturacion" && unbilled !== ""
+                      ? `${section.label}, ${unbilled} sesiones sin facturar`
+                      : undefined
+                  }
                   className={`relative flex w-full flex-col items-center gap-0.5 rounded-control px-2 py-1.5 text-[10px] font-medium md:w-11 md:gap-0 md:px-0 md:py-2 ${
                     active
                       ? "bg-brand/10 text-brand"
@@ -151,6 +158,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   ) : null}
                   {section.icon}
                   <span className="md:sr-only">{section.label}</span>
+                  {section.href === "/facturacion" && unbilled !== "" ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute right-1 top-0.5 rounded-full bg-brand px-1 text-[9px] font-semibold leading-4 text-brand-ink md:right-0.5"
+                    >
+                      {unbilled}
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             );

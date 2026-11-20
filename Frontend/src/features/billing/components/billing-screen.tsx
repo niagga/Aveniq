@@ -21,6 +21,7 @@ import { LogoutButton } from "@/features/auth/components/logout-button";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
 import { Button } from "@/shared/ui/button";
+import { useUnbilledCount, unbilledLabel } from "@/features/billing/use-unbilled";
 import { Field, inputClass } from "@/shared/ui/field";
 import { Notice } from "@/shared/ui/notice";
 import { ScreenFrame } from "@/shared/ui/shell/app-shell";
@@ -64,6 +65,7 @@ export function BillingScreen() {
   const from = searchParams.get("desde") ?? "";
   const to = searchParams.get("hasta") ?? "";
   const filters: BillingFilters = { status, from, to };
+  const unbilled = unbilledLabel(useUnbilledCount(true));
   const [vouchers, setVouchers] = useState<Voucher[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -199,6 +201,15 @@ export function BillingScreen() {
       aria-label="Vistas de facturación"
       className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex"
     >
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Sin facturar</h2>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          {unbilled === ""
+            ? "Ninguna sesión atendida quedó sin comprobante en los últimos 30 días."
+            : `${unbilled} ${unbilled === "1" ? "sesión atendida" : "sesiones atendidas"} sin comprobante en los últimos 30 días.`}
+        </p>
+      </div>
+
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">Vistas</h2>
         <p className="mt-0.5 text-xs text-ink-muted">Los filtros viven en la URL</p>

@@ -253,6 +253,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/unbilled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the sessions no voucher bills
+         * @description Attended sessions of the practice inside the window that no issued voucher bills, oldest first: the worklist of the billing screen.
+         */
+        get: operations["list-unbilled-sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/vouchers": {
         parameters: {
             query?: never;
@@ -1532,7 +1552,7 @@ export interface components {
         ProposalBody: {
             /**
              * Format: int64
-             * @description The patient's share in minor units: the full fee for a particular patient, the copago for a mutual.
+             * @description The tariff's total in minor units: the full fee for a particular patient, the mutual's share plus the copago for a mutual.
              */
             amountMinor: number;
             currency: string;
@@ -1877,6 +1897,29 @@ export interface components {
             patientId: string;
             /** Format: uuid */
             professionalId: string;
+        };
+        UnbilledSessionBody: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            modality: "online" | "presencial";
+            /** Format: uuid */
+            patientId: string;
+            patientName: string;
+            /** Format: uuid */
+            professionalId: string;
+            professionalName: string;
+            /** Format: date-time */
+            startsAt: string;
+        };
+        UnbilledSessionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UnbilledSessionsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["UnbilledSessionBody"][] | null;
         };
         UserBody: {
             /**
@@ -2418,6 +2461,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListPatientSessionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-unbilled-sessions": {
+        parameters: {
+            query?: {
+                /** @description Start of the window, inclusive. Required. */
+                from?: string;
+                /** @description End of the window, exclusive. Required. */
+                to?: string;
+                /** @description Page size. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnbilledSessionsOutputBody"];
                 };
             };
             /** @description Error */
