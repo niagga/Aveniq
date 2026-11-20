@@ -477,6 +477,43 @@ func (r *BillingRepository) Professionals(ctx context.Context) ([]billing.Profes
 }
 
 // sessionOf maps the session columns every appointment read returns.
+// UnbilledSessions lists the attended sessions that no issued voucher bills: the worklist of
+// the billing screen. The tenant scope decides which rows exist at all, as with every other
+// query of this repository.
+func (r *BillingRepository) UnbilledSessions(
+	ctx context.Context,
+	from, to time.Time,
+	limit int32,
+) ([]billing.UnbilledSession, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries.ListUnbilledSessions(ctx, sqlcgen.ListUnbilledSessionsParams{
+		FromAt: from.UTC(),
+		ToAt:   to.UTC(),
+		Lim:    limit,
+	})
+	if err != nil {
+		return nil, translateBillingError(err)
+	}
+
+	out := make([]billing.UnbilledSession, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, billing.UnbilledSession{
+			ID:               row.ID.String(),
+			PatientID:        row.PatientID.String(),
+			PatientName:      row.PatientName,
+			ProfessionalID:   row.ProfessionalUserID.String(),
+			ProfessionalName: row.ProfessionalName,
+			Modality:         row.Modality,
+			StartsAt:         row.StartsAt,
+			Status:           row.Status,
+		})
+	}
+	return out, nil
+}
+
 func sessionOf(
 	id, patientID, professionalID pgtype.UUID,
 	professionalName, modality string,

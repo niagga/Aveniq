@@ -180,6 +180,7 @@ func run() error {
 		ListVouchers:           billingapp.NewListUseCase(billingRepository, transactor),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(billingRepository, transactor),
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(billingRepository, tariffRepository, tenantRepository, transactor),
+		UnbilledSessions:       billingapp.NewUnbilledUseCase(billingRepository, transactor),
 		Professionals:          billingapp.NewProfessionalsUseCase(billingRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),

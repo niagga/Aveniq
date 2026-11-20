@@ -47,6 +47,17 @@ type photoBody struct {
 	ProfessionalName *string `json:"professionalName"`
 }
 
+// unbilledSessionBody is one row of the worklist: an attended session that no voucher bills.
+type unbilledSessionBody struct {
+	ID               string `json:"id" format:"uuid"`
+	PatientID        string `json:"patientId" format:"uuid"`
+	PatientName      string `json:"patientName"`
+	ProfessionalID   string `json:"professionalId" format:"uuid"`
+	ProfessionalName string `json:"professionalName"`
+	Modality         string `json:"modality" enum:"online,presencial"`
+	StartsAt         string `json:"startsAt" format:"date-time"`
+}
+
 type listVouchersOutput struct {
 	Body struct {
 		Items []voucherBody `json:"items"`
@@ -134,6 +145,18 @@ type voucherIDInput struct {
 	ID string `path:"id" format:"uuid" doc:"Voucher identifier."`
 }
 
+type unbilledSessionsInput struct {
+	From  string `query:"from" format:"date-time" doc:"Start of the window, inclusive. Required."`
+	To    string `query:"to" format:"date-time" doc:"End of the window, exclusive. Required."`
+	Limit int32  `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"Page size."`
+}
+
+type unbilledSessionsOutput struct {
+	Body struct {
+		Items []unbilledSessionBody `json:"items"`
+	}
+}
+
 type listVouchersInput struct {
 	From      string `query:"from" format:"date-time" doc:"Only vouchers issued at or after this instant."`
 	To        string `query:"to" format:"date-time" doc:"Only vouchers issued before this instant."`
@@ -170,6 +193,7 @@ type billingHandlers struct {
 	list        *billingapp.ListUseCase
 	subjects    *billingapp.SearchSubjectsUseCase
 	sessions    *billingapp.PatientSessionsUseCase
+	unbilled    *billingapp.UnbilledUseCase
 	professions *billingapp.ProfessionalsUseCase
 	logger      *slog.Logger
 }
@@ -185,6 +209,7 @@ func registerBillingRoutes(api huma.API, deps Deps) {
 		list:        deps.ListVouchers,
 		subjects:    deps.SearchSubjects,
 		sessions:    deps.PatientSessions,
+		unbilled:    deps.UnbilledSessions,
 		professions: deps.Professionals,
 		logger:      deps.Logger,
 	}
@@ -205,6 +230,18 @@ func registerBillingRoutes(api huma.API, deps Deps) {
 		Security:      secured,
 		Middlewares:   readGuard,
 	}, handlers.listVouchersHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "list-unbilled-sessions",
+		Method:        http.MethodGet,
+		Path:          APIPrefix + "/billing/unbilled",
+		Summary:       "List the sessions no voucher bills",
+		Description:   "Attended sessions of the practice inside the window that no issued voucher bills, oldest first: the worklist of the billing screen.",
+		Tags:          []string{"billing"},
+		DefaultStatus: http.StatusOK,
+		Security:      secured,
+		Middlewares:   readGuard,
+	}, handlers.unbilledSessionsHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-voucher",
@@ -311,6 +348,43 @@ func (h *billingHandlers) listProfessionalsHandler(ctx context.Context, _ *struc
 	out.Body.Items = make([]professionalBody, 0, len(views))
 	for _, view := range views {
 		out.Body.Items = append(out.Body.Items, professionalBody{ID: view.ID, FullName: view.FullName})
+	}
+	return out, nil
+}
+
+func (h *billingHandlers) unbilledSessionsHandler(ctx context.Context, in *unbilledSessionsInput) (*unbilledSessionsOutput, error) {
+	who := identityOf(ctx)
+	from, err := parseOptionalInstant(in.From, "from")
+	if err != nil {
+		return nil, err
+	}
+	to, err := parseOptionalInstant(in.To, "to")
+	if err != nil {
+		return nil, err
+	}
+
+	views, err := h.unbilled.Execute(ctx, billingapp.UnbilledInput{
+		TenantID: who.TenantID,
+		From:     from,
+		To:       to,
+		Limit:    in.Limit,
+	})
+	if err != nil {
+		return nil, problem(ctx, h.logger, err)
+	}
+
+	out := &unbilledSessionsOutput{}
+	out.Body.Items = make([]unbilledSessionBody, 0, len(views))
+	for _, view := range views {
+		out.Body.Items = append(out.Body.Items, unbilledSessionBody{
+			ID:               view.ID,
+			PatientID:        view.PatientID,
+			PatientName:      view.PatientName,
+			ProfessionalID:   view.ProfessionalID,
+			ProfessionalName: view.ProfessionalName,
+			Modality:         view.Modality,
+			StartsAt:         view.StartsAt,
+		})
 	}
 	return out, nil
 }

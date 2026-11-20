@@ -368,6 +368,7 @@ func newHarness(t *testing.T) *harness {
 		ListVouchers:           billingapp.NewListUseCase(vouchers, scope),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(vouchers, tariffs, tenants, scope),
+		UnbilledSessions:       billingapp.NewUnbilledUseCase(vouchers, scope),
 		Professionals:          billingapp.NewProfessionalsUseCase(vouchers, scope),
 	})
 

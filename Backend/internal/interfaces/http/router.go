@@ -108,6 +108,7 @@ type Deps struct {
 	ListVouchers           *billingapp.ListUseCase
 	SearchSubjects         *billingapp.SearchSubjectsUseCase
 	PatientSessions        *billingapp.PatientSessionsUseCase
+	UnbilledSessions       *billingapp.UnbilledUseCase
 	Professionals          *billingapp.ProfessionalsUseCase
 	ListInsurers           *insurerapp.ListUseCase
 	CreateInsurer          *insurerapp.CreateUseCase
