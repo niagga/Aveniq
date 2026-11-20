@@ -103,6 +103,7 @@ func run() error {
 	clinicalGrantRepository := postgres.NewClinicalGrantRepository(pool)
 	careAccess := careapp.NewAccess(patientRepository, clinicalGrantRepository)
 	billingRepository := postgres.NewBillingRepository(pool)
+	settlementRepository := postgres.NewSettlementRepository(pool)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -182,6 +183,12 @@ func run() error {
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(billingRepository, tariffRepository, tenantRepository, transactor),
 		UnbilledSessions:       billingapp.NewUnbilledUseCase(billingRepository, transactor),
 		Professionals:          billingapp.NewProfessionalsUseCase(billingRepository, transactor),
+		SettlementInsurers:     billingapp.NewSettlementInsurersUseCase(settlementRepository, transactor),
+		PreviewSettlement:      billingapp.NewSettlementPreviewUseCase(settlementRepository, tariffRepository, tenantRepository, transactor),
+		ListSettlements:        billingapp.NewListSettlementsUseCase(settlementRepository, transactor),
+		GetSettlement:          billingapp.NewGetSettlementUseCase(settlementRepository, transactor),
+		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlementRepository, tariffRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
+		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlementRepository, transactor, auditLog, clock.New()),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),

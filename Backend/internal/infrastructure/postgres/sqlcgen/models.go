@@ -191,6 +191,41 @@ type Session struct {
 	ReplacedBy  pgtype.UUID
 }
 
+type Settlement struct {
+	ID           pgtype.UUID
+	TenantID     pgtype.UUID
+	InsurerID    pgtype.UUID
+	InsurerName  string
+	InsurerTaxID string
+	PracticeName string
+	PeriodStart  pgtype.Date
+	PeriodEnd    pgtype.Date
+	Status       string
+	CreatedBy    pgtype.UUID
+	CreatedAt    time.Time
+	VoidedBy     pgtype.UUID
+	VoidedAt     pgtype.Timestamptz
+	VoidReason   *string
+	UpdatedAt    time.Time
+}
+
+type SettlementItem struct {
+	TenantID           pgtype.UUID
+	SettlementID       pgtype.UUID
+	AppointmentID      pgtype.UUID
+	PatientID          pgtype.UUID
+	PatientName        string
+	MemberNumber       string
+	ProfessionalUserID pgtype.UUID
+	ProfessionalName   string
+	Modality           string
+	StartsAt           time.Time
+	Currency           string
+	AmountMinor        int64
+	ReleasedAt         pgtype.Timestamptz
+	CopagoMinor        int64
+}
+
 type Tariff struct {
 	ID                 pgtype.UUID
 	TenantID           pgtype.UUID

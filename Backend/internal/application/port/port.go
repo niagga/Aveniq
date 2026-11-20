@@ -351,3 +351,32 @@ type VoucherFilter struct {
 	Limit     int32
 	Offset    int32
 }
+
+// SettlementRepository persists the monthly settlements to the mutuales. A settlement and its
+// sessions are written in the caller's tenant transaction, so a settlement exists whole or not at all.
+type SettlementRepository interface {
+	// Insurer reads a mutual of the practice, active or not. A mutual the practice does not hold
+	// is billing.ErrInsurerNotVisible.
+	Insurer(ctx context.Context, insurerID string) (billing.SettlementInsurer, error)
+	// Insurers lists the active mutuales of the practice, by name.
+	Insurers(ctx context.Context) ([]billing.SettlementInsurer, error)
+	// SettlableSessions returns the attended sessions of the mutual's patients that start in
+	// [from, to) and that no active settlement liquidates, oldest first.
+	SettlableSessions(ctx context.Context, insurerID string, from, to time.Time) ([]billing.SettlableSession, error)
+	// Issue writes the settlement and its sessions. A session already in an active settlement is
+	// billing.ErrAppointmentAlreadySettled.
+	Issue(ctx context.Context, settlement billing.Settlement) (billing.Settlement, error)
+	// Void records the void of an issued settlement and releases its sessions.
+	Void(ctx context.Context, settlement billing.Settlement) (billing.Settlement, error)
+	// ByID reads one settlement with its sessions, or billing.ErrNotFound.
+	ByID(ctx context.Context, id billing.SettlementID) (billing.Settlement, error)
+	// List returns one page of settlements, newest first, each with its sessions.
+	List(ctx context.Context, filter SettlementFilter) ([]billing.Settlement, error)
+}
+
+// SettlementFilter narrows the settlements list to one mutual, when InsurerID is set.
+type SettlementFilter struct {
+	InsurerID string
+	Limit     int32
+	Offset    int32
+}

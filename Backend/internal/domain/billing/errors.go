@@ -35,6 +35,11 @@ var (
 	ErrProfessionalNotVisible = errors.New("billing: the professional is not an active professional of this practice")
 	// ErrActorNotVisible reports an issuer or voider UUID that is not in this tenant.
 	ErrActorNotVisible = errors.New("billing: the actor is not visible in this tenant scope")
+	// ErrAppointmentAlreadySettled reports a session that an active settlement already liquidates.
+	// A void of that settlement frees the session again.
+	ErrAppointmentAlreadySettled = errors.New("billing: the appointment is already in an active settlement")
+	// ErrInsurerNotVisible reports an insurer UUID that is not a mutual of this practice.
+	ErrInsurerNotVisible = errors.New("billing: the insurer is not visible in this tenant scope")
 	// ErrTenantScopeMissing reports an operation attempted without WithTenant.
 	ErrTenantScopeMissing = errors.New("billing: no tenant context: the operation must run inside WithTenant")
 )
