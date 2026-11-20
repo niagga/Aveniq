@@ -18,6 +18,7 @@ import type { Insurer } from "@/entities/insurer/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { inputClass } from "@/shared/ui/field";
 
 type PatientProfile = components["schemas"]["PatientProfileBody"];
 
@@ -482,9 +483,6 @@ export function PatientForm({
     </form>
   );
 }
-
-const inputClass =
-  "mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
 function Field({
   label,

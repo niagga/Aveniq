@@ -31,6 +31,7 @@ No toca Backend ni contratos de API. El estado de sesión, permisos y trial sigu
 | Task | Commit |
 | --- | --- |
 | T1 | `040b9e0` — tokens de control, valores oscuros y foco visible |
+| T2 | `4018b41` — shell con rail, layout privado y fin de los wrappers duplicados |
 
 ## Log
 
@@ -43,3 +44,4 @@ No toca Backend ni contratos de API. El estado de sesión, permisos y trial sigu
 - **L7** — Trabajo sobre rama `feat/shell-interfaz`, creada desde `main`. `pnpm install --frozen-lockfile` instaló lo que faltaba sin tocar `pnpm-lock.yaml` (verificado con `git diff`); `tsc --noEmit` y `pnpm build` quedaron en verde con las 11 rutas intactas antes de commitear T1.
 - **L8** — `gentle-ai-worker` no arrancó para T2: `Writer repository preparation was unavailable or its session/target changed`, dos veces, con árbol limpio y `git worktree list` normal. Es una falla del harness, no del repo. T2 se ejecuta inline y las superficies de edición se ampliaron a `Frontend/src/features/*/components/*-screen.tsx`, porque ahí vivían 4 de los 6 `← Volver al consultorio`; sin eso el criterio de aceptación (cero ocurrencias) no se cumple.
 - **L9** — Los e2e dependen de los links del dashboard (`e2e/e2.spec.ts:13`, `e2e/e4-billing.spec.ts:173-176`). Por eso la fila de 6 links se **elimina** del dashboard en lugar de convivir con el rail: duplicada, `getByRole("link", { name: "Pacientes" })` resuelve a dos elementos y falla por strict mode. El rail conserva exactamente los mismos nombres accesibles y el mismo gating por rol.
+- **L10** — Los e2e siguen **sin ejecutarse**: no hay navegadores de Playwright instalados en esta máquina (`~/AppData/Local/ms-playwright` vacío) aunque el backend conteste en `127.0.0.1:8080`. Ninguna tarea de esta feature se apoya en e2e como prueba de cierre mientras siga así; las verificaciones reales son `pnpm build`, `tsc --noEmit` y los greps de aceptación. Instalar navegadores es una decisión pendiente del usuario, no algo que este trabajo haga por su cuenta.
