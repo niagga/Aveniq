@@ -41,15 +41,15 @@ export function UserTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
           <tr>
-            <th className="px-4 py-3 font-medium">Cuenta</th>
-            <th className="px-4 py-3 font-medium">Email</th>
-            <th className="px-4 py-3 font-medium">Rol</th>
-            <th className="px-4 py-3 font-medium">Estado</th>
-            <th className="px-4 py-3 font-medium">Acciones</th>
+            <th scope="col" className="px-4 py-3 font-medium">Cuenta</th>
+            <th scope="col" className="px-4 py-3 font-medium">Email</th>
+            <th scope="col" className="px-4 py-3 font-medium">Rol</th>
+            <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+            <th scope="col" className="px-4 py-3 font-medium">Acciones</th>
           </tr>
         </thead>
         <tbody>

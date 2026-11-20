@@ -119,7 +119,7 @@ export function InsurersScreen() {
           eligen de esta lista.
         </Notice>
       ) : (
-        <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+        <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
           {actionError ? (
             <p role="alert" className="border-b border-border px-4 py-2 text-sm text-danger">
               {actionError}
@@ -128,10 +128,10 @@ export function InsurersScreen() {
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
               <tr>
-                <th className="px-4 py-3 font-medium">Mutual</th>
-                <th className="px-4 py-3 font-medium">CUIT</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">
+                <th scope="col" className="px-4 py-3 font-medium">Mutual</th>
+                <th scope="col" className="px-4 py-3 font-medium">CUIT</th>
+                <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                <th scope="col" className="px-4 py-3 font-medium">
                   <span className="sr-only">Acciones</span>
                 </th>
               </tr>

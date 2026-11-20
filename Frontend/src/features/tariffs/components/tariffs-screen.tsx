@@ -141,14 +141,14 @@ export function TariffsScreen() {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Profesional</th>
-                  <th className="px-4 py-3 font-medium">Cobertura</th>
-                  <th className="px-4 py-3 font-medium">Modalidad</th>
-                  <th className="px-4 py-3 font-medium">Moneda</th>
-                  <th className="px-4 py-3 font-medium">Vigente desde</th>
-                  <th className="px-4 py-3 text-right font-medium">Paga la mutual</th>
-                  <th className="px-4 py-3 text-right font-medium">Paga el paciente</th>
-                  <th className="px-4 py-3 text-right font-medium">Total</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Profesional</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Cobertura</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Modalidad</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Moneda</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Vigente desde</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Paga la mutual</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Paga el paciente</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">
                     <span className="sr-only">Acciones</span>
                   </th>
