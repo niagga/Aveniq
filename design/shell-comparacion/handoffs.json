@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "03-c-rail-dos-niveles.html",
+  "handoffs": {
+    "03-c-rail-dos-niveles.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-20T18:56:33.785Z",
+      "startedAt": "2026-11-20T18:58:51.972Z",
+      "implementedAt": null,
+      "note": "Implementando dirección C. T1 (tokens + foco visible) escrito, build corriendo. Siguen T2 shell y T4 facturación."
+    }
+  }
+}

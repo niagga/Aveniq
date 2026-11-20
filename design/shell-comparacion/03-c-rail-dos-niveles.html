@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq · Shell C — Rail de iconos + panel contextual</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible { outline: 2px solid #2f5d8a; outline-offset: 2px; border-radius: 2px; }
+
+      .board { width: 1440px; padding: 20px 40px 32px; }
+
+      .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+      .head h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+      .head h1 span { color: #5c6472; font-weight: 400; }
+      .head p { margin: 3px 0 0; font-size: 12px; color: #5c6472; max-width: 78ch; }
+      .same {
+        flex: none; font-size: 11px; color: #1f7a4d; font-weight: 600;
+        border: 1px solid #bfe0ce; background: #f2faf6; border-radius: 999px; padding: 3px 10px;
+      }
+
+      .controls {
+        display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+        margin: 14px 0 12px; padding: 10px 14px;
+        background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+      }
+      .controls fieldset { border: 0; margin: 0; padding: 0; display: flex; align-items: center; gap: 8px; }
+      .controls legend {
+        float: left; padding: 0 8px 0 0; font-size: 11px; font-weight: 500;
+        letter-spacing: 0.04em; text-transform: uppercase; color: #5c6472;
+      }
+      .controls label {
+        font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+        border: 1px solid #e3e6ea; color: #5c6472; background: #fff;
+      }
+      input[name="theme"], input[name="w"] { position: absolute; opacity: 0; pointer-events: none; }
+      #t-light:checked ~ .controls label[for="t-light"],
+      #t-dark:checked ~ .controls label[for="t-dark"],
+      #w-desktop:checked ~ .controls label[for="w-desktop"],
+      #w-tablet:checked ~ .controls label[for="w-tablet"],
+      #w-phone:checked ~ .controls label[for="w-phone"] {
+        border-color: #2f5d8a; background: rgba(47, 93, 138, 0.08); color: #2f5d8a; font-weight: 600;
+      }
+      #t-light:focus-visible ~ .controls label[for="t-light"],
+      #t-dark:focus-visible ~ .controls label[for="t-dark"],
+      #w-desktop:focus-visible ~ .controls label[for="w-desktop"],
+      #w-tablet:focus-visible ~ .controls label[for="w-tablet"],
+      #w-phone:focus-visible ~ .controls label[for="w-phone"] {
+        outline: 2px solid #2f5d8a; outline-offset: 2px;
+      }
+      .controls .note { margin-left: auto; font-size: 11px; color: #5c6472; }
+
+      .stage {
+        --surface: #ffffff;
+        --surface-muted: #f6f7f9;
+        --border: #e3e6ea;
+        --ink: #16181d;
+        --ink-muted: #5c6472;
+        --brand: #2f5d8a;
+        --brand-ink: #ffffff;
+        --success: #1f7a4d;
+        --warning: #8a5a00;
+        --danger: #a4232b;
+        --panel: 0.75rem;
+        --control: 0.375rem;
+      }
+
+      #t-dark:checked ~ .stage {
+        --surface: #14171c;
+        --surface-muted: #0f1115;
+        --border: #2b3139;
+        --ink: #eef1f5;
+        --ink-muted: #a4adba;
+        --brand: #6aa3d8;
+        --brand-ink: #0f1115;
+        --success: #4cc38a;
+        --warning: #e0a44a;
+        --danger: #f07178;
+      }
+
+      .frame {
+        width: 1360px; height: 742px;
+        container-type: inline-size;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+      }
+      #w-tablet:checked ~ .stage .frame { width: 768px; }
+      #w-phone:checked ~ .stage .frame { width: 390px; }
+
+      /* ---------- C. rail de iconos + panel ---------- */
+      .app {
+        display: grid;
+        grid-template-columns: 64px 300px 1fr;
+        height: 100%;
+        color: var(--ink);
+      }
+
+      .iconrail {
+        background: var(--surface); border-right: 1px solid var(--border);
+        display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 0;
+        order: 1;
+      }
+      .iconrail .logo {
+        width: 32px; height: 32px; border-radius: var(--control);
+        background: var(--brand); color: var(--brand-ink);
+        display: grid; place-items: center; font-weight: 700; font-size: 12px; margin-bottom: 8px;
+      }
+      .iconrail a {
+        position: relative; width: 42px; height: 38px; border-radius: var(--control);
+        display: grid; place-items: center; color: var(--ink-muted); text-decoration: none;
+      }
+      .iconrail a:hover { background: var(--surface-muted); color: var(--ink); }
+      .iconrail a[aria-current="page"] { background: rgba(47, 93, 138, 0.1); color: var(--brand); }
+      .iconrail a[aria-current="page"]::before {
+        content: ""; position: absolute; left: -11px; top: 7px; bottom: 7px;
+        width: 2px; border-radius: 2px; background: var(--brand);
+      }
+      .iconrail .dot {
+        position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;
+        border-radius: 999px; background: var(--brand);
+      }
+      .iconrail .spacer { margin-top: auto; }
+      .cmd {
+        width: 42px; height: 38px; border: 1px solid var(--border); background: var(--surface);
+        border-radius: var(--control); color: var(--ink-muted); font-family: inherit;
+        font-size: 10.5px; font-weight: 600; cursor: pointer;
+      }
+      .avatar {
+        width: 28px; height: 28px; border-radius: 999px; background: var(--surface-muted);
+        border: 1px solid var(--border); color: var(--ink-muted);
+        display: grid; place-items: center; font-size: 9.5px; font-weight: 600; flex: none; margin-top: 8px;
+      }
+
+      .panel-col {
+        background: var(--surface); border-right: 1px solid var(--border);
+        display: flex; flex-direction: column; min-width: 0; order: 2;
+      }
+      .panel-head { padding: 12px 12px 9px; border-bottom: 1px solid var(--border); display: grid; gap: 9px; }
+      .panel-head .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .panel-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+      .trial-inline {
+        border: 1px solid rgba(138, 90, 0, 0.3); background: rgba(138, 90, 0, 0.07); color: var(--warning);
+        border-radius: var(--control); padding: 6px 8px; font-size: 10px;
+      }
+      .views { flex: 1; overflow: hidden; padding: 6px; display: grid; gap: 2px; align-content: start; }
+      .views a {
+        display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+        border-radius: var(--control); text-decoration: none; color: var(--ink); font-size: 12.5px;
+      }
+      .views a:hover { background: var(--surface-muted); }
+      .views a[aria-current="true"] {
+        background: rgba(47, 93, 138, 0.1); font-weight: 600; box-shadow: inset 2px 0 0 var(--brand);
+      }
+      .views a .n { margin-left: auto; font-size: 10.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+      .views a[aria-current="true"] .n { color: var(--brand); font-weight: 600; }
+      .views h3 {
+        margin: 0; padding: 10px 9px 4px; font-size: 10px; font-weight: 500;
+        text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted);
+      }
+      .panel-foot { border-top: 1px solid var(--border); padding: 8px 12px; font-size: 10.5px; color: var(--ink-muted); }
+
+      .main { display: flex; flex-direction: column; min-width: 0; order: 3; }
+      .topbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 18px;
+        padding: 13px 20px; background: var(--surface); border-bottom: 1px solid var(--border); flex: none;
+      }
+      .topbar h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+      .topbar p { margin: 1px 0 0; font-size: 11.5px; color: var(--ink-muted); }
+      .actions { display: flex; gap: 7px; flex: none; }
+      .btn {
+        border-radius: var(--control); border: 1px solid var(--border); background: var(--surface);
+        color: var(--ink); font-size: 11.5px; font-weight: 500; padding: 5px 10px;
+        font-family: inherit; cursor: pointer; white-space: nowrap;
+      }
+      .btn-primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-size: 12.5px; padding: 6px 12px; }
+
+      .content { flex: 1; padding: 16px 18px 18px; display: grid; gap: 12px; overflow: hidden; align-content: start; min-height: 0; }
+
+      .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .fact { background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel); padding: 9px 11px; }
+      .fact span { display: block; font-size: 10px; color: var(--ink-muted); }
+      .fact strong { display: block; margin-top: 1px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+      .fact em { display: block; font-size: 10px; font-style: normal; color: var(--ink-muted); }
+
+      .filterbar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+      .chip {
+        border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+        padding: 4px 11px; font-size: 11.5px; color: var(--ink-muted); white-space: nowrap;
+      }
+      .chip[aria-pressed="true"] { border-color: var(--brand); background: rgba(47, 93, 138, 0.1); color: var(--brand); font-weight: 600; }
+      .url-note { margin-left: auto; font-size: 10.5px; color: var(--ink-muted); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+
+      .table-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel); overflow: hidden; }
+      .table-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+      .table-panel > header strong { font-size: 12.5px; font-weight: 600; }
+      .table-panel > header small { font-size: 10.5px; color: var(--ink-muted); }
+      table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      thead { background: var(--surface-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+      th { padding: 8px 13px; font-weight: 500; text-align: left; }
+      td { padding: 9px 13px; border-top: 1px solid var(--border); }
+      .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+      .badge {
+        display: inline-block; border-radius: 999px; padding: 1px 7px; font-size: 10px;
+        border: 1px solid var(--border); background: var(--surface-muted); color: var(--ink-muted); white-space: nowrap;
+      }
+      .badge-warn { border-color: rgba(138, 90, 0, 0.3); background: rgba(138, 90, 0, 0.07); color: var(--warning); }
+      .rowaction {
+        border: 1px solid var(--border); background: var(--surface); border-radius: var(--control);
+        padding: 3px 9px; font-size: 10.5px; font-weight: 500; font-family: inherit; cursor: pointer; color: var(--ink);
+      }
+      .foot-note { margin: 0; padding: 8px 13px; border-top: 1px solid var(--border); font-size: 10.5px; color: var(--ink-muted); }
+
+      /* ---------- responsive ---------- */
+      @container (max-width: 1080px) {
+        .app { grid-template-columns: 60px 240px 1fr; }
+        .views a { font-size: 12px; padding: 6px 8px; }
+        th, td { padding: 7px 10px; }
+      }
+
+      @container (max-width: 900px) {
+        .app { grid-template-columns: 58px 1fr; }
+        .panel-col { display: none; }
+        .content { padding: 12px; }
+        .topbar { padding: 11px 14px; }
+      }
+
+      @container (max-width: 736px) {
+        .app { grid-template-columns: 1fr; }
+        .iconrail {
+          order: 4; flex-direction: row; border-right: 0; border-top: 1px solid var(--border);
+          padding: 0; gap: 0;
+        }
+        .iconrail .logo, .iconrail .spacer, .iconrail .cmd, .iconrail .avatar { display: none; }
+        .iconrail a { flex: 1; width: auto; height: 46px; border-radius: 0; }
+        .iconrail a[aria-current="page"]::before { left: 10px; right: 10px; top: 0; bottom: auto; width: auto; height: 2px; }
+        .iconrail a:nth-of-type(n+5) { display: none; }
+        .main { order: 3; }
+        .content { padding: 10px; gap: 10px; }
+        .topbar { padding: 10px 12px; }
+        .topbar h2 { font-size: 15px; }
+        .actions .btn:not(.btn-primary) { display: none; }
+        .facts { grid-template-columns: 1fr; gap: 8px; }
+        .fact { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; }
+        .fact span { flex: none; }
+        .fact strong { font-size: 14px; }
+        .fact em { margin-left: auto; }
+        .url-note { display: none; }
+        .table-panel > header small { display: none; }
+        .hide-narrow { display: none; }
+        th, td { padding: 7px 10px; }
+      }
+
+      /* ---------- notes ---------- */
+      .notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+      .note { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px; padding: 11px 14px; font-size: 11.5px; color: #5c6472; }
+      .note strong { display: block; color: #16181d; font-size: 11.5px; margin-bottom: 5px; }
+      .note code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; color: #16181d; }
+      .dark-caveat { grid-column: 1 / -1; font-size: 11px; color: #8a5a00; }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <div class="head">
+        <div>
+          <h1>C — Rail de iconos + panel contextual <span>· 64 px + 300 px</span></h1>
+          <p>
+            Misma pantalla, mismo contenido y mismos estados en A, B y C: sólo cambia la estructura del
+            shell. Ancho y tema son toggles reales — el frame responde con <span class="mono">@container</span>,
+            no es una captura.
+          </p>
+        </div>
+        <span class="same">Contenido idéntico en A · B · C</span>
+      </div>
+
+      <input type="radio" name="theme" id="t-light" checked />
+      <input type="radio" name="theme" id="t-dark" />
+      <input type="radio" name="w" id="w-desktop" checked />
+      <input type="radio" name="w" id="w-tablet" />
+      <input type="radio" name="w" id="w-phone" />
+
+      <div class="controls">
+        <fieldset>
+          <legend>Tema</legend>
+          <label for="t-light">Claro</label>
+          <label for="t-dark">Oscuro</label>
+        </fieldset>
+        <fieldset>
+          <legend>Ancho</legend>
+          <label for="w-desktop">Escritorio 1360</label>
+          <label for="w-tablet">Tablet 768</label>
+          <label for="w-phone">Móvil 390</label>
+        </fieldset>
+        <span class="note">El segundo nivel es de la pantalla: vistas guardadas, filtros con estado.</span>
+      </div>
+
+      <div class="stage">
+        <div class="frame">
+          <div class="app">
+            <nav class="iconrail" aria-label="Secciones del consultorio">
+              <div class="logo" title="Consultorio San Martín">A</div>
+              <a href="#" title="Inicio" aria-label="Inicio">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z" /></svg>
+              </a>
+              <a href="#" title="Agenda" aria-label="Agenda">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1" /><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" /></svg>
+              </a>
+              <a href="#" title="Pacientes" aria-label="Pacientes">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" /></svg>
+              </a>
+              <a href="#" title="Facturación — 7 pendientes" aria-label="Facturación, 7 sesiones sin facturar" aria-current="page">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12M5 10h3" /></svg>
+                <span class="dot" aria-hidden="true"></span>
+              </a>
+              <a href="#" title="Tarifario" aria-label="Tarifario">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h6" /><circle cx="12.5" cy="12" r="1.6" /></svg>
+              </a>
+              <a href="#" title="Mutuales" aria-label="Mutuales">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M8 2.5 13.5 5v3.2c0 2.6-2.2 4.6-5.5 5.3-3.3-.7-5.5-2.7-5.5-5.3V5L8 2.5Z" /></svg>
+              </a>
+              <a href="#" title="Usuarios" aria-label="Usuarios">
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="6" cy="5.5" r="2.2" /><path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" /><path d="M11 5.5h3M12.5 4v3" /></svg>
+              </a>
+              <span class="spacer"></span>
+              <button class="cmd" aria-label="Abrir paleta de comandos">⌘K</button>
+              <span class="avatar" title="Dra. Mariana Ferreyra · dueña">MF</span>
+            </nav>
+
+            <div class="panel-col">
+              <div class="panel-head">
+                <div class="line">
+                  <h2>Facturación</h2>
+                </div>
+                <div class="trial-inline">Trial vence en 3 días · elegir plan</div>
+              </div>
+
+              <div class="views">
+                <h3>Vistas</h3>
+                <a href="#" aria-current="true">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12" /></svg>
+                  Sin facturar <span class="n">7</span>
+                </a>
+                <a href="#">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5" /></svg>
+                  Emitidos hoy <span class="n">3</span>
+                </a>
+                <a href="#">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.2l2 1.3" /></svg>
+                  Vencen hoy <span class="n">1</span>
+                </a>
+                <a href="#">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                  Anulados <span class="n">2</span>
+                </a>
+
+                <h3>Lotes recientes</h3>
+                <a href="#">Semana 11 – 17 nov <span class="n">18</span></a>
+                <a href="#">Semana 04 – 10 nov <span class="n">23</span></a>
+                <a href="#">Octubre completo <span class="n">96</span></a>
+              </div>
+
+              <div class="panel-foot">2 filtros activos · guardados en la URL</div>
+            </div>
+
+            <div class="main">
+              <div class="topbar">
+                <div>
+                  <h2>Sin facturar</h2>
+                  <p>Semana 18 – 24 nov · 7 sesiones esperando voucher</p>
+                </div>
+                <div class="actions">
+                  <button class="btn">Exportar</button>
+                  <button class="btn btn-primary">Emitir voucher</button>
+                </div>
+              </div>
+
+              <div class="content">
+                <div class="facts">
+                  <div class="fact"><span>Sin facturar</span><strong>7</strong><em>4 de esta semana</em></div>
+                  <div class="fact"><span>Pendiente de cobro</span><strong>$ 312.000</strong><em>incluye copagos</em></div>
+                  <div class="fact"><span>Emitidos hoy</span><strong>3</strong><em>último 11:42</em></div>
+                </div>
+
+                <div class="filterbar" role="group" aria-label="Filtros de la lista">
+                  <span class="chip" aria-pressed="true">Sin facturar</span>
+                  <span class="chip" aria-pressed="false">Emitidos</span>
+                  <span class="chip" aria-pressed="false">Anulados</span>
+                  <span class="url-note">Filtros en la URL: <span class="mono">?estado=sin-facturar&amp;desde=2026-11-18</span></span>
+                </div>
+
+                <div class="table-panel">
+                  <header>
+                    <strong>Sesiones sin facturar</strong>
+                    <small>Ordenadas por fecha de atención</small>
+                  </header>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Fecha</th>
+                        <th scope="col">Paciente</th>
+                        <th scope="col" class="hide-narrow">Profesional</th>
+                        <th scope="col" class="hide-narrow">Cobertura</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col" class="num">Monto</th>
+                        <th scope="col"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="mono">18/11</td>
+                        <td>Lucía Bermúdez</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">OSDE 210 · titular</td>
+                        <td><span class="badge">Sin voucher</span></td>
+                        <td class="num">$ 48.000</td>
+                        <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">18/11</td>
+                        <td>Ramiro Ocampo</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Dr. Sosa</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Swiss Medical · adherente</td>
+                        <td><span class="badge">Sin voucher</span></td>
+                        <td class="num">$ 36.000</td>
+                        <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">17/11</td>
+                        <td>Estela Quiroga</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Particular</td>
+                        <td><span class="badge badge-warn">Vence hoy</span></td>
+                        <td class="num">$ 52.000</td>
+                        <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">16/11</td>
+                        <td>Julián Arriaga</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">Lic. Peralta</td>
+                        <td class="hide-narrow" style="color: var(--ink-muted)">IOMA · titular</td>
+                        <td><span class="badge">Sin voucher</span></td>
+                        <td class="num">$ 29.500</td>
+                        <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p class="foot-note">Mostrando 4 de 7 · paginado real, no un tope silencioso</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <strong>Qué gana</strong>
+          Las vistas guardadas son navegación real, no chips sueltos: la pantalla estrena segundo nivel
+          propio y el mismo patrón sirve para Pacientes (lista → ficha) y Agenda (profesional → semana).
+        </div>
+        <div class="note">
+          <strong>Qué cuesta</strong>
+          364 px de chrome antes del contenido y tres columnas que mantener. Para quien entra tres
+          veces al día a lo mismo, es profundidad extra sin beneficio.
+        </div>
+        <div class="note">
+          <strong>Angosto</strong>
+          1080 px: panel a 240 px. 900 px: el panel desaparece y las vistas vuelven a chips. 736 px:
+          rail a barra inferior, dos columnas secundarias fuera, acción primaria intacta.
+        </div>
+        <p class="dark-caveat">
+          Oscuro: los 10 tokens oscuros son una <strong>propuesta</strong> derivada del set claro
+          (<span class="mono">--brand #6aa3d8</span>, <span class="mono">--brand-ink #0f1115</span>), no
+          existen en <span class="mono">globals.css</span>. Ratios calculados: texto entre 6.4:1 y 16:1;
+          el borde sigue bajo 3:1 como límite de control, igual que en claro.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

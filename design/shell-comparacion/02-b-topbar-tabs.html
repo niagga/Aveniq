@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq · Shell B — Topbar con tabs</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible { outline: 2px solid #2f5d8a; outline-offset: 2px; border-radius: 2px; }
+
+      .board { width: 1440px; padding: 20px 40px 32px; }
+
+      .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+      .head h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+      .head h1 span { color: #5c6472; font-weight: 400; }
+      .head p { margin: 3px 0 0; font-size: 12px; color: #5c6472; max-width: 78ch; }
+      .same {
+        flex: none; font-size: 11px; color: #1f7a4d; font-weight: 600;
+        border: 1px solid #bfe0ce; background: #f2faf6; border-radius: 999px; padding: 3px 10px;
+      }
+
+      .controls {
+        display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+        margin: 14px 0 12px; padding: 10px 14px;
+        background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+      }
+      .controls fieldset { border: 0; margin: 0; padding: 0; display: flex; align-items: center; gap: 8px; }
+      .controls legend {
+        float: left; padding: 0 8px 0 0; font-size: 11px; font-weight: 500;
+        letter-spacing: 0.04em; text-transform: uppercase; color: #5c6472;
+      }
+      .controls label {
+        font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+        border: 1px solid #e3e6ea; color: #5c6472; background: #fff;
+      }
+      input[name="theme"], input[name="w"] { position: absolute; opacity: 0; pointer-events: none; }
+      #t-light:checked ~ .controls label[for="t-light"],
+      #t-dark:checked ~ .controls label[for="t-dark"],
+      #w-desktop:checked ~ .controls label[for="w-desktop"],
+      #w-tablet:checked ~ .controls label[for="w-tablet"],
+      #w-phone:checked ~ .controls label[for="w-phone"] {
+        border-color: #2f5d8a; background: rgba(47, 93, 138, 0.08); color: #2f5d8a; font-weight: 600;
+      }
+      #t-light:focus-visible ~ .controls label[for="t-light"],
+      #t-dark:focus-visible ~ .controls label[for="t-dark"],
+      #w-desktop:focus-visible ~ .controls label[for="w-desktop"],
+      #w-tablet:focus-visible ~ .controls label[for="w-tablet"],
+      #w-phone:focus-visible ~ .controls label[for="w-phone"] {
+        outline: 2px solid #2f5d8a; outline-offset: 2px;
+      }
+      .controls .note { margin-left: auto; font-size: 11px; color: #5c6472; }
+
+      .stage {
+        --surface: #ffffff;
+        --surface-muted: #f6f7f9;
+        --border: #e3e6ea;
+        --ink: #16181d;
+        --ink-muted: #5c6472;
+        --brand: #2f5d8a;
+        --brand-ink: #ffffff;
+        --success: #1f7a4d;
+        --warning: #8a5a00;
+        --danger: #a4232b;
+        --panel: 0.75rem;
+        --control: 0.375rem;
+      }
+
+      #t-dark:checked ~ .stage {
+        --surface: #14171c;
+        --surface-muted: #0f1115;
+        --border: #2b3139;
+        --ink: #eef1f5;
+        --ink-muted: #a4adba;
+        --brand: #6aa3d8;
+        --brand-ink: #0f1115;
+        --success: #4cc38a;
+        --warning: #e0a44a;
+        --danger: #f07178;
+      }
+
+      .frame {
+        width: 1360px; height: 742px;
+        container-type: inline-size;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+      }
+      #w-tablet:checked ~ .stage .frame { width: 768px; }
+      #w-phone:checked ~ .stage .frame { width: 390px; }
+
+      /* ---------- B. topbar con tabs ---------- */
+      .app { display: flex; flex-direction: column; height: 100%; color: var(--ink); }
+
+      .topbar {
+        display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 16px;
+        background: var(--surface); border-bottom: 1px solid var(--border); flex: none;
+      }
+      .brand { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+      .brand .mark { width: 21px; height: 21px; border-radius: var(--control); background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+      .practice-name {
+        font-size: 11.5px; color: var(--ink-muted); white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+      }
+
+      .tabs-primary { display: flex; align-items: stretch; height: 100%; margin-left: 6px; overflow: hidden; }
+      .tabs-primary a {
+        display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12.5px;
+        color: var(--ink-muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap;
+      }
+      .tabs-primary a:hover { color: var(--ink); background: var(--surface-muted); }
+      .tabs-primary a[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--brand); }
+      .count {
+        border-radius: 999px; font-size: 10px; font-weight: 600; padding: 0 6px;
+        border: 1px solid rgba(47, 93, 138, 0.3); background: rgba(47, 93, 138, 0.1); color: var(--brand);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+      .trial-pill {
+        border: 1px solid rgba(138, 90, 0, 0.3); background: rgba(138, 90, 0, 0.07);
+        color: var(--warning); border-radius: 999px; padding: 2px 9px; font-size: 10.5px; font-weight: 500;
+      }
+      .me { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+      .avatar {
+        width: 25px; height: 25px; border-radius: 999px; background: var(--surface-muted);
+        border: 1px solid var(--border); color: var(--ink-muted);
+        display: grid; place-items: center; font-size: 9.5px; font-weight: 600; flex: none;
+      }
+
+      .contextbar {
+        display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px;
+        background: var(--surface); border-bottom: 1px solid var(--border); flex: none;
+      }
+      .contextbar h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+      .contextbar .sub { font-size: 11.5px; color: var(--ink-muted); }
+      .segmented { display: flex; border: 1px solid var(--border); border-radius: var(--control); overflow: hidden; }
+      .segmented span { padding: 4px 9px; font-size: 11.5px; color: var(--ink-muted); }
+      .segmented span[aria-pressed="true"] { background: var(--surface-muted); color: var(--ink); font-weight: 600; }
+      .btn {
+        border-radius: var(--control); border: 1px solid var(--border); background: var(--surface);
+        color: var(--ink); font-size: 11.5px; font-weight: 500; padding: 5px 10px;
+        font-family: inherit; cursor: pointer; white-space: nowrap;
+      }
+      .btn-primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-size: 12.5px; padding: 6px 12px; }
+      .contextbar .actions { margin-left: auto; display: flex; gap: 7px; }
+      .section-picker {
+        display: none; align-items: center; gap: 8px;
+        border: 1px solid var(--border); border-radius: var(--control);
+        background: var(--surface); padding: 4px 9px; font-size: 12px; font-weight: 600;
+      }
+
+      .content {
+        flex: 1; padding: 16px 16px 18px; display: grid; gap: 13px;
+        overflow: hidden; align-content: start; min-height: 0;
+      }
+
+      .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .fact { background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel); padding: 10px 12px; }
+      .fact span { display: block; font-size: 10.5px; color: var(--ink-muted); }
+      .fact strong { display: block; margin-top: 1px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+      .fact em { display: block; font-size: 10.5px; font-style: normal; color: var(--ink-muted); }
+
+      .filterbar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+      .chip {
+        border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+        padding: 4px 11px; font-size: 11.5px; color: var(--ink-muted); white-space: nowrap;
+      }
+      .chip[aria-pressed="true"] { border-color: var(--brand); background: rgba(47, 93, 138, 0.1); color: var(--brand); font-weight: 600; }
+      .url-note { margin-left: auto; font-size: 10.5px; color: var(--ink-muted); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+
+      .table-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel); overflow: hidden; }
+      .table-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+      .table-panel > header strong { font-size: 12.5px; font-weight: 600; }
+      .table-panel > header small { font-size: 10.5px; color: var(--ink-muted); }
+      table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      thead { background: var(--surface-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+      th { padding: 8px 14px; font-weight: 500; text-align: left; }
+      td { padding: 9px 14px; border-top: 1px solid var(--border); }
+      .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+      .badge {
+        display: inline-block; border-radius: 999px; padding: 1px 7px; font-size: 10px;
+        border: 1px solid var(--border); background: var(--surface-muted); color: var(--ink-muted); white-space: nowrap;
+      }
+      .badge-warn { border-color: rgba(138, 90, 0, 0.3); background: rgba(138, 90, 0, 0.07); color: var(--warning); }
+      .rowaction {
+        border: 1px solid var(--border); background: var(--surface); border-radius: var(--control);
+        padding: 3px 9px; font-size: 10.5px; font-weight: 500; font-family: inherit; cursor: pointer; color: var(--ink);
+      }
+      .foot-note { margin: 0; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 10.5px; color: var(--ink-muted); }
+
+      /* ---------- responsive ---------- */
+      @container (max-width: 1080px) {
+        .practice-name { display: none; }
+        .tabs-primary a { padding: 0 8px; font-size: 12px; }
+      }
+
+      @container (max-width: 900px) {
+        .tabs-primary { overflow-x: auto; }
+        .tabs-primary a { padding: 0 7px; }
+        .content { padding: 12px; }
+        th, td { padding: 7px 11px; }
+      }
+
+      @container (max-width: 736px) {
+        .tabs-primary { display: none; }
+        .section-picker { display: flex; }
+        .topbar { gap: 10px; height: 48px; padding: 0 12px; }
+        .me span.name { display: none; }
+        .contextbar { height: auto; padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+        .contextbar h2 { font-size: 15px; }
+        .segmented, .contextbar .sub, .actions .btn:not(.btn-primary) { display: none; }
+        .content { padding: 10px; gap: 10px; }
+        .facts { grid-template-columns: 1fr; gap: 8px; }
+        .fact { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; }
+        .fact span { flex: none; }
+        .fact strong { font-size: 14px; }
+        .fact em { margin-left: auto; }
+        .url-note { display: none; }
+        .table-panel > header small { display: none; }
+        .hide-narrow { display: none; }
+        th, td { padding: 7px 10px; }
+      }
+
+      /* ---------- notes ---------- */
+      .notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+      .note { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px; padding: 11px 14px; font-size: 11.5px; color: #5c6472; }
+      .note strong { display: block; color: #16181d; font-size: 11.5px; margin-bottom: 5px; }
+      .note code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; color: #16181d; }
+      .dark-caveat { grid-column: 1 / -1; font-size: 11px; color: #8a5a00; }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <div class="head">
+        <div>
+          <h1>B — Topbar con tabs <span>· cero ancho robado</span></h1>
+          <p>
+            Misma pantalla, mismo contenido y mismos estados en A, B y C: sólo cambia la estructura del
+            shell. Ancho y tema son toggles reales — el frame responde con <span class="mono">@container</span>,
+            no es una captura.
+          </p>
+        </div>
+        <span class="same">Contenido idéntico en A · B · C</span>
+      </div>
+
+      <input type="radio" name="theme" id="t-light" checked />
+      <input type="radio" name="theme" id="t-dark" />
+      <input type="radio" name="w" id="w-desktop" checked />
+      <input type="radio" name="w" id="w-tablet" />
+      <input type="radio" name="w" id="w-phone" />
+
+      <div class="controls">
+        <fieldset>
+          <legend>Tema</legend>
+          <label for="t-light">Claro</label>
+          <label for="t-dark">Oscuro</label>
+        </fieldset>
+        <fieldset>
+          <legend>Ancho</legend>
+          <label for="w-desktop">Escritorio 1360</label>
+          <label for="w-tablet">Tablet 768</label>
+          <label for="w-phone">Móvil 390</label>
+        </fieldset>
+        <span class="note">Todo el ancho para la tabla; la barra contextual es de la pantalla.</span>
+      </div>
+
+      <div class="stage">
+        <div class="frame">
+          <div class="app">
+            <div class="topbar">
+              <div class="brand"><span class="mark">A</span> Aveniq</div>
+              <span class="practice-name">Consultorio San Martín · Plan Profesional</span>
+
+              <nav class="tabs-primary" aria-label="Secciones del consultorio">
+                <a href="#">Inicio</a>
+                <a href="#">Agenda</a>
+                <a href="#">Pacientes</a>
+                <a href="#" aria-current="page">Facturación <span class="count" aria-label="7 sesiones sin facturar">7</span></a>
+                <a href="#">Tarifario</a>
+                <a href="#">Mutuales</a>
+                <a href="#">Usuarios</a>
+              </nav>
+
+              <div class="section-picker" aria-label="Sección actual">Facturación ▾</div>
+
+              <div class="topbar-right">
+                <span class="trial-pill">Trial · 3 días</span>
+                <span class="me"><span class="avatar">MF</span><span class="name">Dra. Ferreyra</span></span>
+              </div>
+            </div>
+
+            <div class="contextbar">
+              <h2>Facturación</h2>
+              <span class="sub">Semana 18 – 24 nov · 7 esperando voucher</span>
+              <div class="segmented" role="group" aria-label="Vista">
+                <span aria-pressed="true">Pendientes</span>
+                <span aria-pressed="false">Emitidos</span>
+              </div>
+              <div class="actions">
+                <button class="btn">Exportar</button>
+                <button class="btn btn-primary">Emitir voucher</button>
+              </div>
+            </div>
+
+            <div class="content">
+              <div class="facts">
+                <div class="fact"><span>Sin facturar</span><strong>7</strong><em>4 de esta semana</em></div>
+                <div class="fact"><span>Pendiente de cobro</span><strong>$ 312.000</strong><em>incluye copagos</em></div>
+                <div class="fact"><span>Emitidos hoy</span><strong>3</strong><em>último 11:42</em></div>
+              </div>
+
+              <div class="filterbar" role="group" aria-label="Filtros de la lista">
+                <span class="chip" aria-pressed="true">Sin facturar</span>
+                <span class="chip" aria-pressed="false">Emitidos</span>
+                <span class="chip" aria-pressed="false">Anulados</span>
+                <span class="url-note">Filtros en la URL: <span class="mono">?estado=sin-facturar&amp;desde=2026-11-18</span></span>
+              </div>
+
+              <div class="table-panel">
+                <header>
+                  <strong>Sesiones sin facturar</strong>
+                  <small>Ordenadas por fecha de atención</small>
+                </header>
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Fecha</th>
+                      <th scope="col">Paciente</th>
+                      <th scope="col" class="hide-narrow">Profesional</th>
+                      <th scope="col" class="hide-narrow">Cobertura</th>
+                      <th scope="col">Estado</th>
+                      <th scope="col" class="num">Monto</th>
+                      <th scope="col"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="mono">18/11</td>
+                      <td>Lucía Bermúdez</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">OSDE 210 · titular</td>
+                      <td><span class="badge">Sin voucher</span></td>
+                      <td class="num">$ 48.000</td>
+                      <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">18/11</td>
+                      <td>Ramiro Ocampo</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Dr. Sosa</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Swiss Medical · adherente</td>
+                      <td><span class="badge">Sin voucher</span></td>
+                      <td class="num">$ 36.000</td>
+                      <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">17/11</td>
+                      <td>Estela Quiroga</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Dra. Ferreyra</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Particular</td>
+                      <td><span class="badge badge-warn">Vence hoy</span></td>
+                      <td class="num">$ 52.000</td>
+                      <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">16/11</td>
+                      <td>Julián Arriaga</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">Lic. Peralta</td>
+                      <td class="hide-narrow" style="color: var(--ink-muted)">IOMA · titular</td>
+                      <td><span class="badge">Sin voucher</span></td>
+                      <td class="num">$ 29.500</td>
+                      <td style="text-align: right"><button class="rowaction">Emitir</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="foot-note">Mostrando 4 de 7 · paginado real, no un tope silencioso</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <strong>Qué gana</strong>
+          1360 px íntegros para la tabla y la grilla semanal; cada pantalla puede tener su propia barra
+          contextual con acciones y vistas, sin tocar el shell.
+        </div>
+        <div class="note">
+          <strong>Qué cuesta</strong>
+          Siete secciones en una sola fila: al agregar Reportes o el dashboard de T59, la fila desborda
+          o hay que meter un menú "Más". El trial compite por espacio con el usuario.
+        </div>
+        <div class="note">
+          <strong>Angosto</strong>
+          900 px: los tabs pasan a scroll horizontal con la activa visible. 736 px: los tabs se
+          reemplazan por un selector de sección; la acción primaria se mantiene, el resto se pliega.
+        </div>
+        <p class="dark-caveat">
+          Oscuro: los 10 tokens oscuros son una <strong>propuesta</strong> derivada del set claro
+          (<span class="mono">--brand #6aa3d8</span>, <span class="mono">--brand-ink #0f1115</span>), no
+          existen en <span class="mono">globals.css</span>. Ratios calculados: texto entre 6.4:1 y 16:1;
+          el borde sigue bajo 3:1 como límite de control, igual que en claro.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

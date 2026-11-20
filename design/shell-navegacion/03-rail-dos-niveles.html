@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq · Shell 03 — Rail de iconos + panel contextual</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      :root {
+        --surface: #ffffff;
+        --surface-muted: #f6f7f9;
+        --border: #e3e6ea;
+        --ink: #16181d;
+        --ink-muted: #5c6472;
+        --brand: #2f5d8a;
+        --brand-ink: #ffffff;
+        --success: #1f7a4d;
+        --warning: #8a5a00;
+        --danger: #a4232b;
+        --panel: 0.75rem;
+        --control: 0.375rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--surface-muted);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .board {
+        width: 1440px;
+        padding: 24px 40px 40px;
+      }
+
+      .anno {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 32px;
+        padding-bottom: 16px;
+      }
+
+      .anno h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .anno h1 span {
+        color: var(--ink-muted);
+        font-weight: 400;
+      }
+
+      .anno p {
+        margin: 0;
+        max-width: 74ch;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .tag {
+        display: inline-block;
+        border: 1px solid color-mix(in srgb, var(--success) 30%, white);
+        background: color-mix(in srgb, var(--success) 5%, white);
+        color: var(--success);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      /* ---------- app frame ---------- */
+      .app {
+        display: grid;
+        grid-template-columns: 68px 320px 1fr;
+        height: 748px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+      }
+
+      /* ---------- icon rail ---------- */
+      .iconrail {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 12px 0;
+      }
+
+      .iconrail .logo {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--control);
+        background: var(--brand);
+        color: var(--brand-ink);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 13px;
+        margin-bottom: 10px;
+      }
+
+      .iconrail a {
+        position: relative;
+        width: 44px;
+        height: 40px;
+        border-radius: var(--control);
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+        text-decoration: none;
+      }
+
+      .iconrail a:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .iconrail a[aria-current="page"] {
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        color: var(--brand);
+      }
+
+      .iconrail a[aria-current="page"]::before {
+        content: "";
+        position: absolute;
+        left: -12px;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 2px;
+        background: var(--brand);
+      }
+
+      .iconrail .dot {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--brand);
+      }
+
+      .iconrail .spacer {
+        margin-top: auto;
+      }
+
+      .cmd {
+        width: 44px;
+        height: 40px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: var(--control);
+        color: var(--ink-muted);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        font-weight: 600;
+        margin-top: 8px;
+      }
+
+      /* ---------- second panel ---------- */
+      .panel-col {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .panel-head {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid var(--border);
+        display: grid;
+        gap: 10px;
+      }
+
+      .panel-head .line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .panel-head h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .count {
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-muted);
+        color: var(--ink-muted);
+        font-size: 11px;
+        padding: 0 7px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--ink-muted);
+        background: var(--surface);
+      }
+
+      .search kbd {
+        margin-left: auto;
+        font-family: inherit;
+        font-size: 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 4px;
+        color: var(--ink-muted);
+      }
+
+      .list {
+        flex: 1;
+        overflow: hidden;
+        padding: 6px;
+        display: grid;
+        gap: 2px;
+        align-content: start;
+      }
+
+      .list a {
+        display: grid;
+        gap: 1px;
+        padding: 8px 10px;
+        border-radius: var(--control);
+        text-decoration: none;
+        color: var(--ink);
+        font-size: 13px;
+      }
+
+      .list a:hover {
+        background: var(--surface-muted);
+      }
+
+      .list a[aria-current="true"] {
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        box-shadow: inset 2px 0 0 var(--brand);
+      }
+
+      .list a b {
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .list a small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .list .pill {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-radius: 999px;
+        padding: 0 5px;
+        border: 1px solid var(--border);
+        color: var(--ink-muted);
+      }
+
+      .list-foot {
+        border-top: 1px solid var(--border);
+        padding: 9px 14px;
+        font-size: 11px;
+        color: var(--ink-muted);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      /* ---------- detail ---------- */
+      .detail {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .detail-top {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-top .who h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .detail-top .who p {
+        margin: 1px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .detail-top .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn {
+        border-radius: var(--control);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 500;
+        padding: 6px 11px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: var(--brand-ink);
+        font-size: 13px;
+        padding: 7px 13px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 2px;
+        padding: 0 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .tabs a {
+        padding: 9px 12px;
+        font-size: 12px;
+        color: var(--ink-muted);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+      }
+
+      .tabs a[aria-selected="true"] {
+        color: var(--ink);
+        font-weight: 600;
+        border-bottom-color: var(--brand);
+      }
+
+      .detail-body {
+        flex: 1;
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        align-content: start;
+        overflow: hidden;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 14px 16px;
+      }
+
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+      }
+
+      .kv {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        font-size: 13px;
+      }
+
+      .kv div {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        border-top: 1px solid var(--border);
+        padding-top: 7px;
+      }
+
+      .kv div:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .kv dt {
+        color: var(--ink-muted);
+      }
+
+      .kv dd {
+        margin: 0;
+        text-align: right;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 11px;
+        border: 1px solid color-mix(in srgb, var(--success) 30%, white);
+        background: color-mix(in srgb, var(--success) 5%, white);
+        color: var(--success);
+      }
+
+      .record-note {
+        grid-column: 1 / -1;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--brand);
+        background: var(--surface);
+        border-radius: var(--control);
+        padding: 10px 14px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .record-note b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      /* ---------- palette peek ---------- */
+      .palette {
+        position: absolute;
+        left: 96px;
+        top: 92px;
+        width: 420px;
+        background: var(--surface);
+        border: 1px solid var(--ink-muted);
+        border-radius: var(--panel);
+        overflow: hidden;
+        font-size: 13px;
+      }
+
+      .app-wrap {
+        position: relative;
+      }
+
+      .palette header {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--ink-muted);
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .palette ul {
+        margin: 0;
+        padding: 6px;
+        list-style: none;
+        display: grid;
+        gap: 1px;
+      }
+
+      .palette li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: var(--control);
+        font-size: 12px;
+      }
+
+      .palette li small {
+        color: var(--ink-muted);
+        font-size: 11px;
+        margin-left: auto;
+      }
+
+      .palette li.active {
+        background: color-mix(in srgb, var(--brand) 8%, white);
+      }
+
+      .palette footer {
+        border-top: 1px solid var(--border);
+        padding: 7px 12px;
+        font-size: 11px;
+        color: var(--ink-muted);
+        display: flex;
+        gap: 14px;
+      }
+
+      /* narrow band */
+      .narrow {
+        margin-top: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .narrow-caption {
+        max-width: 260px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .narrow-caption strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      .phone {
+        width: 320px;
+        height: 452px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .phone-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .phone-top strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .phone-top .back {
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        background: var(--surface);
+        font-family: inherit;
+        font-size: 11px;
+        padding: 2px 7px;
+        cursor: pointer;
+        color: var(--ink);
+      }
+
+      .phone-body {
+        flex: 1;
+        background: var(--surface-muted);
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+
+      .phone-row {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        padding: 9px 11px;
+        font-size: 12px;
+        display: grid;
+        gap: 1px;
+      }
+
+      .phone-row small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .tabs-bottom {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--border);
+      }
+
+      .tabs-bottom a {
+        padding: 8px 4px 10px;
+        text-align: center;
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-decoration: none;
+        display: grid;
+        gap: 3px;
+        justify-items: center;
+      }
+
+      .tabs-bottom a[aria-current="page"] {
+        color: var(--brand);
+        font-weight: 600;
+      }
+
+      .notes {
+        flex: 1;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 16px 18px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .notes strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .notes ul {
+        margin: 0;
+        padding-left: 16px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .notes code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <div class="anno">
+        <h1>03 — Rail de iconos + panel contextual <span>· 68 px + 320 px</span></h1>
+        <p>
+          <strong>Tradeoff:</strong> dos niveles de navegación y una paleta de comandos para trabajo
+          denso: elegís sección, después elegís registro, sin perder el contexto. El detalle del
+          paciente deja de ser una pantalla a la que se vuelve. Paga con más piezas a mantener y una
+          curva mayor para la secretaria que entra tres veces por día a hacer lo mismo.
+        </p>
+        <span class="tag">Orientado a flujo denso</span>
+      </div>
+
+      <div class="app-wrap">
+        <div class="app">
+          <nav class="iconrail" aria-label="Secciones del consultorio">
+            <div class="logo" title="Consultorio San Martín">A</div>
+            <a href="#" title="Inicio" aria-label="Inicio">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z" /></svg>
+            </a>
+            <a href="#" title="Agenda" aria-label="Agenda">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1" /><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" /></svg>
+            </a>
+            <a href="#" title="Pacientes" aria-label="Pacientes" aria-current="page">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" /></svg>
+            </a>
+            <a href="#" title="Facturación — 7 pendientes" aria-label="Facturación, 7 sesiones sin facturar">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12M5 10h3" /></svg>
+              <span class="dot" aria-hidden="true"></span>
+            </a>
+            <a href="#" title="Tarifario" aria-label="Tarifario">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h6" /><circle cx="12.5" cy="12" r="1.6" /></svg>
+            </a>
+            <a href="#" title="Mutuales" aria-label="Mutuales">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M8 2.5 13.5 5v3.2c0 2.6-2.2 4.6-5.5 5.3-3.3-.7-5.5-2.7-5.5-5.3V5L8 2.5Z" /></svg>
+            </a>
+            <a href="#" title="Usuarios" aria-label="Usuarios">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="6" cy="5.5" r="2.2" /><path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" /><path d="M11 5.5h3M12.5 4v3" /></svg>
+            </a>
+            <span class="spacer"></span>
+            <button class="cmd" aria-label="Abrir paleta de comandos">⌘K</button>
+            <span class="avatar" title="Dra. Mariana Ferreyra · dueña">MF</span>
+          </nav>
+
+          <div class="panel-col">
+            <div class="panel-head">
+              <div class="line">
+                <h2>Pacientes</h2>
+                <span class="count">128</span>
+              </div>
+              <div class="search">
+                <span>Buscar nombre, documento o cobertura</span>
+                <kbd>/</kbd>
+              </div>
+            </div>
+
+            <div class="list">
+              <a href="#" aria-current="true">
+                <b>Lucía Bermúdez <span class="pill">activo</span></b>
+                <small>DNI 30.456.789 · OSDE 210</small>
+              </a>
+              <a href="#">
+                <b>Ramiro Ocampo <span class="pill">activo</span></b>
+                <small>DNI 27.118.402 · Swiss Medical</small>
+              </a>
+              <a href="#">
+                <b>Estela Quiroga</b>
+                <small>DNI 24.902.115 · Particular</small>
+              </a>
+              <a href="#">
+                <b>Julián Arriaga <span class="pill">activo</span></b>
+                <small>DNI 31.774.201 · IOMA</small>
+              </a>
+              <a href="#">
+                <b>Sofía Maidana <span class="pill">activo</span></b>
+                <small>DNI 33.208.774 · OSDE 310</small>
+              </a>
+              <a href="#">
+                <b>Hugo Benítez</b>
+                <small>DNI 22.451.900 · Particular</small>
+              </a>
+            </div>
+
+            <div class="list-foot">
+              <span>1 – 6 de 128</span>
+              <span>ordenado por apellido</span>
+            </div>
+          </div>
+
+          <div class="detail">
+            <div class="detail-top">
+              <div class="who">
+                <h2>Lucía Bermúdez</h2>
+                <p>DNI 30.456.789 · 34 años · OSDE 210 titular</p>
+              </div>
+              <div class="actions">
+                <button class="btn">Editar</button>
+                <button class="btn">Nuevo turno</button>
+                <button class="btn btn-primary">Emitir voucher</button>
+              </div>
+            </div>
+
+            <div class="tabs" role="tablist" aria-label="Ficha del paciente">
+              <a href="#" role="tab" aria-selected="true">Datos</a>
+              <a href="#" role="tab" aria-selected="false">Cobertura</a>
+              <a href="#" role="tab" aria-selected="false">Historia clínica</a>
+              <a href="#" role="tab" aria-selected="false">Turnos</a>
+              <a href="#" role="tab" aria-selected="false">Vouchers</a>
+            </div>
+
+            <div class="detail-body">
+              <div class="card">
+                <h3>Datos personales</h3>
+                <dl class="kv">
+                  <div><dt>Nombre completo</dt><dd>Lucía Bermúdez</dd></div>
+                  <div><dt>Documento</dt><dd class="mono">DNI 30.456.789</dd></div>
+                  <div><dt>Nacimiento</dt><dd class="mono">14/03/1991</dd></div>
+                  <div><dt>Teléfono</dt><dd class="mono">11 5842 7731</dd></div>
+                  <div><dt>Estado</dt><dd><span class="badge">Activo</span></dd></div>
+                </dl>
+              </div>
+
+              <div class="card">
+                <h3>Cobertura y facturación</h3>
+                <dl class="kv">
+                  <div><dt>Mutual</dt><dd>OSDE 210</dd></div>
+                  <div><dt>Condición</dt><dd>Titular</dd></div>
+                  <div><dt>Moneda</dt><dd>ARS</dd></div>
+                  <div><dt>Último voucher</dt><dd class="mono">18/11 · $ 48.000</dd></div>
+                  <div><dt>Sesiones sin facturar</dt><dd>2</dd></div>
+                </dl>
+              </div>
+
+              <div class="record-note">
+                <b>Historia clínica con acceso restringido.</b> Sólo profesionales con permiso
+                vigente ven las notas. Si cambiás de paciente con una nota a medio escribir, el
+                shell pide confirmación antes de descartarla.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="palette" role="dialog" aria-label="Paleta de comandos">
+          <header>
+            <span>⌘K</span>
+            <span>Buscar paciente, sección o acción</span>
+          </header>
+          <ul>
+            <li class="active"><span>Buscar «lucia»</span><small>3 pacientes</small></li>
+            <li><span>Nuevo turno para Lucía Bermúdez</span><small>acción</small></li>
+            <li><span>Emitir voucher de la sesión 18/11</span><small>acción</small></li>
+            <li><span>Ir a Facturación — 7 sin facturar</span><small>sección</small></li>
+          </ul>
+          <footer>
+            <span>↑↓ mover</span>
+            <span>↵ abrir</span>
+            <span>esc cerrar</span>
+          </footer>
+        </div>
+      </div>
+
+      <div class="narrow">
+        <div class="narrow-caption">
+          <strong>Estrecho (≤ 640 px)</strong>
+          El rail queda como barra inferior y el panel contextual pasa a ser la pantalla: la lista
+          ocupa todo y el detalle es una ruta propia con "volver". Un solo nivel de profundidad a la
+          vez, sin apilar tres columnas.
+        </div>
+
+        <div class="phone">
+          <div class="phone-top">
+            <button class="back" aria-label="Volver">←</button>
+            <strong>Lucía Bermúdez</strong>
+            <span class="count" style="margin-left: auto">Activo</span>
+          </div>
+          <div class="phone-body">
+            <div class="phone-row"><b>DNI 30.456.789</b><small>34 años · OSDE 210 titular</small></div>
+            <div class="phone-row"><b>2 sesiones sin facturar</b><small>17/11 y 18/11 · $ 84.000</small></div>
+            <div class="phone-row"><b>Próximo turno</b><small>mar 25/11 · 09:15 con Dra. Ferreyra</small></div>
+            <div class="phone-row"><b>Historia clínica</b><small>acceso restringido por permiso</small></div>
+          </div>
+          <nav class="tabs-bottom" aria-label="Secciones">
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z" /></svg>
+              Inicio
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1" /><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" /></svg>
+              Agenda
+            </a>
+            <a href="#" aria-current="page">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" /></svg>
+              Pacientes
+            </a>
+            <a href="#">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 6.5h12M5 10h3" /></svg>
+              Facturar
+            </a>
+          </nav>
+        </div>
+
+        <div class="notes">
+          <strong>Lo que este shell resuelve del diagnóstico</strong>
+          <ul>
+            <li>La selección de paciente deja de perderse: vive en la URL (<code>?paciente=…</code>) y la lista la refleja.</li>
+            <li>Guarda de cambios en la historia clínica antes de cambiar de registro.</li>
+            <li>Icon-only con nombre accesible (<code>aria-label</code> + <code>title</code>): nunca un ícono mudo.</li>
+            <li>La paleta <code>⌘K</code> reemplaza el search por tecla: una acción, un salto, sin requests por pulsación.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

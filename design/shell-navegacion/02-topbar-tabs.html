@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq · Shell 02 — Topbar con tabs</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      :root {
+        --surface: #ffffff;
+        --surface-muted: #f6f7f9;
+        --border: #e3e6ea;
+        --ink: #16181d;
+        --ink-muted: #5c6472;
+        --brand: #2f5d8a;
+        --brand-ink: #ffffff;
+        --success: #1f7a4d;
+        --warning: #8a5a00;
+        --danger: #a4232b;
+        --panel: 0.75rem;
+        --control: 0.375rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--surface-muted);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .board {
+        width: 1440px;
+        padding: 24px 40px 40px;
+      }
+
+      .anno {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 32px;
+        padding-bottom: 16px;
+      }
+
+      .anno h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .anno h1 span {
+        color: var(--ink-muted);
+        font-weight: 400;
+      }
+
+      .anno p {
+        margin: 0;
+        max-width: 74ch;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .tag {
+        display: inline-block;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, white);
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        color: var(--brand);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      /* ---------- app frame ---------- */
+      .app {
+        height: 748px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* row 1: identity + primary tabs */
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        height: 52px;
+        padding: 0 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        flex: none;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+
+      .brand .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: var(--control);
+        background: var(--brand);
+        color: var(--brand-ink);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .practice-name {
+        font-size: 12px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 210px;
+      }
+
+      .tabs-primary {
+        display: flex;
+        align-items: stretch;
+        gap: 2px;
+        height: 100%;
+        margin-left: 8px;
+        overflow: hidden;
+      }
+
+      .tabs-primary a {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 12px;
+        font-size: 13px;
+        color: var(--ink-muted);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+
+      .tabs-primary a:hover {
+        color: var(--ink);
+        background: var(--surface-muted);
+      }
+
+      .tabs-primary a[aria-current="page"] {
+        color: var(--ink);
+        font-weight: 600;
+        border-bottom-color: var(--brand);
+      }
+
+      .count {
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, white);
+        background: color-mix(in srgb, var(--brand) 8%, white);
+        color: var(--brand);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0 6px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        white-space: nowrap;
+      }
+
+      .trial-pill {
+        border: 1px solid color-mix(in srgb, var(--warning) 30%, white);
+        background: color-mix(in srgb, var(--warning) 5%, white);
+        color: var(--warning);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 500;
+      }
+
+      .me {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .me .avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        font-weight: 600;
+      }
+
+      /* row 2: contextual bar owned by the screen */
+      .contextbar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 60px;
+        padding: 0 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        flex: none;
+      }
+
+      .contextbar h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .segmented {
+        display: flex;
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        overflow: hidden;
+      }
+
+      .segmented span {
+        padding: 5px 10px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .segmented span[aria-pressed="true"] {
+        background: var(--surface-muted);
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .select {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        padding: 5px 10px;
+        font-size: 12px;
+        background: var(--surface);
+      }
+
+      .select b {
+        font-weight: 600;
+      }
+
+      .select small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .btn {
+        border-radius: var(--control);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 500;
+        padding: 6px 11px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: var(--brand-ink);
+        font-size: 13px;
+        padding: 7px 13px;
+      }
+
+      .contextbar .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+
+      /* content */
+      .content {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 16px;
+        padding: 16px 20px 20px;
+        min-height: 0;
+      }
+
+      .calendar {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .calendar-head {
+        display: grid;
+        grid-template-columns: 56px repeat(7, 1fr);
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-muted);
+      }
+
+      .calendar-head div {
+        padding: 8px 8px;
+        font-size: 11px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .calendar-head div.today {
+        color: var(--brand);
+        font-weight: 600;
+        box-shadow: inset 0 -2px 0 var(--brand);
+      }
+
+      .calendar-head b {
+        display: block;
+        font-size: 12px;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .calendar-head .today b {
+        color: var(--brand);
+      }
+
+      .grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 56px repeat(7, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+        position: relative;
+      }
+
+      .grid .slotlabel {
+        grid-column: 1;
+        font-size: 11px;
+        color: var(--ink-muted);
+        padding: 6px 8px;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cell {
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .cell:nth-child(8n) {
+        border-right: 0;
+      }
+
+      .appt {
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, white);
+        border-left: 3px solid var(--brand);
+        background: color-mix(in srgb, var(--brand) 5%, white);
+        border-radius: var(--control);
+        padding: 4px 7px;
+        font-size: 11px;
+        margin: 2px 4px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .appt b {
+        font-weight: 600;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .appt small {
+        color: var(--ink-muted);
+        font-size: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .appt.is-attended {
+        border-color: color-mix(in srgb, var(--success) 30%, white);
+        border-left-color: var(--success);
+        background: color-mix(in srgb, var(--success) 5%, white);
+      }
+
+      .appt.is-cancelled {
+        border-color: var(--border);
+        border-left-color: var(--border);
+        background: var(--surface-muted);
+        color: var(--ink-muted);
+        text-decoration: line-through;
+      }
+
+      .appt.is-selected {
+        border-color: var(--brand);
+        border-left-color: var(--brand);
+        box-shadow: inset 0 0 0 1px var(--brand);
+      }
+
+      .appt .state {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+      }
+
+      /* aside */
+      .aside {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 0;
+      }
+
+      .aside h3 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .aside .when {
+        font-size: 12px;
+        color: var(--ink-muted);
+        margin: 0;
+      }
+
+      .kv {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        font-size: 12px;
+      }
+
+      .kv div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--border);
+        padding-top: 8px;
+      }
+
+      .kv dt {
+        color: var(--ink-muted);
+      }
+
+      .kv dd {
+        margin: 0;
+        text-align: right;
+      }
+
+      .aside .stack {
+        margin-top: auto;
+        display: grid;
+        gap: 8px;
+      }
+
+      .btn-wide {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+
+      .btn-ghost-danger {
+        color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 30%, white);
+      }
+
+      .hintline {
+        font-size: 11px;
+        color: var(--ink-muted);
+        margin: 0;
+      }
+
+      /* narrow band */
+      .narrow {
+        margin-top: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .narrow-caption {
+        max-width: 260px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .narrow-caption strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      .phone {
+        width: 320px;
+        height: 440px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .phone-top {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        display: grid;
+        gap: 8px;
+      }
+
+      .phone-top .line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .phone-top strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .phone-top .scroll {
+        display: flex;
+        gap: 6px;
+        overflow: hidden;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .phone-top .scroll span[aria-current="page"] {
+        color: var(--brand);
+        font-weight: 600;
+        border-bottom: 2px solid var(--brand);
+        padding-bottom: 3px;
+      }
+
+      .phone-body {
+        flex: 1;
+        background: var(--surface-muted);
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+
+      .day-row {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--control);
+        padding: 9px 11px;
+        font-size: 12px;
+        display: grid;
+        gap: 2px;
+      }
+
+      .day-row small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .notes {
+        flex: 1;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--panel);
+        padding: 16px 18px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .notes strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .notes ul {
+        margin: 0;
+        padding-left: 16px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .notes code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <div class="anno">
+        <h1>02 — Topbar con tabs <span>· cero ancho robado</span></h1>
+        <p>
+          <strong>Tradeoff:</strong> todo el ancho horizontal queda para la grilla semanal y las
+          tablas anchas, y la pantalla gana una barra contextual propia para sus acciones. La
+          orientación depende de una única fila de tabs que se satura al llegar a 6 secciones y no
+          tiene lugar natural para badges, trial ni futuro dashboard.
+        </p>
+        <span class="tag">Orientado a ancho</span>
+      </div>
+
+      <div class="app">
+        <div class="topbar">
+          <div class="brand"><span class="mark">A</span> Aveniq</div>
+          <span class="practice-name">Consultorio San Martín · Plan Profesional</span>
+
+          <nav class="tabs-primary" aria-label="Secciones del consultorio">
+            <a href="#">Inicio</a>
+            <a href="#" aria-current="page">Agenda</a>
+            <a href="#">Pacientes</a>
+            <a href="#">Facturación <span class="count" aria-label="7 sesiones sin facturar">7</span></a>
+            <a href="#">Tarifario</a>
+            <a href="#">Mutuales</a>
+            <a href="#">Usuarios</a>
+          </nav>
+
+          <div class="topbar-right">
+            <span class="trial-pill">Trial · 3 días</span>
+            <span class="me"><span class="avatar">MF</span> Dra. Ferreyra</span>
+          </div>
+        </div>
+
+        <div class="contextbar">
+          <h2>Agenda</h2>
+          <div class="segmented" role="group" aria-label="Vista">
+            <span aria-pressed="false">Día</span>
+            <span aria-pressed="true">Semana</span>
+          </div>
+          <div class="select">
+            <span style="color: var(--ink-muted)">Profesional</span>
+            <b>Dra. Mariana Ferreyra</b>
+            <small>▾</small>
+          </div>
+          <div class="select">
+            <span style="color: var(--ink-muted)">Semana</span>
+            <b>18 – 24 nov</b>
+            <small>‹ ›</small>
+          </div>
+          <div class="actions">
+            <button class="btn">Hoy</button>
+            <button class="btn btn-primary">Nuevo turno</button>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="calendar">
+            <div class="calendar-head">
+              <div>Hora</div>
+              <div class="today"><b>Lun 18</b></div>
+              <div><b>Mar 19</b></div>
+              <div><b>Mié 20</b></div>
+              <div><b>Jue 21</b></div>
+              <div><b>Vie 22</b></div>
+              <div><b>Sáb 23</b></div>
+              <div><b>Dom 24</b></div>
+            </div>
+
+            <div class="grid">
+              <div class="slotlabel" style="grid-row: 1">09:00</div>
+              <div class="cell" style="grid-row: 1; grid-column: 2"></div>
+              <div class="appt" style="grid-row: 1; grid-column: 2">
+                <span class="state">Atendido</span>
+                <b>Lucía Bermúdez</b>
+                <small>09:00 · OSDE 210</small>
+              </div>
+              <div class="cell" style="grid-row: 1; grid-column: 3"></div>
+              <div class="appt is-selected" style="grid-row: 1; grid-column: 3">
+                <span class="state">Confirmado</span>
+                <b>Ramiro Ocampo</b>
+                <small>09:15 · Swiss Medical</small>
+              </div>
+              <div class="cell" style="grid-row: 1; grid-column: 4"></div>
+              <div class="cell" style="grid-row: 1; grid-column: 5"></div>
+              <div class="appt is-attended" style="grid-row: 1; grid-column: 5">
+                <span class="state">Atendido</span>
+                <b>Julián Arriaga</b>
+                <small>09:30 · IOMA</small>
+              </div>
+              <div class="cell" style="grid-row: 1; grid-column: 6"></div>
+              <div class="cell" style="grid-row: 1; grid-column: 7"></div>
+              <div class="cell" style="grid-row: 1; grid-column: 8"></div>
+
+              <div class="slotlabel" style="grid-row: 2">10:00</div>
+              <div class="cell" style="grid-row: 2; grid-column: 2"></div>
+              <div class="appt is-attended" style="grid-row: 2; grid-column: 2">
+                <span class="state">Atendido</span>
+                <b>Estela Quiroga</b>
+                <small>10:00 · Particular</small>
+              </div>
+              <div class="cell" style="grid-row: 2; grid-column: 3"></div>
+              <div class="cell" style="grid-row: 2; grid-column: 4"></div>
+              <div class="appt" style="grid-row: 2; grid-column: 4">
+                <span class="state">Confirmado</span>
+                <b>Sofía Maidana</b>
+                <small>10:30 · OSDE 310</small>
+              </div>
+              <div class="cell" style="grid-row: 2; grid-column: 5"></div>
+              <div class="appt is-cancelled" style="grid-row: 2; grid-column: 5">
+                <span class="state">Cancelado</span>
+                <b>Hugo Benítez</b>
+                <small>10:00 · particular</small>
+              </div>
+              <div class="cell" style="grid-row: 2; grid-column: 6"></div>
+              <div class="cell" style="grid-row: 2; grid-column: 7"></div>
+              <div class="cell" style="grid-row: 2; grid-column: 8"></div>
+
+              <div class="slotlabel" style="grid-row: 3">11:00</div>
+              <div class="cell" style="grid-row: 3; grid-column: 2"></div>
+              <div class="cell" style="grid-row: 3; grid-column: 3"></div>
+              <div class="appt" style="grid-row: 3; grid-column: 3">
+                <span class="state">Confirmado</span>
+                <b>Ana Piccardo</b>
+                <small>11:15 · IOMA</small>
+              </div>
+              <div class="cell" style="grid-row: 3; grid-column: 4"></div>
+              <div class="cell" style="grid-row: 3; grid-column: 5"></div>
+              <div class="cell" style="grid-row: 3; grid-column: 6"></div>
+              <div class="appt" style="grid-row: 3; grid-column: 6">
+                <span class="state">Confirmado</span>
+                <b>Tomás Rivas</b>
+                <small>11:00 · Particular</small>
+              </div>
+              <div class="cell" style="grid-row: 3; grid-column: 7"></div>
+              <div class="cell" style="grid-row: 3; grid-column: 8"></div>
+
+              <div class="slotlabel" style="grid-row: 4">12:00</div>
+              <div class="cell" style="grid-row: 4; grid-column: 2"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 3"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 4"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 5"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 6"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 7"></div>
+              <div class="cell" style="grid-row: 4; grid-column: 8"></div>
+            </div>
+          </div>
+
+          <aside class="aside" aria-label="Turno seleccionado">
+            <div>
+              <h3>Ramiro Ocampo</h3>
+              <p class="when">Martes 19 · 09:15 – 09:45 · Consulta médica</p>
+            </div>
+
+            <dl class="kv">
+              <div><dt>Cobertura</dt><dd>Swiss Medical · adherente</dd></div>
+              <div><dt>Documento</dt><dd>DNI 27.118.402</dd></div>
+              <div><dt>Estado</dt><dd>Confirmado</dd></div>
+              <div><dt>Voucher</dt><dd>Sin emitir</dd></div>
+            </dl>
+
+            <p class="hintline">
+              Acción primaria de la pantalla: marcar atendido. Un clic, con confirmación visible y
+              enlace directo a emitir el voucher.
+            </p>
+
+            <div class="stack">
+              <button class="btn btn-primary btn-wide">Marcar atendido</button>
+              <button class="btn btn-wide">Reprogramar</button>
+              <button class="btn btn-ghost-danger btn-wide">Cancelar turno</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="narrow">
+        <div class="narrow-caption">
+          <strong>Estrecho (≤ 640 px)</strong>
+          La fila de tabs pasa a scroll horizontal con la sección activa anclada; la semana se
+          reemplaza por una lista de días, no por 7 columnas apiladas. El selector de profesional se
+          mantiene: es la causa de la "semana vacía" de hoy.
+        </div>
+
+        <div class="phone">
+          <div class="phone-top">
+            <div class="line">
+              <strong>Agenda</strong>
+              <span class="trial-pill" style="margin-left: auto">Trial · 3 días</span>
+            </div>
+            <div class="scroll">
+              <span>Inicio</span><span aria-current="page">Agenda</span><span>Pacientes</span><span>Facturar</span><span>Más</span>
+            </div>
+            <div class="line" style="font-size: 11px; color: var(--ink-muted)">
+              Dra. Ferreyra · 18 – 24 nov
+            </div>
+          </div>
+          <div class="phone-body">
+            <div class="day-row">
+              <b>Lunes 18</b>
+              <small>09:00 Lucía Bermúdez · atendido</small>
+              <small>10:00 Estela Quiroga · atendido</small>
+            </div>
+            <div class="day-row">
+              <b>Martes 19</b>
+              <small>09:15 Ramiro Ocampo · confirmado</small>
+              <small>11:15 Ana Piccardo · confirmado</small>
+            </div>
+            <div class="day-row">
+              <b>Miércoles 20</b>
+              <small>10:30 Sofía Maidana · confirmado</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="notes">
+          <strong>Lo que este shell resuelve del diagnóstico</strong>
+          <ul>
+            <li>La barra contextual da lugar a <code>Profesional ▾</code>: muere la semana vacía del owner y del admin.</li>
+            <li>Ancho completo para la grilla: 7 columnas respiran sin scroll horizontal.</li>
+            <li>Estado por color + <code>&lt;span class="state"&gt;</code> con palabra: no depende sólo del color.</li>
+            <li>La validación del alta de turno vive en la barra contextual, no en un banner global.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

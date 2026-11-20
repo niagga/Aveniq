@@ -1,0 +1,27 @@
+{
+  "title": "Shell de navegación de Aveniq",
+  "brief": "Pass sistémico de UI: un shell de navegación único para las 8 pantallas privadas (Inicio, Agenda, Pacientes, Facturación, Tarifario, Mutuales, Usuarios), con estado del consultorio, badge de trabajo pendiente, foco visible y adaptación a pantalla angosta. Hoy no hay nav: cada pantalla repite 'Volver al consultorio'.",
+  "artboards": [
+    {
+      "file": "01-rail-lateral.html",
+      "title": "01 — Rail lateral fijo",
+      "tradeoff": "Orientación máxima y badges accionables sin entrar a la pantalla; cuesta 248 px de ancho horizontal, justo lo que la grilla semanal y el tarifario de 9 columnas necesitan.",
+      "width": 1440,
+      "height": 1360
+    },
+    {
+      "file": "02-topbar-tabs.html",
+      "title": "02 — Topbar con tabs",
+      "tradeoff": "Todo el ancho para la grilla y las tablas anchas, con barra contextual propia; la orientación depende de una fila de tabs que se satura a 6 secciones y no tiene lugar para badges, trial ni dashboard.",
+      "width": 1440,
+      "height": 1350
+    },
+    {
+      "file": "03-rail-dos-niveles.html",
+      "title": "03 — Rail de iconos + panel contextual",
+      "tradeoff": "Navegación a dos niveles y paleta de comandos para trabajo denso; más piezas a mantener y curva mayor para la secretaria que entra tres veces por día a hacer lo mismo.",
+      "width": 1440,
+      "height": 1360
+    }
+  ]
+}

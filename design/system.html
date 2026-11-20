@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aveniq — sistema de diseño</title>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      :root {
+        --color-surface: #ffffff;
+        --color-surface-muted: #f6f7f9;
+        --color-border: #e3e6ea;
+        --color-ink: #16181d;
+        --color-ink-muted: #5c6472;
+        --color-brand: #2f5d8a;
+        --color-brand-ink: #ffffff;
+        --color-success: #1f7a4d;
+        --color-warning: #8a5a00;
+        --color-danger: #a4232b;
+        --radius-panel: 0.75rem;
+        --radius-control: 0.375rem;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--color-surface-muted);
+        color: var(--color-ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.5;
+      }
+
+      *:focus-visible {
+        outline: 2px solid var(--color-brand);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .board {
+        width: 1440px;
+        padding: 48px 56px 72px;
+        box-sizing: border-box;
+      }
+
+      .board-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .sub {
+        margin: 6px 0 0;
+        font-size: 14px;
+        color: var(--color-ink-muted);
+        max-width: 62ch;
+      }
+
+      .stamp {
+        font-size: 12px;
+        color: var(--color-ink-muted);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      section {
+        margin-top: 40px;
+      }
+
+      h2 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .hint {
+        margin: 0 0 16px;
+        font-size: 12px;
+        color: var(--color-ink-muted);
+        max-width: 90ch;
+      }
+
+      .panel {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-panel);
+      }
+
+      /* Colors */
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+      }
+
+      .swatch {
+        border-radius: var(--radius-panel);
+        border: 1px solid var(--color-border);
+        overflow: hidden;
+        background: var(--color-surface);
+      }
+
+      .chip {
+        height: 64px;
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .swatch dl {
+        margin: 0;
+        padding: 10px 12px 12px;
+        font-size: 12px;
+      }
+
+      .swatch dt {
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: var(--color-ink);
+      }
+
+      .swatch dd {
+        margin: 2px 0 0;
+        color: var(--color-ink-muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Type */
+      .type-row {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 24px;
+        align-items: baseline;
+        padding: 12px 20px;
+        border-top: 1px solid var(--color-border);
+      }
+
+      .type-row:first-child {
+        border-top: 0;
+      }
+
+      .type-meta {
+        font-size: 11px;
+        color: var(--color-ink-muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      /* Spacing + radius */
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      .bars {
+        padding: 20px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .bar {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 12px;
+        align-items: center;
+        font-size: 11px;
+        color: var(--color-ink-muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .bar span.block {
+        height: 12px;
+        background: var(--color-brand);
+        border-radius: 2px;
+      }
+
+      .corners {
+        padding: 20px;
+        display: flex;
+        gap: 24px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .corner {
+        text-align: center;
+        font-size: 11px;
+        color: var(--color-ink-muted);
+      }
+
+      .corner div {
+        width: 96px;
+        height: 64px;
+        background: var(--color-surface-muted);
+        border: 1px solid var(--color-border);
+        margin-bottom: 8px;
+      }
+
+      /* Components */
+      .components {
+        padding: 24px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+      }
+
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        border-radius: var(--radius-control);
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-ink);
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--color-brand);
+        border-color: var(--color-brand);
+        color: var(--color-brand-ink);
+        padding: 10px 16px;
+        font-size: 14px;
+      }
+
+      .btn-danger {
+        border-color: color-mix(in srgb, var(--color-danger) 30%, white);
+        color: var(--color-danger);
+      }
+
+      .field {
+        margin-top: 4px;
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: var(--radius-control);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        padding: 8px 12px;
+        font-size: 14px;
+        font-family: inherit;
+        color: var(--color-ink);
+        outline: none;
+      }
+
+      .field:focus {
+        border-color: var(--color-brand);
+      }
+
+      .label {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-ink-muted);
+      }
+
+      .notice {
+        border-radius: var(--radius-panel);
+        padding: 12px 16px;
+        font-size: 14px;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-ink-muted);
+      }
+
+      .notice p {
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .notice div {
+        margin-top: 4px;
+      }
+
+      .notice-warning {
+        border-color: color-mix(in srgb, var(--color-warning) 30%, white);
+        background: color-mix(in srgb, var(--color-warning) 5%, white);
+        color: var(--color-warning);
+      }
+
+      .notice-danger {
+        border-color: color-mix(in srgb, var(--color-danger) 30%, white);
+        background: color-mix(in srgb, var(--color-danger) 5%, white);
+        color: var(--color-danger);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 14px;
+      }
+
+      thead {
+        background: var(--color-surface-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-ink-muted);
+      }
+
+      th {
+        padding: 12px 16px;
+        font-weight: 500;
+      }
+
+      td {
+        padding: 12px 16px;
+        border-top: 1px solid var(--color-border);
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .badge {
+        border-radius: 999px;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface-muted);
+        color: var(--color-ink-muted);
+        padding: 2px 8px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .badge-ok {
+        border-color: color-mix(in srgb, var(--color-success) 30%, white);
+        background: color-mix(in srgb, var(--color-success) 5%, white);
+        color: var(--color-success);
+      }
+
+      .legend {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--color-ink-muted);
+      }
+
+      .focus-demo {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--color-ink-muted);
+      }
+
+      .focus-demo button {
+        outline: 2px solid var(--color-brand);
+        outline-offset: 2px;
+      }
+
+      .contrast {
+        font-size: 12px;
+      }
+
+      .contrast td,
+      .contrast th {
+        padding: 8px 12px;
+      }
+
+      .pass {
+        color: var(--color-success);
+        font-weight: 500;
+      }
+
+      .fail {
+        color: var(--color-danger);
+        font-weight: 500;
+      }
+
+      .gap-note {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--color-warning);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <header class="board-header">
+        <div>
+          <h1>Aveniq — sistema de diseño</h1>
+          <p class="sub">
+            Extraído de <span class="mono">Frontend/src/app/globals.css</span>, la única fuente de
+            tokens del proyecto. Todo lo que sigue son valores que ya existen en el código, no una
+            propuesta de paleta.
+          </p>
+        </div>
+        <div class="stamp">
+          sync de sistema de diseño<br />
+          1 fuente · 10 colores · 1 radio
+        </div>
+      </header>
+
+      <section>
+        <h2>Colores</h2>
+        <p class="hint">
+          10 tokens declarados en el bloque <span class="mono">@theme</span>. La app los consume por
+          nombre; no hay hex crudos en componentes.
+        </p>
+        <div class="swatches">
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-surface)"></div>
+            <dl>
+              <dt>--color-surface</dt>
+              <dd>#ffffff</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-surface-muted)"></div>
+            <dl>
+              <dt>--color-surface-muted</dt>
+              <dd>#f6f7f9</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-border)"></div>
+            <dl>
+              <dt>--color-border</dt>
+              <dd>#e3e6ea</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-ink)"></div>
+            <dl>
+              <dt>--color-ink</dt>
+              <dd>#16181d</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-ink-muted)"></div>
+            <dl>
+              <dt>--color-ink-muted</dt>
+              <dd>#5c6472</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-brand)"></div>
+            <dl>
+              <dt>--color-brand</dt>
+              <dd>#2f5d8a</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-brand-ink); border-bottom: 1px solid var(--color-border)"></div>
+            <dl>
+              <dt>--color-brand-ink</dt>
+              <dd>#ffffff</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-success)"></div>
+            <dl>
+              <dt>--color-success</dt>
+              <dd>#1f7a4d</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-warning)"></div>
+            <dl>
+              <dt>--color-warning</dt>
+              <dd>#8a5a00</dd>
+            </dl>
+          </div>
+          <div class="swatch">
+            <div class="chip" style="background: var(--color-danger)"></div>
+            <dl>
+              <dt>--color-danger</dt>
+              <dd>#a4232b</dd>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Tipografía</h2>
+        <p class="hint">
+          No hay tokens de tipografía ni escala declarada: la familia sale de <span class="mono">body</span>
+          y la escala de utilidades repetidas. Estos son los roles reales en uso.
+        </p>
+        <div class="panel">
+          <div class="type-row">
+            <div class="type-meta">título de página · text-2xl / 600</div>
+            <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em">
+              Facturación del consultorio
+            </div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">título de sección · text-sm / 600</div>
+            <div style="font-size: 14px; font-weight: 600">Sesiones sin facturar</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">cuerpo y celdas · text-sm / 400</div>
+            <div style="font-size: 14px">
+              Dra. Mariana Ferreyra · Sesión del 18/11 · Consulta médica
+            </div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">label de control · text-xs / 500</div>
+            <div style="font-size: 12px; font-weight: 500; color: var(--color-ink-muted)">
+              Cobertura del paciente
+            </div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">metadato · text-xs / 400</div>
+            <div style="font-size: 12px; color: var(--color-ink-muted)">
+              12 pacientes · fiscales: 9 con datos cargados
+            </div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">numérico · font-mono / text-xs</div>
+            <div class="mono">$ 48.000,00 · DNI 30.456.789</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Espaciado y radio</h2>
+        <p class="hint">
+          Sin tokens de espaciado: la escala default de Tailwind v4 (base 4 px) con el ritmo que ya
+          usan las tablas y el frame de página. El radio sí tiene token para paneles, pero los
+          controles usan un valor crudo.
+        </p>
+        <div class="two-col">
+          <div class="panel bars">
+            <div class="bar"><span>px-3 py-1.5</span><span class="block" style="width: 12px"></span></div>
+            <div class="bar"><span>px-3 py-2</span><span class="block" style="width: 16px"></span></div>
+            <div class="bar"><span>gap-3</span><span class="block" style="width: 12px"></span></div>
+            <div class="bar"><span>px-4 py-3</span><span class="block" style="width: 24px"></span></div>
+            <div class="bar"><span>gap-6</span><span class="block" style="width: 24px"></span></div>
+            <div class="bar"><span>px-6 py-12</span><span class="block" style="width: 48px"></span></div>
+          </div>
+          <div class="panel corners">
+            <div>
+              <div class="corner">
+                <div style="border-radius: var(--radius-panel)"></div>
+                --radius-panel · 0.75rem
+              </div>
+            </div>
+            <div>
+              <div class="corner">
+                <div style="border-radius: var(--radius-control)"></div>
+                rounded-md · 0.375rem
+              </div>
+            </div>
+            <div>
+              <div class="corner">
+                <div style="border-radius: 999px"></div>
+                rounded-full
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="gap-note">
+          Deuda: el radio está partido entre un token y un valor crudo en ~60 sitios de botones e
+          inputs. Un solo token para controles lo cierra.
+        </p>
+      </section>
+
+      <section>
+        <h2>Componentes</h2>
+        <p class="hint">
+          Las dos únicas primitivas compartidas más el idioma de tabla que se repite en las ocho
+          pantallas. Fijate el estado de foco: el borde de marca en el input y el anillo del botón de
+          abajo son la regla que hoy falta en toda la app.
+        </p>
+        <div class="components">
+          <div class="panel" style="padding: 24px; display: grid; gap: 20px">
+            <div>
+              <span class="label">Acciones</span>
+              <div class="row" style="margin-top: 8px">
+                <button class="btn btn-primary">Emitir voucher</button>
+                <button class="btn">Pacientes</button>
+                <button class="btn btn-danger">Anular</button>
+                <button class="btn" disabled style="opacity: 0.5; cursor: not-allowed">Guardando…</button>
+              </div>
+              <div class="focus-demo">
+                <button class="btn">Foco de teclado</button>
+                <span>regla ausente hoy: <span class="mono">:focus-visible</span> en toda la app</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="label" for="demo-field">Cobertura del paciente</label>
+              <input id="demo-field" class="field" value="OSDE 210 · titular" />
+              <p class="legend">Input canónico: borde 1 px, radio 0.375rem, foco por borde de marca.</p>
+            </div>
+
+            <div style="display: grid; gap: 12px">
+              <div class="notice"><p>Todavía no hay pacientes</p><div>Cargá el primero con el formulario de arriba.</div></div>
+              <div class="notice notice-warning"><p>El trial vence en 3 días</p><div>Pasado ese plazo el consultorio queda en sólo lectura.</div></div>
+              <div class="notice notice-danger"><p>No pudimos guardar el voucher</p><div>La API respondió 503. Reintentá en unos segundos.</div></div>
+            </div>
+          </div>
+
+          <div class="panel" style="overflow: hidden; align-self: start">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Paciente</th>
+                  <th scope="col">Documento</th>
+                  <th scope="col">Cobertura</th>
+                  <th scope="col">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight: 500">Lucía Bermúdez</td>
+                  <td class="mono">DNI 30.456.789</td>
+                  <td style="color: var(--color-ink-muted)">OSDE 210 · titular</td>
+                  <td><span class="badge badge-ok">Activo</span></td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500">Ramiro Ocampo</td>
+                  <td class="mono">DNI 27.118.402</td>
+                  <td style="color: var(--color-ink-muted)">Swiss Medical · adherente</td>
+                  <td><span class="badge badge-ok">Activo</span></td>
+                </tr>
+                <tr style="background: color-mix(in srgb, var(--color-brand) 5%, white)">
+                  <td style="font-weight: 500">Estela Quiroga</td>
+                  <td class="mono">DNI 24.902.115</td>
+                  <td style="color: var(--color-ink-muted)">Particular</td>
+                  <td><span class="badge">Inactivo</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="legend" style="padding: 10px 16px; border-top: 1px solid var(--color-border); margin: 0">
+              3 pacientes · fiscales: 2 con datos cargados · fila del medio: selección con
+              <span class="mono">bg-brand/5</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Contraste calculado</h2>
+        <p class="hint">
+          Ratios derivados de los valores de arriba, para detectar riesgo antes de diseñar. Calculado
+          en esta tabla, no medido en navegador.
+        </p>
+        <div class="panel" style="overflow: hidden">
+          <table class="contrast">
+            <thead>
+              <tr>
+                <th scope="col">Par</th>
+                <th scope="col">Ratio</th>
+                <th scope="col">AA texto normal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>ink sobre surface</td><td class="mono">16.6:1</td><td class="pass">Pasa</td></tr>
+              <tr><td>ink-muted sobre surface</td><td class="mono">6.2:1</td><td class="pass">Pasa</td></tr>
+              <tr><td>ink-muted sobre surface-muted</td><td class="mono">5.4:1</td><td class="pass">Pasa</td></tr>
+              <tr><td>brand-ink sobre brand</td><td class="mono">6.7:1</td><td class="pass">Pasa</td></tr>
+              <tr><td>danger sobre surface</td><td class="mono">7.4:1</td><td class="pass">Pasa</td></tr>
+              <tr><td>border sobre surface (límite de control)</td><td class="mono">1.2:1</td><td class="fail">Falla 3:1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="gap-note">
+          La paleta aguanta texto. El hueco es el borde como límite de control y la ausencia total de
+          foco visible.
+        </p>
+      </section>
+    </div>
+  </body>
+</html>
