@@ -23,6 +23,7 @@ import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
 import { loadStaff, type StaffMember } from "@/features/patients/staff";
 import { LoadingState } from "@/shared/ui/states";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
 
@@ -453,6 +454,7 @@ function AppointmentActions({
   const [busy, setBusy] = useState(false);
   const scheduled = appointment.status === "scheduled";
   const writesLocked = useWritesLocked();
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   async function transition(path: "attend" | "cancel") {
     onError(null);
@@ -505,11 +507,25 @@ function AppointmentActions({
           <button
             type="button"
             disabled={busy || writesLocked}
-            onClick={() => void transition("cancel")}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+            onClick={() => setConfirmingCancel(true)}
+            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
           >
             Cancelar turno
           </button>
+          <ConfirmDialog
+            open={confirmingCancel}
+            title={`¿Cancelar el turno de ${patientName}?`}
+            description="El horario queda libre y el turno pasa a cancelado. No se borra: sigue en la semana, tachado, para que el hueco tenga explicación."
+            confirmLabel="Cancelar turno"
+            cancelLabel="Volver"
+            tone="danger"
+            busy={busy}
+            onCancel={() => setConfirmingCancel(false)}
+            onConfirm={() => {
+              setConfirmingCancel(false);
+              void transition("cancel");
+            }}
+          />
         </div>
       ) : null}
     </aside>

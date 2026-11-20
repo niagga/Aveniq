@@ -7,6 +7,7 @@ import { InsurerForm } from "@/features/insurers/components/insurer-form";
 import { useInsurers } from "@/features/insurers/use-insurers";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -25,6 +26,7 @@ export function InsurersScreen() {
   const [editing, setEditing] = useState<Insurer | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<string | null>(null);
+  const [confirmingDowngrade, setConfirmingDowngrade] = useState<Insurer | null>(null);
 
   function startEdit(insurer: Insurer) {
     setEditing(insurer);
@@ -162,9 +164,12 @@ export function InsurersScreen() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void toggleActive(insurer)}
+                        onClick={() => {
+                          if (insurer.isActive) setConfirmingDowngrade(insurer);
+                          else void toggleActive(insurer);
+                        }}
                         disabled={busyID === insurer.id || writesLocked}
-                        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
+                        className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
                       >
                         {busyID === insurer.id
                           ? "Guardando…"
@@ -172,6 +177,20 @@ export function InsurersScreen() {
                             ? "Dar de baja"
                             : "Reactivar"}
                       </button>
+                      <ConfirmDialog
+                        open={confirmingDowngrade?.id === insurer.id}
+                        title={`¿Dar de baja ${insurer.name}?`}
+                        description="Deja de ofrecerse en las altas y en el tarifario. Los pacientes que ya la tienen siguen cubiertos, y se puede reactivar cuando haga falta."
+                        confirmLabel="Dar de baja"
+                        tone="danger"
+                        busy={busyID === insurer.id}
+                        onCancel={() => setConfirmingDowngrade(null)}
+                        onConfirm={() => {
+                          const target = confirmingDowngrade;
+                          setConfirmingDowngrade(null);
+                          if (target !== null) void toggleActive(target);
+                        }}
+                      />
                     </div>
                   </td>
                 </tr>

@@ -15,6 +15,7 @@ import { useTariffs } from "@/features/tariffs/use-tariffs";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
 
 /**
@@ -34,6 +35,9 @@ export function TariffsScreen() {
   const [editing, setEditing] = useState<Tariff | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<string | null>(null);
+  // The removal used window.confirm: the one destructive action in the app that asked, with
+  // an idiom that cannot be styled, translated or tested like the rest.
+  const [confirming, setConfirming] = useState<Tariff | null>(null);
 
   function startEdit(tariff: Tariff) {
     setEditing(tariff);
@@ -55,11 +59,6 @@ export function TariffsScreen() {
   }
 
   async function remove(tariff: Tariff) {
-    const confirmed = window.confirm(
-      "¿Quitar este valor del tarifario? Los comprobantes ya emitidos conservan el importe con el que se emitieron.",
-    );
-    if (!confirmed) return;
-
     setActionError(null);
     setBusyID(tariff.id);
     try {
@@ -187,12 +186,26 @@ export function TariffsScreen() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void remove(tariff)}
+                            onClick={() => setConfirming(tariff)}
                             disabled={busyID === tariff.id || writesLocked}
-                            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
+                            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
                           >
                             {busyID === tariff.id ? "Quitando…" : "Quitar"}
                           </button>
+                          <ConfirmDialog
+                            open={confirming?.id === tariff.id}
+                            title="¿Quitar este valor del tarifario?"
+                            description="Deja de ofrecerse en las altas nuevas. Los comprobantes ya emitidos conservan el importe con el que se emitieron."
+                            confirmLabel="Quitar"
+                            tone="danger"
+                            busy={busyID === tariff.id}
+                            onCancel={() => setConfirming(null)}
+                            onConfirm={() => {
+                              const target = confirming;
+                              setConfirming(null);
+                              if (target !== null) void remove(target);
+                            }}
+                          />
                         </div>
                       ) : null}
                     </td>
