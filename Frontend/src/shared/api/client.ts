@@ -32,6 +32,38 @@ browserApi.use({
   },
 });
 
+/**
+ * A rejected token is a session problem, not a screen problem (T12).
+ *
+ * The response still returns 401 to its caller - the screen decides what to say - but the
+ * session layer gets a chance to refresh, and sends the user to the login screen when the
+ * refresh cookie is gone too. Without this, an expired token left every form open with the
+ * raw API sentence in it and no way forward but a manual reload.
+ *
+ * The auth endpoints are excluded: a wrong password is a 401 that must not start a recovery
+ * loop. The import is dynamic so the client does not statically depend on the session layer,
+ * which already depends on this client.
+ */
+browserApi.use({
+  onResponse({ request, response }) {
+    if (response.status !== 401) return response;
+
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/auth/login") || path.endsWith("/auth/refresh")) return response;
+
+    // The public flows have no session to recover: an invitation link that does not open is
+    // an error to show on its own screen, not a reason to send anyone to the sign-in form.
+    const page = window.location.pathname;
+    if (PUBLIC_PATHS.some((publicPath) => page.startsWith(publicPath))) return response;
+
+    void import("@/shared/auth/unauthorized").then((module) => module.recoverSessionOnce());
+    return response;
+  },
+});
+
+/** Screens that render without a session, where a 401 is their own answer to show. */
+const PUBLIC_PATHS = ["/login", "/registro", "/invitacion"];
+
 /** Shown when the request never reached the API at all. */
 export const CONNECTION_ERROR_MESSAGE =
   "No pudimos contactar al servidor. Revisá que la API esté corriendo.";
