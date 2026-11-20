@@ -142,7 +142,7 @@ function NextSessions({ zone }: { zone: string }) {
               href="/agenda"
               className="inline-flex items-center rounded-control border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted"
             >
-              Ver la agenda
+              Ver el calendario
             </Link>
           </div>
         </div>
@@ -165,7 +165,7 @@ function BillingShortcut() {
           href="/facturacion"
           className="inline-flex items-center rounded-control border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted"
         >
-          Ir a facturación
+          Ver los comprobantes
         </Link>
       </div>
     </section>

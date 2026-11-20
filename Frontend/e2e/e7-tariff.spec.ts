@@ -128,7 +128,7 @@ test("the accountant reads the fee schedule and cannot change it", async ({ page
 
   await expect(page.getByRole("button", { name: "Nuevo valor" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Editar importes" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Quitar" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Quitar", exact: true })).toHaveCount(0);
 });
 
 test("the owner removes the mutual price and the table no longer lists it", async ({ page }) => {
@@ -139,8 +139,14 @@ test("the owner removes the mutual price and the table no longer lists it", asyn
   const row = page.getByRole("row").filter({ hasText: mutualName });
   await expect(row).toBeVisible({ timeout: 10_000 });
 
-  page.once("dialog", (dialog) => void dialog.accept());
-  await row.getByRole("button", { name: "Quitar" }).click();
+  await row.getByRole("button", { name: "Quitar", exact: true }).click();
+
+  // Removing asks first: the confirmation is part of the behaviour now, so the test asserts it
+  // appeared instead of accepting the native dialog that used to be the question.
+  const confirm = row.getByRole("dialog");
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText("¿Quitar este valor del tarifario?");
+  await confirm.getByRole("button", { name: "Quitar del tarifario" }).click();
 
   await expect(page.getByRole("row").filter({ hasText: mutualName })).toHaveCount(0, { timeout: 10_000 });
 });

@@ -196,7 +196,7 @@ export function TariffsScreen() {
                             open={confirming?.id === tariff.id}
                             title="¿Quitar este valor del tarifario?"
                             description="Deja de ofrecerse en las altas nuevas. Los comprobantes ya emitidos conservan el importe con el que se emitieron."
-                            confirmLabel="Quitar"
+                            confirmLabel="Quitar del tarifario"
                             tone="danger"
                             busy={busyID === tariff.id}
                             onCancel={() => setConfirming(null)}

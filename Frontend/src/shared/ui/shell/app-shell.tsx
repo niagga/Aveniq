@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <Link
           href="/"
-          aria-label="Aveniq, inicio"
+          aria-label="Aveniq"
           className="hidden rounded-control bg-brand px-2 py-1 text-xs font-bold text-brand-ink md:mb-2 md:grid md:h-8 md:w-8 md:place-items-center md:px-0 md:py-0"
         >
           A
