@@ -71,6 +71,8 @@ test("a professional registers a patient, keeps its clinical record, and books i
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
   await page.getByLabel("Paciente").selectOption({ label: patientName });
+  // The modality has no default: a booking must name it (L61).
+  await page.getByLabel("Modalidad").selectOption("presencial");
 
   // The week grid is Monday–Sunday. Booking +3 days from Friday lands next week
   // and never appears; book tomorrow (or later today on Sunday).
@@ -98,4 +100,5 @@ test("a professional registers a patient, keeps its clinical record, and books i
     );
   }
   expect(isBooked, "no free hour left on the next day").toBe(true);
+  await expect(booked.first()).toContainText("Presencial");
 });

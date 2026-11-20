@@ -9,11 +9,14 @@ import {
   dateTimeLocalToRFC3339,
   formatDayHeading,
   formatSlotTime,
+  MODALITY_OPTIONS,
+  modalityLabel,
   startOfWeek,
   toDateTimeLocalValue,
   toISODate,
   weekdayLabel,
   type Appointment,
+  type Modality,
 } from "@/entities/schedule/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
@@ -179,6 +182,7 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
                         {formatSlotTime(slot.startsAt, zone)}–{formatSlotTime(slot.endsAt, zone)}
                       </span>
                       <span className="block">{patientName(slot.patientId)}</span>
+                      <span className="block text-ink-muted">{modalityLabel(slot.modality)}</span>
                     </button>
                   </li>
                 ))
@@ -223,6 +227,8 @@ function BookingForms({
   const [patientId, setPatientId] = useState("");
   const [startsAt, setStartsAt] = useState(() => toDateTimeLocalValue(new Date()));
   const [duration, setDuration] = useState(45);
+  // No default: the professional decides each time whether the session is online or presencial.
+  const [modality, setModality] = useState<Modality | "">("");
   const [seriesUntil, setSeriesUntil] = useState("");
   const [busy, setBusy] = useState(false);
   const writesLocked = useWritesLocked();
@@ -236,11 +242,21 @@ function BookingForms({
       onError("Elegí un paciente y una hora de inicio.");
       return;
     }
+    if (modality === "") {
+      onError("Elegí si el turno es online o presencial.");
+      return;
+    }
     const ends = new Date(new Date(start).getTime() + duration * 60_000).toISOString();
     setBusy(true);
     try {
       const result = await browserApi.POST("/api/v1/appointments", {
-        body: { patientId, professionalUserId: professionalId, startsAt: start, endsAt: ends },
+        body: {
+          patientId,
+          professionalUserId: professionalId,
+          startsAt: start,
+          endsAt: ends,
+          modality,
+        },
       });
       if (result.error || !result.data) {
         onError(apiErrorMessage(result.error));
@@ -263,6 +279,10 @@ function BookingForms({
       onError("La serie necesita paciente, hora de inicio y fecha de fin.");
       return;
     }
+    if (modality === "") {
+      onError("Elegí si la serie es online o presencial.");
+      return;
+    }
     const startDate = new Date(start);
     const localMinutes = startDate.getHours() * 60 + startDate.getMinutes();
     setBusy(true);
@@ -274,6 +294,7 @@ function BookingForms({
           weekday: startDate.getDay(),
           localStartMinute: localMinutes,
           durationMinutes: duration,
+          modality,
           startsOn: toISODate(startDate, zone),
           untilOn: seriesUntil,
         },
@@ -312,6 +333,7 @@ function BookingForms({
           />
         </label>
         <DurationField value={duration} onChange={setDuration} disabled={writesLocked} />
+        <ModalityField value={modality} onChange={setModality} disabled={writesLocked} />
         <button
           type="submit"
           disabled={busy || writesLocked}
@@ -399,7 +421,7 @@ function AppointmentActions({
           <h2 className="text-sm font-semibold">{patientName}</h2>
           <p className="text-xs text-ink-muted">
             {formatSlotTime(appointment.startsAt, zone)}–{formatSlotTime(appointment.endsAt, zone)} ·{" "}
-            {appointment.status}
+            {modalityLabel(appointment.modality)} · {appointment.status}
           </p>
         </div>
         <button type="button" onClick={onClose} className="text-xs text-ink-muted" aria-label="Cerrar">
@@ -455,6 +477,36 @@ function PatientSelect({
         {patients.map((patient) => (
           <option key={patient.id} value={patient.id}>
             {patient.fullName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ModalityField({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: Modality | "";
+  onChange: (value: Modality | "") => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block text-xs font-medium text-ink-muted">
+      Modalidad
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as Modality | "")}
+        disabled={disabled}
+        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
+        required
+      >
+        <option value="">Elegí online o presencial</option>
+        {MODALITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>

@@ -15,6 +15,7 @@ type AppointmentView struct {
 	StartsAt           string
 	EndsAt             string
 	Status             string
+	Modality           string
 	Notes              string
 }
 
@@ -31,6 +32,7 @@ func toAppointmentView(slot schedule.Appointment) AppointmentView {
 		StartsAt:           slot.StartsAt.UTC().Format(time.RFC3339),
 		EndsAt:             slot.EndsAt.UTC().Format(time.RFC3339),
 		Status:             string(slot.Status),
+		Modality:           string(slot.Modality),
 		Notes:              notes,
 	}
 }
@@ -43,6 +45,7 @@ type SeriesView struct {
 	Weekday            int
 	LocalStartMinute   int
 	DurationMinutes    int
+	Modality           string
 	StartsOn           string
 	UntilOn            string
 	Appointments       []AppointmentView
@@ -60,6 +63,7 @@ func toSeriesView(series schedule.Series, slots []schedule.Appointment) SeriesVi
 		Weekday:            int(series.Weekday),
 		LocalStartMinute:   series.LocalStartMinute,
 		DurationMinutes:    series.DurationMinutes,
+		Modality:           string(series.Modality),
 		StartsOn:           series.StartsOn.Format("2006-01-02"),
 		UntilOn:            series.UntilOn.Format("2006-01-02"),
 		Appointments:       views,

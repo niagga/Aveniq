@@ -206,8 +206,8 @@ func TestBillingSchema(t *testing.T) {
 			_, err := app.Exec(ctx, `
 				INSERT INTO appointments (
 					id, tenant_id, professional_user_id, patient_id,
-					starts_at, ends_at, status, created_at, updated_at
-				) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', now(), now())`,
+					starts_at, ends_at, status, modality, created_at, updated_at
+				) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', 'presencial', now(), now())`,
 				appointment, scratchTenantA, users[scratchTenantA], patients[scratchTenantA], start, start.Add(45*time.Minute))
 			return err
 		}); err != nil {

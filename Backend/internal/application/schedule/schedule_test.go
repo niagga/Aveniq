@@ -110,12 +110,16 @@ func TestCreateAppointmentPersistsAScheduledSlot(t *testing.T) {
 		PatientID:          "33333333-3333-3333-3333-333333333333",
 		StartsAt:           now,
 		EndsAt:             now.Add(45 * time.Minute),
+		Modality:           "online",
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if view.Status != "scheduled" {
 		t.Fatalf("status = %s", view.Status)
+	}
+	if view.Modality != "online" {
+		t.Fatalf("modality = %s, want online", view.Modality)
 	}
 	if len(slots.created) != 1 {
 		t.Fatalf("created %d slots", len(slots.created))
@@ -138,6 +142,7 @@ func TestCreateSeriesExpandsWeeklyOccurrences(t *testing.T) {
 		Weekday:            int(time.Monday),
 		LocalStartMinute:   10 * 60,
 		DurationMinutes:    45,
+		Modality:           "presencial",
 		StartsOn:           time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC), // Monday
 		UntilOn:            time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC),
 	})
@@ -146,5 +151,13 @@ func TestCreateSeriesExpandsWeeklyOccurrences(t *testing.T) {
 	}
 	if len(view.Appointments) != 3 {
 		t.Fatalf("got %d appointments, want 3 Mondays", len(view.Appointments))
+	}
+	if view.Modality != "presencial" {
+		t.Fatalf("series modality = %s, want presencial", view.Modality)
+	}
+	for _, slot := range view.Appointments {
+		if slot.Modality != "presencial" {
+			t.Fatalf("occurrence %s modality = %s, want presencial", slot.StartsAt, slot.Modality)
+		}
 	}
 }

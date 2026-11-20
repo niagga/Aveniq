@@ -24,6 +24,7 @@ type Series struct {
 	Weekday            time.Weekday
 	LocalStartMinute   int
 	DurationMinutes    int
+	Modality           Modality
 	StartsOn           time.Time // date in the tenant timezone, truncated to day
 	UntilOn            time.Time
 	CreatedAt          time.Time
@@ -37,6 +38,7 @@ type SeriesDraft struct {
 	Weekday            int
 	LocalStartMinute   int
 	DurationMinutes    int
+	Modality           Modality
 	StartsOn           time.Time
 	UntilOn            time.Time
 }
@@ -65,6 +67,9 @@ func NewSeries(id SeriesID, tenantID tenant.ID, draft SeriesDraft, now time.Time
 	if draft.DurationMinutes < 5 || draft.DurationMinutes > 480 {
 		return Series{}, &ValidationError{Field: "duration_minutes", Message: "must be between 5 and 480"}
 	}
+	if !draft.Modality.Valid() {
+		return Series{}, &ValidationError{Field: "modality", Message: "must be online or presencial"}
+	}
 	if draft.StartsOn.IsZero() {
 		return Series{}, &ValidationError{Field: "starts_on", Message: "must not be empty"}
 	}
@@ -86,6 +91,7 @@ func NewSeries(id SeriesID, tenantID tenant.ID, draft SeriesDraft, now time.Time
 		Weekday:            time.Weekday(draft.Weekday),
 		LocalStartMinute:   draft.LocalStartMinute,
 		DurationMinutes:    draft.DurationMinutes,
+		Modality:           draft.Modality,
 		StartsOn:           startsOn,
 		UntilOn:            untilOn,
 		CreatedAt:          now.UTC(),
@@ -99,6 +105,7 @@ func ReconstituteSeries(
 	tenantID tenant.ID,
 	professionalUserID, patientID string,
 	weekday, localStartMinute, durationMinutes int,
+	modality Modality,
 	startsOn, untilOn, createdAt, updatedAt time.Time,
 ) (Series, error) {
 	return NewSeries(id, tenantID, SeriesDraft{
@@ -107,6 +114,7 @@ func ReconstituteSeries(
 		Weekday:            weekday,
 		LocalStartMinute:   localStartMinute,
 		DurationMinutes:    durationMinutes,
+		Modality:           modality,
 		StartsOn:           startsOn,
 		UntilOn:            untilOn,
 	}, createdAt)

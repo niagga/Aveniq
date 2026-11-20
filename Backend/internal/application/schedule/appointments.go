@@ -21,7 +21,9 @@ type CreateAppointmentInput struct {
 	PatientID          string
 	StartsAt           time.Time
 	EndsAt             time.Time
-	Notes              string
+	// Modality is "online" or "presencial". The use case refuses anything else.
+	Modality string
+	Notes    string
 }
 
 // ListAppointmentsInput is the weekly window.
@@ -71,6 +73,7 @@ func (uc *CreateAppointmentUseCase) Execute(ctx context.Context, in CreateAppoin
 			PatientID:          in.PatientID,
 			StartsAt:           in.StartsAt,
 			EndsAt:             in.EndsAt,
+			Modality:           schedule.Modality(in.Modality),
 			Notes:              optional(notes),
 		},
 		uc.clock.Now(),

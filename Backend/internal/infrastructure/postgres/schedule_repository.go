@@ -177,6 +177,7 @@ func (r *ScheduleRepository) SaveSeries(ctx context.Context, series schedule.Ser
 		StartsOn:         pgtype.Date{Time: series.StartsOn, Valid: true},
 		UntilOn:          pgtype.Date{Time: series.UntilOn, Valid: true},
 		UpdatedAt:        series.UpdatedAt,
+		Modality:         string(series.Modality),
 	})
 	return translateScheduleError(err)
 }
@@ -246,6 +247,7 @@ func appointmentParams(slot schedule.Appointment) (sqlcgen.CreateAppointmentPara
 		StartsAt:           slot.StartsAt,
 		EndsAt:             slot.EndsAt,
 		Status:             string(slot.Status),
+		Modality:           string(slot.Modality),
 		Notes:              slot.Notes,
 		CreatedAt:          slot.CreatedAt,
 		UpdatedAt:          slot.UpdatedAt,
@@ -277,6 +279,7 @@ func seriesParams(series schedule.Series) (sqlcgen.CreateAppointmentSeriesParams
 		Weekday:            int16(series.Weekday),
 		LocalStartMinute:   int32(series.LocalStartMinute),
 		DurationMinutes:    int32(series.DurationMinutes),
+		Modality:           string(series.Modality),
 		StartsOn:           pgtype.Date{Time: series.StartsOn, Valid: true},
 		UntilOn:            pgtype.Date{Time: series.UntilOn, Valid: true},
 		CreatedAt:          series.CreatedAt,
@@ -298,6 +301,7 @@ func appointmentToDomain(row sqlcgen.Appointment) (schedule.Appointment, error) 
 		row.StartsAt,
 		row.EndsAt,
 		schedule.Status(row.Status),
+		schedule.Modality(row.Modality),
 		row.Notes,
 		row.CreatedAt,
 		row.UpdatedAt,
@@ -313,6 +317,7 @@ func seriesToDomain(row sqlcgen.AppointmentSeries) (schedule.Series, error) {
 		int(row.Weekday),
 		int(row.LocalStartMinute),
 		int(row.DurationMinutes),
+		schedule.Modality(row.Modality),
 		row.StartsOn.Time,
 		row.UntilOn.Time,
 		row.CreatedAt,

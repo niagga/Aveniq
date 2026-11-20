@@ -2287,3 +2287,33 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   nombre contra el catálogo.
 - **Verificación.** `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e` 22 de 22 contra una API
   con el código nuevo (`127.0.0.1:8080`). Commit solo cuando se pida.
+
+**L64 — T52: modalidad del turno y de la serie (online o presencial)**
+
+- **Migración `0018_appointment_modality.sql`** (aplicada en la base de desarrollo, versión 18).
+  `appointments` y `appointment_series` suman `modality` (`online` | `presencial`) con CHECK. Los
+  turnos y series existentes quedan `presencial` por backfill. Después se quita el default, igual
+  que la moneda en 0017: la API tiene que enviarla siempre. El Down quita columnas y constraints.
+- **Dominio.** `schedule.Modality` con `Valid()`. `NewAppointment` y `NewSeries` rechazan una
+  modalidad desconocida o vacía. `Reconstitute` y `ReconstituteSeries` la reciben. La serie pasa su
+  modalidad a cada turno que genera.
+- **Aplicación.** `CreateAppointmentInput`, `SeriesInput` y `UpdateSeriesInput` llevan `Modality`;
+  `AppointmentView` y `SeriesView` la exponen. Al editar una serie, la nueva modalidad alcanza las
+  ocurrencias futuras; las atendidas no se reescriben.
+- **Postgres.** Los inserts y el update de series escriben `modality`. `sqlcgen` regenerado con
+  sqlc v1.31.1 (el diff solo agrega la columna). `TestScheduleSchema` suma el caso: sin modalidad
+  falla con 23502, con un valor desconocido con 23514, y con `online` entra. Los inserts crudos de
+  los tests pasan la modalidad; los de la prueba de migraciones anteriores a 0018 no cambian.
+- **HTTP.** `modality` es obligatorio, con enum, en el cuerpo de turno y de serie (`POST`,
+  `PATCH`). El spec lo marca como requerido y el schema regenerado solo agrega esas dos líneas.
+- **Agenda.** Selector "Modalidad" en el formulario de reserva, compartido por "Nuevo turno" y
+  "Crear serie" (como paciente, inicio y duración). Sin preselección: el botón avisa si falta. Cada
+  turno muestra su modalidad en la grilla y en la ficha. `e2e/e2.spec.ts` elige "Presencial" y
+  verifica que el turno lo muestre.
+- **Decisiones tomadas sin consultar.** Modalidad obligatoria, sin default, en la API y en la UI; sin
+  preselección en la agenda (igual que la moneda, cambiable); la serie aplica su modalidad a todas
+  sus ocurrencias; los turnos existentes quedan presenciales.
+- **Verificación.** `go vet ./...` limpio, `gofmt` sin diferencias, `go test ./...` completo en verde
+  con las bases de test. `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e` 22 de 22 contra la API
+  nueva (`127.0.0.1:8080`, reiniciada con este build).
+- **Pendiente.** Commit solo cuando se pida. T53 es el siguiente.

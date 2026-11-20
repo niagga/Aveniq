@@ -19,6 +19,7 @@ type appointmentBody struct {
 	SeriesID           string `json:"seriesId,omitempty" format:"uuid"`
 	StartsAt           string `json:"startsAt" format:"date-time"`
 	EndsAt             string `json:"endsAt" format:"date-time"`
+	Modality           string `json:"modality" enum:"online,presencial" doc:"Whether the session happens online or in the practice. Required; there is no default."`
 	Status             string `json:"status,omitempty" enum:"scheduled,attended,cancelled"`
 	Notes              string `json:"notes,omitempty"`
 }
@@ -30,6 +31,7 @@ type seriesBody struct {
 	Weekday            int               `json:"weekday" minimum:"0" maximum:"6" doc:"0 is Sunday, matching Go and PostgreSQL."`
 	LocalStartMinute   int               `json:"localStartMinute" minimum:"0" maximum:"1439" doc:"Minutes from local midnight in the practice timezone."`
 	DurationMinutes    int               `json:"durationMinutes" minimum:"5" maximum:"480"`
+	Modality           string            `json:"modality" enum:"online,presencial" doc:"Applies to every occurrence the series creates."`
 	StartsOn           string            `json:"startsOn" format:"date"`
 	UntilOn            string            `json:"untilOn" format:"date"`
 	Appointments       []appointmentBody `json:"appointments,omitempty"`
@@ -43,6 +45,7 @@ func toAppointmentBody(view scheduleapp.AppointmentView) appointmentBody {
 		SeriesID:           view.SeriesID,
 		StartsAt:           view.StartsAt,
 		EndsAt:             view.EndsAt,
+		Modality:           view.Modality,
 		Status:             view.Status,
 		Notes:              view.Notes,
 	}
@@ -60,6 +63,7 @@ func toSeriesBody(view scheduleapp.SeriesView) seriesBody {
 		Weekday:            view.Weekday,
 		LocalStartMinute:   view.LocalStartMinute,
 		DurationMinutes:    view.DurationMinutes,
+		Modality:           view.Modality,
 		StartsOn:           view.StartsOn,
 		UntilOn:            view.UntilOn,
 		Appointments:       items,
@@ -265,6 +269,7 @@ func (h *scheduleHandlers) createHandler(ctx context.Context, in *createAppointm
 		PatientID:          in.Body.PatientID,
 		StartsAt:           starts,
 		EndsAt:             ends,
+		Modality:           in.Body.Modality,
 		Notes:              in.Body.Notes,
 	})
 	if err != nil {
@@ -316,6 +321,7 @@ func (h *scheduleHandlers) createSeriesHandler(ctx context.Context, in *createSe
 		Weekday:            in.Body.Weekday,
 		LocalStartMinute:   in.Body.LocalStartMinute,
 		DurationMinutes:    in.Body.DurationMinutes,
+		Modality:           in.Body.Modality,
 		StartsOn:           startsOn,
 		UntilOn:            untilOn,
 	})
@@ -341,6 +347,7 @@ func (h *scheduleHandlers) updateSeriesHandler(ctx context.Context, in *updateSe
 		Weekday:          in.Body.Weekday,
 		LocalStartMinute: in.Body.LocalStartMinute,
 		DurationMinutes:  in.Body.DurationMinutes,
+		Modality:         in.Body.Modality,
 		StartsOn:         startsOn,
 		UntilOn:          untilOn,
 	})

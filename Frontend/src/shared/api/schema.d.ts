@@ -846,6 +846,11 @@ export interface components {
             endsAt: string;
             /** Format: uuid */
             id?: string;
+            /**
+             * @description Whether the session happens online or in the practice. Required; there is no default.
+             * @enum {string}
+             */
+            modality: "online" | "presencial";
             notes?: string;
             /** Format: uuid */
             patientId: string;
@@ -1426,6 +1431,11 @@ export interface components {
              * @description Minutes from local midnight in the practice timezone.
              */
             localStartMinute: number;
+            /**
+             * @description Applies to every occurrence the series creates.
+             * @enum {string}
+             */
+            modality: "online" | "presencial";
             /** Format: uuid */
             patientId: string;
             /** Format: uuid */

@@ -3,6 +3,18 @@ import type { components } from "@/shared/api/schema";
 export type Appointment = components["schemas"]["AppointmentBody"];
 export type AppointmentSeries = components["schemas"]["SeriesBody"];
 
+/** Where a session happens (L61). The API has no default: a booking must name one. */
+export type Modality = Appointment["modality"];
+
+export const MODALITY_OPTIONS: ReadonlyArray<{ value: Modality; label: string }> = [
+  { value: "presencial", label: "Presencial" },
+  { value: "online", label: "Online" },
+];
+
+export function modalityLabel(modality: string): string {
+  return MODALITY_OPTIONS.find((option) => option.value === modality)?.label ?? modality;
+}
+
 const WEEKDAY_LABELS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
 export function weekdayLabel(weekday: number): string {

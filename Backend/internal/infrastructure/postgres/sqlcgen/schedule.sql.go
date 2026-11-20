@@ -34,9 +34,9 @@ const createAppointment = `-- name: CreateAppointment :one
 
 INSERT INTO appointments (
     id, tenant_id, professional_user_id, patient_id, series_id,
-    starts_at, ends_at, status, notes, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at
+    starts_at, ends_at, status, modality, notes, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
 `
 
 type CreateAppointmentParams struct {
@@ -48,6 +48,7 @@ type CreateAppointmentParams struct {
 	StartsAt           time.Time
 	EndsAt             time.Time
 	Status             string
+	Modality           string
 	Notes              *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -65,6 +66,7 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		arg.StartsAt,
 		arg.EndsAt,
 		arg.Status,
+		arg.Modality,
 		arg.Notes,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -82,6 +84,7 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }
@@ -89,10 +92,10 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 const createAppointmentSeries = `-- name: CreateAppointmentSeries :one
 INSERT INTO appointment_series (
     id, tenant_id, professional_user_id, patient_id,
-    weekday, local_start_minute, duration_minutes, starts_on, until_on,
+    weekday, local_start_minute, duration_minutes, modality, starts_on, until_on,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at, modality
 `
 
 type CreateAppointmentSeriesParams struct {
@@ -103,6 +106,7 @@ type CreateAppointmentSeriesParams struct {
 	Weekday            int16
 	LocalStartMinute   int32
 	DurationMinutes    int32
+	Modality           string
 	StartsOn           pgtype.Date
 	UntilOn            pgtype.Date
 	CreatedAt          time.Time
@@ -118,6 +122,7 @@ func (q *Queries) CreateAppointmentSeries(ctx context.Context, arg CreateAppoint
 		arg.Weekday,
 		arg.LocalStartMinute,
 		arg.DurationMinutes,
+		arg.Modality,
 		arg.StartsOn,
 		arg.UntilOn,
 		arg.CreatedAt,
@@ -136,6 +141,7 @@ func (q *Queries) CreateAppointmentSeries(ctx context.Context, arg CreateAppoint
 		&i.UntilOn,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }
@@ -160,7 +166,7 @@ func (q *Queries) DeleteScheduledOfSeriesFrom(ctx context.Context, arg DeleteSch
 }
 
 const getAppointment = `-- name: GetAppointment :one
-SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at
+SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
 FROM appointments
 WHERE id = $1
 `
@@ -180,12 +186,13 @@ func (q *Queries) GetAppointment(ctx context.Context, id pgtype.UUID) (Appointme
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }
 
 const getAppointmentSeries = `-- name: GetAppointmentSeries :one
-SELECT id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at
+SELECT id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at, modality
 FROM appointment_series
 WHERE id = $1
 `
@@ -205,12 +212,13 @@ func (q *Queries) GetAppointmentSeries(ctx context.Context, id pgtype.UUID) (App
 		&i.UntilOn,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }
 
 const listAppointmentsInRange = `-- name: ListAppointmentsInRange :many
-SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at
+SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
 FROM appointments
 WHERE starts_at < $1
   AND ends_at > $2
@@ -245,6 +253,7 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Modality,
 		); err != nil {
 			return nil, err
 		}
@@ -257,7 +266,7 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 }
 
 const listAppointmentsInRangeForProfessional = `-- name: ListAppointmentsInRangeForProfessional :many
-SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at
+SELECT id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
 FROM appointments
 WHERE professional_user_id = $1
   AND starts_at < $2
@@ -293,6 +302,7 @@ func (q *Queries) ListAppointmentsInRangeForProfessional(ctx context.Context, ar
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Modality,
 		); err != nil {
 			return nil, err
 		}
@@ -311,9 +321,10 @@ SET weekday = $2,
     duration_minutes = $4,
     starts_on = $5,
     until_on = $6,
-    updated_at = $7
+    updated_at = $7,
+    modality = $8
 WHERE id = $1
-RETURNING id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at
+RETURNING id, tenant_id, professional_user_id, patient_id, weekday, local_start_minute, duration_minutes, starts_on, until_on, created_at, updated_at, modality
 `
 
 type UpdateAppointmentSeriesParams struct {
@@ -324,6 +335,7 @@ type UpdateAppointmentSeriesParams struct {
 	StartsOn         pgtype.Date
 	UntilOn          pgtype.Date
 	UpdatedAt        time.Time
+	Modality         string
 }
 
 func (q *Queries) UpdateAppointmentSeries(ctx context.Context, arg UpdateAppointmentSeriesParams) (AppointmentSeries, error) {
@@ -335,6 +347,7 @@ func (q *Queries) UpdateAppointmentSeries(ctx context.Context, arg UpdateAppoint
 		arg.StartsOn,
 		arg.UntilOn,
 		arg.UpdatedAt,
+		arg.Modality,
 	)
 	var i AppointmentSeries
 	err := row.Scan(
@@ -349,6 +362,7 @@ func (q *Queries) UpdateAppointmentSeries(ctx context.Context, arg UpdateAppoint
 		&i.UntilOn,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }
@@ -358,7 +372,7 @@ UPDATE appointments
 SET status = $2,
     updated_at = $3
 WHERE id = $1
-RETURNING id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at
+RETURNING id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
 `
 
 type UpdateAppointmentStatusParams struct {
@@ -382,6 +396,7 @@ func (q *Queries) UpdateAppointmentStatus(ctx context.Context, arg UpdateAppoint
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Modality,
 	)
 	return i, err
 }

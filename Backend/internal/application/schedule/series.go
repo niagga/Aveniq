@@ -22,8 +22,10 @@ type SeriesInput struct {
 	Weekday            int
 	LocalStartMinute   int
 	DurationMinutes    int
-	StartsOn           time.Time
-	UntilOn            time.Time
+	// Modality applies to every occurrence the series creates.
+	Modality string
+	StartsOn time.Time
+	UntilOn  time.Time
 }
 
 // SeriesIDInput names a series.
@@ -73,6 +75,7 @@ func (uc *CreateSeriesUseCase) Execute(ctx context.Context, in SeriesInput) (Ser
 		Weekday:            in.Weekday,
 		LocalStartMinute:   in.LocalStartMinute,
 		DurationMinutes:    in.DurationMinutes,
+		Modality:           schedule.Modality(in.Modality),
 		StartsOn:           in.StartsOn,
 		UntilOn:            in.UntilOn,
 	}, uc.clock.Now())
@@ -108,6 +111,7 @@ func (uc *CreateSeriesUseCase) Execute(ctx context.Context, in SeriesInput) (Ser
 				PatientID:          in.PatientID,
 				StartsAt:           interval.StartsAt,
 				EndsAt:             interval.EndsAt,
+				Modality:           series.Modality,
 			}, uc.clock.Now())
 			if err != nil {
 				return err
@@ -156,8 +160,10 @@ type UpdateSeriesInput struct {
 	Weekday          int
 	LocalStartMinute int
 	DurationMinutes  int
-	StartsOn         time.Time
-	UntilOn          time.Time
+	// Modality replaces the one of the series. Attended occurrences keep theirs.
+	Modality string
+	StartsOn time.Time
+	UntilOn  time.Time
 }
 
 // Execute replaces future scheduled slots of the series.
@@ -188,6 +194,7 @@ func (uc *UpdateSeriesUseCase) Execute(ctx context.Context, in UpdateSeriesInput
 			Weekday:            in.Weekday,
 			LocalStartMinute:   in.LocalStartMinute,
 			DurationMinutes:    in.DurationMinutes,
+			Modality:           schedule.Modality(in.Modality),
 			StartsOn:           in.StartsOn,
 			UntilOn:            in.UntilOn,
 		}, existing.CreatedAt)
@@ -218,6 +225,7 @@ func (uc *UpdateSeriesUseCase) Execute(ctx context.Context, in UpdateSeriesInput
 				PatientID:          updated.PatientID,
 				StartsAt:           interval.StartsAt,
 				EndsAt:             interval.EndsAt,
+				Modality:           updated.Modality,
 			}, now)
 			if err != nil {
 				return err

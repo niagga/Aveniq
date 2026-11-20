@@ -4,8 +4,8 @@
 -- name: CreateAppointment :one
 INSERT INTO appointments (
     id, tenant_id, professional_user_id, patient_id, series_id,
-    starts_at, ends_at, status, notes, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    starts_at, ends_at, status, modality, notes, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: GetAppointment :one
@@ -41,9 +41,9 @@ RETURNING *;
 -- name: CreateAppointmentSeries :one
 INSERT INTO appointment_series (
     id, tenant_id, professional_user_id, patient_id,
-    weekday, local_start_minute, duration_minutes, starts_on, until_on,
+    weekday, local_start_minute, duration_minutes, modality, starts_on, until_on,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: GetAppointmentSeries :one
@@ -58,7 +58,8 @@ SET weekday = $2,
     duration_minutes = $4,
     starts_on = $5,
     until_on = $6,
-    updated_at = $7
+    updated_at = $7,
+    modality = $8
 WHERE id = $1
 RETURNING *;
 

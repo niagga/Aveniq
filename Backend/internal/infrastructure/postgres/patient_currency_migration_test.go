@@ -24,7 +24,8 @@ func TestPatientCurrencyHasNoDefaultAfter0017(t *testing.T) {
 
 	ctx := context.Background()
 	tempOwnerDSN, tempAppDSN := newScratchDatabase(t, ctx, ownerDSN, appDSN)
-	migrate(t, tempOwnerDSN)
+	// Freeze the schema at 17: later migrations (0018) must not change what this proves.
+	migrateUpTo(t, tempOwnerDSN, 17)
 	seedTenants(t, ctx, tempOwnerDSN)
 
 	if got := gooseVersion(t, tempOwnerDSN); got != 17 {

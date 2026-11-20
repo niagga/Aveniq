@@ -23,6 +23,7 @@ type Appointment struct {
 	Notes              *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	Modality           string
 }
 
 type AppointmentSeries struct {
@@ -37,6 +38,7 @@ type AppointmentSeries struct {
 	UntilOn            pgtype.Date
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	Modality           string
 }
 
 // Append-only for the application role (0008 revokes UPDATE and DELETE). Clinical access is recorded here in the same transaction as the read, so an unaudited read cannot commit.

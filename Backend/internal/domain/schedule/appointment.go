@@ -35,6 +35,7 @@ type Appointment struct {
 	StartsAt           time.Time
 	EndsAt             time.Time
 	Status             Status
+	Modality           Modality
 	Notes              *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -46,6 +47,7 @@ type AppointmentDraft struct {
 	PatientID          string
 	StartsAt           time.Time
 	EndsAt             time.Time
+	Modality           Modality
 	Notes              *string
 }
 
@@ -62,6 +64,9 @@ func NewAppointment(id AppointmentID, tenantID tenant.ID, draft AppointmentDraft
 	}
 	if strings.TrimSpace(draft.PatientID) == "" {
 		return Appointment{}, &ValidationError{Field: "patient_id", Message: "must not be empty"}
+	}
+	if !draft.Modality.Valid() {
+		return Appointment{}, &ValidationError{Field: "modality", Message: "must be online or presencial"}
 	}
 
 	starts := draft.StartsAt.UTC()
@@ -88,6 +93,7 @@ func NewAppointment(id AppointmentID, tenantID tenant.ID, draft AppointmentDraft
 		StartsAt:           starts,
 		EndsAt:             ends,
 		Status:             StatusScheduled,
+		Modality:           draft.Modality,
 		Notes:              sanitizeNotes(draft.Notes),
 		CreatedAt:          now.UTC(),
 		UpdatedAt:          now.UTC(),
@@ -101,6 +107,7 @@ func Reconstitute(
 	professionalUserID, patientID, seriesID string,
 	startsAt, endsAt time.Time,
 	status Status,
+	modality Modality,
 	notes *string,
 	createdAt, updatedAt time.Time,
 ) (Appointment, error) {
@@ -109,6 +116,9 @@ func Reconstitute(
 	}
 	if !status.Valid() {
 		return Appointment{}, &ValidationError{Field: "status", Message: "unknown status"}
+	}
+	if !modality.Valid() {
+		return Appointment{}, &ValidationError{Field: "modality", Message: "must be online or presencial"}
 	}
 	return Appointment{
 		ID:                 id,
@@ -119,6 +129,7 @@ func Reconstitute(
 		StartsAt:           startsAt.UTC(),
 		EndsAt:             endsAt.UTC(),
 		Status:             status,
+		Modality:           modality,
 		Notes:              notes,
 		CreatedAt:          createdAt.UTC(),
 		UpdatedAt:          updatedAt.UTC(),

@@ -44,8 +44,8 @@ func TestScheduleSchema(t *testing.T) {
 			_, err := app.Exec(ctx, `
 				INSERT INTO appointments (
 					id, tenant_id, professional_user_id, patient_id,
-					starts_at, ends_at, status, created_at, updated_at
-				) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', now(), now())`,
+					starts_at, ends_at, status, modality, created_at, updated_at
+				) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', 'presencial', now(), now())`,
 				uuid.NewString(), tenantID, professionalID, patientID, start, start.Add(45*time.Minute))
 			return err
 		})
@@ -90,6 +90,30 @@ func TestScheduleSchema(t *testing.T) {
 		}
 		if total != 0 {
 			t.Fatalf("tenant B sees %d appointments of A", total)
+		}
+	})
+
+	t.Run("a slot must name its modality, online or presencial", func(t *testing.T) {
+		at := start.Add(5 * time.Hour)
+		insertWith := func(modality *string) error {
+			return withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+				_, err := app.Exec(ctx, `
+					INSERT INTO appointments (
+						id, tenant_id, professional_user_id, patient_id,
+						starts_at, ends_at, status, modality, created_at, updated_at
+					) VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7, now(), now())`,
+					uuid.NewString(), scratchTenantA, users[scratchTenantA], patients[scratchTenantA],
+					at, at.Add(45*time.Minute), modality)
+				return err
+			})
+		}
+
+		expectCode(t, insertWith(nil), "23502", "slot without modality")
+		hybrid := "hybrid"
+		expectCode(t, insertWith(&hybrid), "23514", "slot with an unknown modality")
+		online := "online"
+		if err := insertWith(&online); err != nil {
+			t.Fatalf("online slot: %v", err)
 		}
 	})
 
