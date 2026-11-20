@@ -122,6 +122,7 @@ test("the accountant's voucher can name a patient, and the buyer comes from the 
     await owner.page.getByRole("button", { name: "Nuevo paciente" }).click();
     await owner.page.getByLabel("Nombre y apellido").fill(patientName);
     await owner.page.getByLabel("Fecha de nacimiento").fill("1988-03-04");
+    await owner.page.getByLabel("Moneda de facturación").selectOption("ARS");
     await owner.page.getByRole("button", { name: "Crear paciente" }).click();
     await expect(owner.page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
   } finally {

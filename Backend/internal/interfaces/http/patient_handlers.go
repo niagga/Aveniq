@@ -46,6 +46,10 @@ type patientBody struct {
 	FiscalAddress          string               `json:"fiscalAddress,omitempty"`
 	AdministrativeNotes    string               `json:"administrativeNotes,omitempty"`
 	TreatingProfessionalID string               `json:"treatingProfessionalId,omitempty" doc:"The professional who treats the patient. Empty until one is assigned."`
+	CoverageKind           string               `json:"coverageKind" enum:"private,insurer" doc:"Who pays: a particular patient (private) or a mutual's (insurer)."`
+	InsurerID              string               `json:"insurerId,omitempty" doc:"The mutual that covers the patient. Empty for a private patient."`
+	MemberNumber           string               `json:"memberNumber,omitempty" doc:"Affiliate number at the mutual. Empty for a private patient."`
+	BillingCurrency        string               `json:"billingCurrency" enum:"ARS,EUR,USD" doc:"Currency the patient's sessions are billed in. Chosen, never derived from the country."`
 	IsActive               bool                 `json:"isActive" doc:"False after a deactivation. Patients are never deleted."`
 	CreatedAt              string               `json:"createdAt" format:"date-time"`
 	UpdatedAt              string               `json:"updatedAt" format:"date-time"`
@@ -66,6 +70,10 @@ func toPatientBody(view patientapp.PatientView) patientBody {
 		FiscalAddress:          view.FiscalAddress,
 		AdministrativeNotes:    view.AdministrativeNotes,
 		TreatingProfessionalID: view.TreatingProfessionalID,
+		CoverageKind:           view.CoverageKind,
+		InsurerID:              view.InsurerID,
+		MemberNumber:           view.MemberNumber,
+		BillingCurrency:        view.BillingCurrency,
 		IsActive:               view.IsActive,
 		CreatedAt:              view.CreatedAt,
 		UpdatedAt:              view.UpdatedAt,
@@ -104,6 +112,10 @@ type patientProfileBody struct {
 	FiscalCondition       string `json:"fiscalCondition,omitempty"`
 	FiscalAddress         string `json:"fiscalAddress,omitempty"`
 	AdministrativeNotes   string `json:"administrativeNotes,omitempty"`
+	CoverageKind          string `json:"coverageKind" enum:"private,insurer" doc:"Required. private for a particular patient, insurer for one covered by a mutual."`
+	InsurerID             string `json:"insurerId,omitempty" doc:"Required with coverageKind insurer: the mutual of the practice's catalog. Must be empty for private."`
+	MemberNumber          string `json:"memberNumber,omitempty" maxLength:"30" doc:"Required with coverageKind insurer: the affiliate number. Must be empty for private."`
+	BillingCurrency       string `json:"billingCurrency" enum:"ARS,EUR,USD" doc:"Required. The currency the patient's sessions are billed in; it is chosen, not derived from the country."`
 }
 
 // profile converts the wire body into the application input, parsing the date.
@@ -122,6 +134,10 @@ func (b patientProfileBody) profile() (patientapp.ProfileInput, error) {
 		FiscalCondition:       b.FiscalCondition,
 		FiscalAddress:         b.FiscalAddress,
 		AdministrativeNotes:   b.AdministrativeNotes,
+		CoverageKind:          b.CoverageKind,
+		InsurerID:             b.InsurerID,
+		MemberNumber:          b.MemberNumber,
+		BillingCurrency:       b.BillingCurrency,
 	}
 
 	if b.BirthDate != "" {

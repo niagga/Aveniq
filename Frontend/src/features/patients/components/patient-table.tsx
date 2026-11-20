@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  coverageText,
   documentKindLabel,
   fiscalConditionLabel,
   formatBirthDate,
@@ -17,10 +18,12 @@ import { Notice } from "@/shared/ui/notice";
 export function PatientTable({
   patients,
   selectedID,
+  insurerNames,
   onSelect,
 }: {
   patients: Patient[];
   selectedID: string | null;
+  insurerNames: ReadonlyMap<string, string>;
   onSelect: (id: string) => void;
 }) {
   if (patients.length === 0) {
@@ -40,6 +43,8 @@ export function PatientTable({
             <th className="px-4 py-3 font-medium">Documento</th>
             <th className="px-4 py-3 font-medium">Nacimiento</th>
             <th className="px-4 py-3 font-medium">Contacto</th>
+            <th className="px-4 py-3 font-medium">Cobertura</th>
+            <th className="px-4 py-3 font-medium">Moneda</th>
             <th className="px-4 py-3 font-medium">Estado</th>
           </tr>
         </thead>
@@ -60,6 +65,15 @@ export function PatientTable({
               </td>
               <td className="px-4 py-3 text-ink-muted">{formatBirthDate(patient.birthDate) || "—"}</td>
               <td className="px-4 py-3 text-ink-muted">{patient.phone ?? "—"}</td>
+              <td className="px-4 py-3 text-ink-muted">
+                {coverageText(
+                  patient,
+                  patient.insurerId ? insurerNames.get(patient.insurerId) : undefined,
+                )}
+              </td>
+              <td className="px-4 py-3 font-mono text-xs text-ink-muted">
+                {patient.billingCurrency || "—"}
+              </td>
               <td className="px-4 py-3">
                 <span
                   className={`rounded-full border px-2 py-0.5 text-xs ${

@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Patient } from "@/entities/patient/model";
 import { PatientDetail, PatientLoadError } from "@/features/patients/components/patient-detail";
 import { PatientForm } from "@/features/patients/components/patient-form";
 import { PatientTable } from "@/features/patients/components/patient-table";
+import { useInsurers } from "@/features/insurers/use-insurers";
 import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
@@ -42,6 +43,13 @@ function PatientsScreen() {
   const [selected, setSelected] = useState<Patient | null>(null);
   const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
   const writesLocked = useWritesLocked();
+
+  // The roster shows a mutual by name, and the patient form offers the catalog.
+  const { insurers } = useInsurers(true);
+  const insurerNames = useMemo(
+    () => new Map((insurers ?? []).map((insurer) => [insurer.id, insurer.name])),
+    [insurers],
+  );
 
   const load = useCallback(async () => {
     const { data, response } = await browserApi.GET("/api/v1/patients", {
@@ -107,12 +115,17 @@ function PatientsScreen() {
       </header>
 
       {mode === "create" && !writesLocked ? (
-        <PatientForm onSaved={afterSave} onCancel={() => setMode("idle")} />
+        <PatientForm
+          insurers={insurers}
+          onSaved={afterSave}
+          onCancel={() => setMode("idle")}
+        />
       ) : null}
 
       {mode === "edit" && selected && !writesLocked ? (
         <PatientForm
           patient={selected}
+          insurers={insurers}
           onSaved={afterSave}
           onCancel={() => setMode("idle")}
         />
@@ -165,6 +178,7 @@ function PatientsScreen() {
         <PatientTable
           patients={patients}
           selectedID={selected?.id ?? null}
+          insurerNames={insurerNames}
           onSelect={(id) => {
             setSelected(patients.find((patient) => patient.id === id) ?? null);
             setMode("idle");
@@ -175,6 +189,7 @@ function PatientsScreen() {
       {selected ? (
         <PatientDetail
           patient={selected}
+          insurerNames={insurerNames}
           onClose={() => setSelected(null)}
           onChanged={() => void load()}
           onEdit={() => setMode("edit")}

@@ -56,6 +56,7 @@ test("inside the trial the owner writes: a patient is created and no banner show
     await newPatient.click();
     await page.getByLabel("Nombre y apellido").fill(patientInsideTrial);
     await page.getByLabel("Fecha de nacimiento").fill("1988-03-04");
+    await page.getByLabel("Moneda de facturación").selectOption("ARS");
     await page.getByRole("button", { name: "Crear paciente" }).click();
     await expect(page.getByRole("cell", { name: patientInsideTrial })).toBeVisible({ timeout: 10_000 });
   } finally {
@@ -104,7 +105,7 @@ test("the API refuses a write from the expired practice with 403 trial_expired a
 
   const write = await request.post("/api/v1/patients", {
     headers: bearer,
-    data: { fullName: `E5 Vencido ${stamp}` },
+    data: { fullName: `E5 Vencido ${stamp}`, coverageKind: "private", billingCurrency: "ARS" },
   });
   expect(write.status()).toBe(403);
   const problem = (await write.json()) as { code?: string };

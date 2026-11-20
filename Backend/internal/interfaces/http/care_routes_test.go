@@ -43,7 +43,7 @@ func createPatient(t *testing.T, h *harness, token, fullName, document string) s
 	t.Helper()
 
 	status, body := h.do(t, http.MethodPost, "/api/v1/patients", token, map[string]any{
-		"fullName":       fullName,
+		"fullName": fullName, "coverageKind": "private", "billingCurrency": "ARS",
 		"documentKind":   "dni",
 		"documentNumber": document,
 	})
@@ -75,7 +75,7 @@ func TestAProfessionalRegisteringAPatientTreatsIt(t *testing.T) {
 	assistant, _ := h.member(t, tenantA, iam.RoleAssistant)
 
 	status, body := h.do(t, http.MethodPost, "/api/v1/patients", treating, map[string]any{
-		"fullName":       "Paciente del tratante",
+		"fullName": "Paciente del tratante", "coverageKind": "private", "billingCurrency": "ARS",
 		"documentKind":   "dni",
 		"documentNumber": "36111222",
 	})

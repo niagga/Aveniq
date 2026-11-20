@@ -20,6 +20,10 @@ import (
 // patientsTenantDocumentUnique is the index behind per-tenant document uniqueness.
 const patientsTenantDocumentUnique = "patients_tenant_document_unique"
 
+// patientsInsurerSameTenant is the composite foreign key that keeps a patient's mutual
+// inside the patient's practice (migration 0016).
+const patientsInsurerSameTenant = "patients_insurer_same_tenant"
+
 // foreignKeyViolationCode is PostgreSQL's SQLSTATE for a broken reference. For this
 // table it means the row names a document kind, tax kind or fiscal condition that
 // the country does not have.
@@ -147,6 +151,10 @@ func (r *PatientRepository) Update(ctx context.Context, subject patient.Patient)
 		AdministrativeNotes:   subject.AdministrativeNotes,
 		IsActive:              subject.IsActive,
 		UpdatedAt:             subject.UpdatedAt,
+		CoverageKind:          string(subject.CoverageKind),
+		InsurerID:             optionalUUID(subject.InsurerID),
+		MemberNumber:          subject.MemberNumber,
+		BillingCurrency:       string(subject.BillingCurrency),
 	})
 	if err != nil {
 		return translatePatientError(err)
@@ -203,6 +211,10 @@ func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, 
 		CreatedAt:              subject.CreatedAt,
 		UpdatedAt:              subject.UpdatedAt,
 		TreatingProfessionalID: optionalUUID(subject.TreatingProfessionalID),
+		CoverageKind:           string(subject.CoverageKind),
+		InsurerID:              optionalUUID(subject.InsurerID),
+		MemberNumber:           subject.MemberNumber,
+		BillingCurrency:        string(subject.BillingCurrency),
 	}, nil
 }
 
@@ -224,6 +236,10 @@ func patientToDomain(row sqlcgen.Patient) (patient.Patient, error) {
 		FiscalAddress:          row.FiscalAddress,
 		AdministrativeNotes:    row.AdministrativeNotes,
 		TreatingProfessionalID: uuidString(row.TreatingProfessionalID),
+		CoverageKind:           patient.Coverage(row.CoverageKind),
+		InsurerID:              uuidString(row.InsurerID),
+		MemberNumber:           row.MemberNumber,
+		BillingCurrency:        patient.Currency(row.BillingCurrency),
 		IsActive:               row.IsActive,
 		CreatedAt:              row.CreatedAt,
 		UpdatedAt:              row.UpdatedAt,
@@ -289,6 +305,10 @@ func translatePatientError(err error) error {
 		switch {
 		case pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == patientsTenantDocumentUnique:
 			return fmt.Errorf("%w: constraint %s", patient.ErrDocumentTaken, pgErr.ConstraintName)
+		case pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == patientsInsurerSameTenant:
+			// The mutual is not in this practice's catalog. The use case checks it first, so
+			// this is the database refusing a row the application let through.
+			return &patient.ValidationError{Field: "insurer_id", Message: "must be a mutual of this practice"}
 		case pgErr.Code == foreignKeyViolationCode:
 			// The catalog says this country has no such kind, or no such fiscal
 			// condition. Both are "the data does not match the country's rules".

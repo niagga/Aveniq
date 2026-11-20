@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 
 import {
   COUNTRIES,
+  CURRENCIES,
+  currencyLabel,
   DOCUMENT_KINDS_BY_COUNTRY,
   documentKindLabel,
   FISCAL_CONDITIONS_BY_COUNTRY,
@@ -12,6 +14,7 @@ import {
   taxIDKindLabel,
   type Patient,
 } from "@/entities/patient/model";
+import type { Insurer } from "@/entities/insurer/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { useWritesLocked } from "@/shared/auth/practice";
@@ -28,6 +31,10 @@ type Fields = {
   email: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
+  coverageKind: string;
+  insurerId: string;
+  memberNumber: string;
+  billingCurrency: string;
   taxIdKind: string;
   taxIdNumber: string;
   fiscalCondition: string;
@@ -35,6 +42,10 @@ type Fields = {
   administrativeNotes: string;
 };
 
+/**
+ * The currency of a new patient is empty on purpose: it is chosen, never defaulted from
+ * the country (L61). Coverage starts private, the common case.
+ */
 function fieldsFrom(patient: Patient | null | undefined): Fields {
   return {
     fullName: patient?.fullName ?? "",
@@ -46,6 +57,10 @@ function fieldsFrom(patient: Patient | null | undefined): Fields {
     email: patient?.email ?? "",
     emergencyContactName: patient?.emergencyContactName ?? "",
     emergencyContactPhone: patient?.emergencyContactPhone ?? "",
+    coverageKind: patient?.coverageKind ?? "private",
+    insurerId: patient?.insurerId ?? "",
+    memberNumber: patient?.memberNumber ?? "",
+    billingCurrency: patient?.billingCurrency ?? "",
     taxIdKind: patient?.taxId?.kind ?? "",
     taxIdNumber: patient?.taxId?.number ?? "",
     fiscalCondition: patient?.fiscalCondition ?? "",
@@ -64,10 +79,12 @@ function fieldsFrom(patient: Patient | null | undefined): Fields {
  */
 export function PatientForm({
   patient,
+  insurers,
   onSaved,
   onCancel,
 }: {
   patient?: Patient | null;
+  insurers: Insurer[] | null;
   onSaved: (id: string) => void;
   onCancel?: () => void;
 }) {
@@ -83,9 +100,27 @@ export function PatientForm({
   const documentKinds = DOCUMENT_KINDS_BY_COUNTRY[fields.country] ?? [];
   const taxIDKinds = TAX_ID_KINDS_BY_COUNTRY[fields.country] ?? [];
   const fiscalConditions = FISCAL_CONDITIONS_BY_COUNTRY[fields.country] ?? [];
+  const isInsured = fields.coverageKind === "insurer";
+
+  // A mutual that was deactivated after this patient was covered stays selectable while
+  // editing that patient: the API keeps the coverage and refuses only a new choice.
+  const insurerOptions = (insurers ?? []).filter(
+    (insurer) => insurer.isActive || insurer.id === patient?.insurerId,
+  );
 
   function set<K extends keyof Fields>(name: K, value: Fields[K]) {
     setFields((current) => ({ ...current, [name]: value }));
+  }
+
+  // A particular patient carries no mutual and no member number: clearing them here
+  // keeps a switch back to private from sending data the API would refuse.
+  function changeCoverage(coverageKind: string) {
+    setFields((current) => ({
+      ...current,
+      coverageKind,
+      insurerId: coverageKind === "insurer" ? current.insurerId : "",
+      memberNumber: coverageKind === "insurer" ? current.memberNumber : "",
+    }));
   }
 
   // Changing the country invalidates a kind the new country does not have.
@@ -117,6 +152,15 @@ export function PatientForm({
     if (fields.taxIdKind === "" && fields.taxIdNumber.trim() !== "") {
       return "Cargaste un identificador fiscal sin elegir el tipo.";
     }
+    if (fields.billingCurrency === "") {
+      return "Elegí la moneda de facturación.";
+    }
+    if (isInsured && fields.insurerId === "") {
+      return "Elegí la mutual que cubre al paciente.";
+    }
+    if (isInsured && fields.memberNumber.trim() === "") {
+      return "Cargá el número de afiliado de la mutual.";
+    }
     return null;
   }
 
@@ -141,6 +185,10 @@ export function PatientForm({
       email: fields.email.trim(),
       emergencyContactName: fields.emergencyContactName.trim(),
       emergencyContactPhone: fields.emergencyContactPhone.trim(),
+      coverageKind: fields.coverageKind as PatientProfile["coverageKind"],
+      insurerId: isInsured ? fields.insurerId : "",
+      memberNumber: isInsured ? fields.memberNumber.trim() : "",
+      billingCurrency: fields.billingCurrency as PatientProfile["billingCurrency"],
       taxIdKind: fields.taxIdKind,
       taxIdNumber: fields.taxIdNumber.trim(),
       fiscalCondition: fields.fiscalCondition,
@@ -284,6 +332,65 @@ export function PatientForm({
             onChange={(event) => set("emergencyContactPhone", event.target.value)}
             className={inputClass}
           />
+        </Field>
+
+        <Field label="Cobertura" htmlFor={id("coverageKind")}>
+          <select
+            id={id("coverageKind")}
+            value={fields.coverageKind}
+            onChange={(event) => changeCoverage(event.target.value)}
+            className={inputClass}
+          >
+            <option value="private">Particular</option>
+            <option value="insurer">Mutual</option>
+          </select>
+        </Field>
+
+        {isInsured ? (
+          <Field label="Mutual" htmlFor={id("insurerId")}>
+            <select
+              id={id("insurerId")}
+              value={fields.insurerId}
+              onChange={(event) => set("insurerId", event.target.value)}
+              className={inputClass}
+            >
+              <option value="">{insurers === null ? "Cargando mutuales…" : "Elegí una mutual"}</option>
+              {insurerOptions.map((insurer) => (
+                <option key={insurer.id} value={insurer.id}>
+                  {insurer.isActive ? insurer.name : `${insurer.name} (dada de baja)`}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+
+        {isInsured ? (
+          <Field label="Número de afiliado" htmlFor={id("memberNumber")}>
+            <input
+              id={id("memberNumber")}
+              value={fields.memberNumber}
+              onChange={(event) => set("memberNumber", event.target.value)}
+              maxLength={30}
+              className={`${inputClass} font-mono`}
+            />
+          </Field>
+        ) : null}
+
+        <Field label="Moneda de facturación" htmlFor={id("billingCurrency")}>
+          <select
+            id={id("billingCurrency")}
+            value={fields.billingCurrency}
+            onChange={(event) => set("billingCurrency", event.target.value)}
+            required
+            className={inputClass}
+          >
+            <option value="">Elegí una moneda</option>
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {currencyLabel(code)}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Identificador fiscal" htmlFor={id("taxIdKind")}>

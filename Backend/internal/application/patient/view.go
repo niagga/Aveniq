@@ -47,6 +47,10 @@ type PatientView struct {
 	FiscalAddress          string
 	AdministrativeNotes    string
 	TreatingProfessionalID string // empty until an owner or admin assigns one
+	CoverageKind           string // "private" or "insurer"
+	InsurerID              string // empty for a private patient
+	MemberNumber           string // empty for a private patient
+	BillingCurrency        string // ARS, EUR or USD
 	IsActive               bool
 	CreatedAt              string // RFC 3339, always UTC
 	UpdatedAt              string // RFC 3339, always UTC
@@ -69,6 +73,10 @@ func toView(subject patient.Patient) PatientView {
 		FiscalAddress:          deref(subject.FiscalAddress),
 		AdministrativeNotes:    deref(subject.AdministrativeNotes),
 		TreatingProfessionalID: deref(subject.TreatingProfessionalID),
+		CoverageKind:           string(subject.CoverageKind),
+		InsurerID:              deref(subject.InsurerID),
+		MemberNumber:           deref(subject.MemberNumber),
+		BillingCurrency:        string(subject.BillingCurrency),
 		IsActive:               subject.IsActive,
 		CreatedAt:              subject.CreatedAt.UTC().Format(timeLayout),
 		UpdatedAt:              subject.UpdatedAt.UTC().Format(timeLayout),

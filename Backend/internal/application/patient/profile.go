@@ -2,10 +2,12 @@ package patientapp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -39,6 +41,16 @@ type ProfileInput struct {
 	FiscalCondition     string
 	FiscalAddress       string
 	AdministrativeNotes string
+
+	// CoverageKind is required: "private" or "insurer". InsurerID and MemberNumber are
+	// the mutual and the affiliate number of an insured patient, empty for a private one.
+	CoverageKind string
+	InsurerID    string
+	MemberNumber string
+
+	// BillingCurrency is required: ARS, EUR or USD. It is chosen by hand, not derived
+	// from the country.
+	BillingCurrency string
 }
 
 // normalizeProfile resolves the country (the request's, or the practice's via the
@@ -97,7 +109,29 @@ func normalizeProfile(ctx context.Context, catalog port.DocumentCatalog, tenantI
 		FiscalCondition:       &in.FiscalCondition,
 		FiscalAddress:         &in.FiscalAddress,
 		AdministrativeNotes:   &in.AdministrativeNotes,
+		CoverageKind:          patient.Coverage(in.CoverageKind),
+		InsurerID:             &in.InsurerID,
+		MemberNumber:          &in.MemberNumber,
+		BillingCurrency:       patient.Currency(in.BillingCurrency),
 	}, nil
+}
+
+// requireActiveInsurer confirms a mutual can be chosen for a patient's coverage: it is in
+// this practice's catalog and it is active. The catalog is read inside the tenant scope,
+// so another practice's mutual is simply not found, and the caller learns only that the
+// field is wrong.
+func requireActiveInsurer(ctx context.Context, insurers port.InsurerRepository, insurerID string) error {
+	mutual, err := insurers.ByID(ctx, insurer.ID(insurerID))
+	if errors.Is(err, insurer.ErrNotFound) {
+		return &patient.ValidationError{Field: "insurer_id", Message: "must be a mutual of this practice"}
+	}
+	if err != nil {
+		return err
+	}
+	if !mutual.IsActive {
+		return &patient.ValidationError{Field: "insurer_id", Message: "is deactivated: choose an active mutual"}
+	}
+	return nil
 }
 
 // normalizeDocument turns a typed document pair into its canonical form, or nil

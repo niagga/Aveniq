@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import {
+  coverageText,
+  currencyLabel,
   documentKindLabel,
   fiscalConditionLabel,
   formatBirthDate,
@@ -33,11 +35,13 @@ import { Notice } from "@/shared/ui/notice";
  */
 export function PatientDetail({
   patient,
+  insurerNames,
   onClose,
   onChanged,
   onEdit,
 }: {
   patient: Patient;
+  insurerNames: ReadonlyMap<string, string>;
   onClose: () => void;
   onChanged: () => void;
   onEdit: () => void;
@@ -158,6 +162,13 @@ export function PatientDetail({
             ? `${patient.emergencyContactName}${patient.emergencyContactPhone ? ` · ${patient.emergencyContactPhone}` : ""}`
             : "—"}
         </Row>
+        <Row label="Cobertura" wide>
+          {coverageText(
+            patient,
+            patient.insurerId ? insurerNames.get(patient.insurerId) : undefined,
+          )}
+        </Row>
+        <Row label="Moneda de facturación">{currencyLabel(patient.billingCurrency) || "—"}</Row>
         <Row label="Identificador fiscal">
           {patient.taxId ? `${taxIDKindLabel(patient.taxId.kind)} ${patient.taxId.number}` : "—"}
         </Row>

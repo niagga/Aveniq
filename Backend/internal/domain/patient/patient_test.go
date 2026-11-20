@@ -23,8 +23,12 @@ func validDraft() patient.Draft {
 			Number:     "30.111.222",
 			Normalized: "30111222",
 		},
+		CoverageKind:    patient.CoveragePrivate,
+		BillingCurrency: patient.CurrencyARS,
 	}
 }
+
+func str(value string) *string { return &value }
 
 func newPatient(t *testing.T, draft patient.Draft) patient.Patient {
 	t.Helper()
@@ -78,6 +82,37 @@ func TestNewPatientValidation(t *testing.T) {
 			when := now.Add(24 * time.Hour)
 			d.BirthDate = &when
 		}, "birth_date"},
+		"billing currency missing": {func(d *patient.Draft) {
+			d.BillingCurrency = ""
+		}, "billing_currency"},
+		"billing currency outside the MVP": {func(d *patient.Draft) {
+			d.BillingCurrency = "BRL"
+		}, "billing_currency"},
+		"billing currency in lowercase": {func(d *patient.Draft) {
+			d.BillingCurrency = "usd"
+		}, "billing_currency"},
+		"unknown coverage": {func(d *patient.Draft) {
+			d.CoverageKind = "prepaga"
+		}, "coverage_kind"},
+		"mutual patient without a mutual": {func(d *patient.Draft) {
+			d.CoverageKind = patient.CoverageInsurer
+			d.MemberNumber = str("12345")
+		}, "insurer_id"},
+		"mutual patient without a member number": {func(d *patient.Draft) {
+			d.CoverageKind = patient.CoverageInsurer
+			d.InsurerID = str("0c1f3e2a-1111-4222-8333-944455556666")
+		}, "member_number"},
+		"mutual patient with a blank member number": {func(d *patient.Draft) {
+			d.CoverageKind = patient.CoverageInsurer
+			d.InsurerID = str("0c1f3e2a-1111-4222-8333-944455556666")
+			d.MemberNumber = str("   ")
+		}, "member_number"},
+		"private patient naming a mutual": {func(d *patient.Draft) {
+			d.InsurerID = str("0c1f3e2a-1111-4222-8333-944455556666")
+		}, "insurer_id"},
+		"private patient with a member number": {func(d *patient.Draft) {
+			d.MemberNumber = str("12345")
+		}, "member_number"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			draft := validDraft()

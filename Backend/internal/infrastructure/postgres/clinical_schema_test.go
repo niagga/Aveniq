@@ -163,12 +163,28 @@ func seedPatientAndUserPerTenant(t *testing.T, ctx context.Context, ownerDSN str
 	patients = map[string]string{}
 	users = map[string]string{}
 
+	// The billing currency arrives with 0016 and is required from 0017 on, so the seed
+	// names it only when the schema has it: some callers seed before 0016 on purpose.
+	var hasCurrency bool
+	if err := conn.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = 'patients' AND column_name = 'billing_currency')`,
+	).Scan(&hasCurrency); err != nil {
+		t.Fatalf("cannot inspect the patients table: %v", err)
+	}
+	insertPatient := `
+			INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
+			VALUES ($1, $2, 'AR', 'Paciente de prueba', now(), now())`
+	if hasCurrency {
+		insertPatient = `
+			INSERT INTO patients (id, tenant_id, country, full_name, billing_currency, created_at, updated_at)
+			VALUES ($1, $2, 'AR', 'Paciente de prueba', 'ARS', now(), now())`
+	}
+
 	for _, tenantID := range []string{scratchTenantA, scratchTenantB} {
 		patientID := uuid.NewString()
-		if _, err := conn.Exec(ctx, `
-			INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
-			VALUES ($1, $2, 'AR', 'Paciente de prueba', now(), now())`,
-			patientID, tenantID); err != nil {
+		if _, err := conn.Exec(ctx, insertPatient, patientID, tenantID); err != nil {
 			t.Fatalf("cannot insert the patient for %s: %v", tenantID, err)
 		}
 		patients[tenantID] = patientID

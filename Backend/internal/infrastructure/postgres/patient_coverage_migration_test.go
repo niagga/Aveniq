@@ -42,7 +42,8 @@ func TestPatientCoverageMigrationRollsBack(t *testing.T) {
 	}
 	defer func() { _ = app.Close(ctx) }()
 
-	migrate(t, tempOwnerDSN)
+	// Stop at 0016: 0017 is proven on its own, and this test is about 0016 alone.
+	migrateUpTo(t, tempOwnerDSN, 16)
 	if got := gooseVersion(t, tempOwnerDSN); got != 16 {
 		t.Fatalf("after up: goose version = %d, want 16", got)
 	}
@@ -199,7 +200,7 @@ func TestPatientCoverageMigrationRollsBack(t *testing.T) {
 	})
 
 	t.Run("up after the down restores the coverage model", func(t *testing.T) {
-		migrate(t, tempOwnerDSN)
+		migrateUpTo(t, tempOwnerDSN, 16)
 		if got := gooseVersion(t, tempOwnerDSN); got != 16 {
 			t.Fatalf("after up: goose version = %d, want 16", got)
 		}

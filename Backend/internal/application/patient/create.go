@@ -22,18 +22,19 @@ type CreateInput struct {
 
 // CreateUseCase registers a new patient.
 type CreateUseCase struct {
-	repo    port.PatientRepository
-	catalog port.DocumentCatalog
-	scope   port.TenantScope
-	clock   port.Clock
-	ids     port.IDGenerator
+	repo     port.PatientRepository
+	insurers port.InsurerRepository
+	catalog  port.DocumentCatalog
+	scope    port.TenantScope
+	clock    port.Clock
+	ids      port.IDGenerator
 }
 
 // NewCreateUseCase wires the use case through constructor injection: every
 // dependency is explicit and replaceable, which is what keeps this layer testable
 // without a database.
-func NewCreateUseCase(repo port.PatientRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, ids port.IDGenerator) *CreateUseCase {
-	return &CreateUseCase{repo: repo, catalog: catalog, scope: scope, clock: clock, ids: ids}
+func NewCreateUseCase(repo port.PatientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, ids port.IDGenerator) *CreateUseCase {
+	return &CreateUseCase{repo: repo, insurers: insurers, catalog: catalog, scope: scope, clock: clock, ids: ids}
 }
 
 // Execute creates the patient or returns a domain error. Normalization runs
@@ -51,6 +52,12 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (PatientVi
 		subject, err := patient.New(patient.ID(uc.ids.NewID()), tenant.ID(in.TenantID), draft, uc.clock.Now())
 		if err != nil {
 			return err
+		}
+		if subject.CoverageKind == patient.CoverageInsurer {
+			// The domain guarantees an insured patient names a mutual.
+			if err := requireActiveInsurer(ctx, uc.insurers, *subject.InsurerID); err != nil {
+				return err
+			}
 		}
 		// A professional who registers a patient treats it: nobody else is set until an
 		// owner or admin assigns one. The other roles register without a treating one.

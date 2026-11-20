@@ -6,7 +6,17 @@ import (
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
+
+// changedInsurer reports whether the edit names a different mutual than the stored
+// patient, or moves a private patient into one.
+func changedInsurer(before, after patient.Patient) bool {
+	if before.InsurerID == nil || after.InsurerID == nil {
+		return before.InsurerID != after.InsurerID
+	}
+	return *before.InsurerID != *after.InsurerID
+}
 
 // UpdateInput is the edited profile of an existing patient, plus the identity of
 // the row to change.
@@ -21,16 +31,17 @@ type UpdateInput struct {
 
 // UpdateUseCase edits the profile of an existing patient.
 type UpdateUseCase struct {
-	repo    port.PatientRepository
-	catalog port.DocumentCatalog
-	scope   port.TenantScope
-	clock   port.Clock
-	access  *careapp.Access
+	repo     port.PatientRepository
+	insurers port.InsurerRepository
+	catalog  port.DocumentCatalog
+	scope    port.TenantScope
+	clock    port.Clock
+	access   *careapp.Access
 }
 
 // NewUpdateUseCase wires the use case.
-func NewUpdateUseCase(repo port.PatientRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, access *careapp.Access) *UpdateUseCase {
-	return &UpdateUseCase{repo: repo, catalog: catalog, scope: scope, clock: clock, access: access}
+func NewUpdateUseCase(repo port.PatientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, access *careapp.Access) *UpdateUseCase {
+	return &UpdateUseCase{repo: repo, insurers: insurers, catalog: catalog, scope: scope, clock: clock, access: access}
 }
 
 // Execute loads the patient inside the tenant scope, applies the same
@@ -56,6 +67,13 @@ func (uc *UpdateUseCase) Execute(ctx context.Context, in UpdateInput) (PatientVi
 		subject, err := resolved.Patient.ChangeProfile(draft, uc.clock.Now())
 		if err != nil {
 			return err
+		}
+		// Only a change of mutual is checked against the catalog. A patient whose mutual was
+		// deactivated keeps it, and can still be edited, until someone changes it.
+		if subject.CoverageKind == patient.CoverageInsurer && changedInsurer(resolved.Patient, subject) {
+			if err := requireActiveInsurer(ctx, uc.insurers, *subject.InsurerID); err != nil {
+				return err
+			}
 		}
 		if err := uc.repo.Update(ctx, subject); err != nil {
 			return err

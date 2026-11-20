@@ -17,6 +17,7 @@ import (
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
@@ -271,12 +272,13 @@ func (uuidIDs) NewID() string { return uuid.NewString() }
 // ─── harness ─────────────────────────────────────────────────────────────────
 
 type harness struct {
-	router  http.Handler
-	tokens  *authn.AccessTokens
-	repo    *fakePatientRepository
-	tenants *fakeTenantRepository
-	users   *fakeUserRepository
-	audit   *fakeAudit
+	router   http.Handler
+	tokens   *authn.AccessTokens
+	repo     *fakePatientRepository
+	insurers *fakeInsurerRepository
+	tenants  *fakeTenantRepository
+	users    *fakeUserRepository
+	audit    *fakeAudit
 
 	invitations *fakeInvitationRepository
 	limiter     *fakeRateLimiter
@@ -295,6 +297,7 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	repo := newFakePatientRepository()
+	insurers := newFakeInsurerRepository()
 	catalog := fakeCatalog{}
 	scope := fakeScope{}
 	grants := newFakeGrantRepository()
@@ -323,8 +326,13 @@ func newHarness(t *testing.T) *harness {
 		RateLimiter:            limiter,
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
 		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenants, clock),
-		CreatePatient:          patientapp.NewCreateUseCase(repo, catalog, scope, clock, uuidIDs{}),
-		UpdatePatient:          patientapp.NewUpdateUseCase(repo, catalog, scope, clock, access),
+		CreatePatient:          patientapp.NewCreateUseCase(repo, insurers, catalog, scope, clock, uuidIDs{}),
+		UpdatePatient:          patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
+		ListInsurers:           insurerapp.NewListUseCase(insurers, scope),
+		CreateInsurer:          insurerapp.NewCreateUseCase(insurers, scope, clock, uuidIDs{}),
+		UpdateInsurer:          insurerapp.NewUpdateUseCase(insurers, scope, clock),
+		DeactivateInsurer:      insurerapp.NewDeactivateUseCase(insurers, scope, clock),
+		ActivateInsurer:        insurerapp.NewActivateUseCase(insurers, scope, clock),
 		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock, access),
 		ActivatePatient:        patientapp.NewActivateUseCase(repo, scope, clock, access),
 		GetPatient:             patientapp.NewGetUseCase(scope, access),
@@ -354,7 +362,7 @@ func newHarness(t *testing.T) *harness {
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers}
+	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the
@@ -500,7 +508,7 @@ func TestTenantComesFromTheToken(t *testing.T) {
 	ownerB := h.token(t, tenantB, iam.RoleOwner)
 
 	status, created := h.do(t, http.MethodPost, "/api/v1/patients", ownerA, map[string]any{
-		"fullName":       "Ana de la práctica A",
+		"fullName": "Ana de la práctica A", "coverageKind": "private", "billingCurrency": "ARS",
 		"documentKind":   "dni",
 		"documentNumber": "30111222",
 	})
@@ -548,7 +556,7 @@ func TestPatientRouteErrors(t *testing.T) {
 
 	t.Run("a document the country does not have is 422 with the field", func(t *testing.T) {
 		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName":       "Con NIE argentino",
+			"fullName": "Con NIE argentino", "coverageKind": "private", "billingCurrency": "ARS",
 			"documentKind":   "nie",
 			"documentNumber": "X1234567L",
 		})
@@ -564,7 +572,7 @@ func TestPatientRouteErrors(t *testing.T) {
 	created := func(t *testing.T, fullName, document string) string {
 		t.Helper()
 		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName":       fullName,
+			"fullName": fullName, "coverageKind": "private", "billingCurrency": "ARS",
 			"documentKind":   "dni",
 			"documentNumber": document,
 		})
@@ -578,7 +586,7 @@ func TestPatientRouteErrors(t *testing.T) {
 	t.Run("the same document twice is 409", func(t *testing.T) {
 		created(t, "Duplicada", "27111222")
 		status, _ := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName":       "Duplicada otra vez",
+			"fullName": "Duplicada otra vez", "coverageKind": "private", "billingCurrency": "ARS",
 			"documentKind":   "dni",
 			"documentNumber": "27.111.222",
 		})
@@ -613,7 +621,7 @@ func TestPatientRouteErrors(t *testing.T) {
 		}
 
 		status, _ := h.do(t, http.MethodPatch, "/api/v1/patients/"+id, owner, map[string]any{
-			"fullName":       "Nombre nuevo",
+			"fullName": "Nombre nuevo", "coverageKind": "private", "billingCurrency": "ARS",
 			"documentKind":   "dni",
 			"documentNumber": "29111222",
 		})

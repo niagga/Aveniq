@@ -106,6 +106,16 @@ type FiscalCondition struct {
 	Label       string
 }
 
+type Insurer struct {
+	ID        pgtype.UUID
+	TenantID  pgtype.UUID
+	Name      string
+	TaxID     *string
+	IsActive  bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Invitation struct {
 	ID         pgtype.UUID
 	TenantID   pgtype.UUID
@@ -141,6 +151,10 @@ type Patient struct {
 	TaxID                  *string
 	TaxIDKind              *string
 	TreatingProfessionalID pgtype.UUID
+	CoverageKind           string
+	InsurerID              pgtype.UUID
+	MemberNumber           *string
+	BillingCurrency        string
 }
 
 // Platform-wide permission catalog. Codes are stable API surface.

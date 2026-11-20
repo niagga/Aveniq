@@ -130,7 +130,7 @@ en cada transición de tarea.
 | T47 | S5 | E5 | Frontend: banner de trial vencido con la fecha y formularios de alta deshabilitados | inline | `cf482fd` |
 | T48 | S5 | E5 | E2E: dentro del trial se escribe; con trial vencido solo se lee | inline | `efa53eb` |
 | T49 | S2, S5 | E6 | Registrar el plan de tarifas, cobertura e informes en el tablero (L61) | inline | — |
-| T50 | S16, S2 | E6 | Migración `0016`: catálogo de mutuales por consultorio; cobertura del paciente (particular o mutual con número de afiliado); moneda de cobro (ARS, EUR, USD) obligatoria en el esquema, con backfill a ARS para los pacientes existentes. RLS forzado | inline | — |
+| T50 | S16, S2 | E6 | Migración `0016`: catálogo de mutuales por consultorio; cobertura del paciente (particular o mutual con número de afiliado); moneda de cobro (ARS, EUR, USD) obligatoria en el esquema, con backfill a ARS para los pacientes existentes. RLS forzado | inline | `4b8615d` |
 | T51 | S16, S2 | E6 | Contrato: dominio, HTTP y pantallas de mutuales y del paciente con cobertura y moneda. La moneda es obligatoria en la API (cambio de contrato confirmado) | inline | — |
 | T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | — |
 | T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | — |
@@ -2249,3 +2249,41 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   con las bases de test.
 - **Pendiente.** Commit solo cuando se pida. T51 es el siguiente: contrato de dominio, HTTP y pantallas,
   y quitar el default de la moneda.
+
+**L63 — T51: contrato de mutuales y de cobertura del paciente (dominio, HTTP y pantallas)**
+
+- **Backend.** Dominio `insurer` (nombre no vacío, CUIT opcional de 11 dígitos, alta y baja sin
+  borrar). Dominio del paciente con `coverageKind` (`private` | `insurer`), `insurerId`,
+  `memberNumber` y `billingCurrency` (`ARS` | `EUR` | `USD`). Aplicación: el paciente con mutual
+  exige que esa mutual esté activa solo cuando se elige o cambia; una mutual dada de baja sigue
+  cubriendo a los pacientes que ya tiene. HTTP: `GET/POST /api/v1/insurers`,
+  `PATCH /api/v1/insurers/{id}`, `POST .../deactivate` y `.../activate`. Escritura del catálogo
+  con `tenant:settings` (owner y admin); lectura con `patients:read`. `coverageKind` y
+  `billingCurrency` son obligatorios en el alta y en la edición; la API no asume moneda.
+- **Migración `0017_patient_currency_without_default.sql`.** Quita el `DEFAULT 'ARS'` de
+  `patients.billing_currency`, como estaba previsto en L62. Los pacientes existentes conservan
+  su ARS del backfill. Su Down restaura el default. Aplicada en la base de desarrollo (versión 17).
+- **Pruebas de Postgres.** `TestInsurerRepository` (persistencia, nombre único sin distinguir
+  mayúsculas ni espacios, aislamiento RLS, baja y listado activo, `ErrTenantScopeMissing`),
+  `TestPatientCoverageAgainstMutuals` (paciente cubierto persiste con mutual, afiliado y moneda; una
+  mutual de otro consultorio se rechaza como error de campo `insurer_id`) y
+  `TestPatientCurrencyHasNoDefaultAfter0017` (sin default, rechazo con 23502, Down restaura ARS).
+  Los inserts crudos de los tests se actualizaron para pasar la moneda; el helper de sembrado
+  la omite solo antes de la 0016, porque esas pruebas corren a esa versión a propósito.
+  `go vet ./...` limpio, `gofmt` sin diferencias y la suite de `internal/infrastructure/postgres`
+  en verde contra las bases de test.
+- **Contrato.** `schema.d.ts` regenerado desde una instancia de la API con el código nuevo
+  (solo se agregan líneas: 320 inserciones, ninguna borrada).
+- **Frontend.** Formulario de paciente: cobertura (particular o mutual), mutual del catálogo,
+  número de afiliado, y moneda de facturación obligatoria sin valor preseleccionado. Una mutual dada
+  de baja sigue visible en la ficha que ya la tiene. Tabla y ficha muestran cobertura y moneda.
+  Pantalla `/mutuales` (owner y admin) con alta, edición y baja o reactivación, y enlace en el
+  menú del consultorio. E2E: los cuatro flujos que dan de alta pacientes eligen la moneda, y
+  `e6-coverage.spec.ts` cubre el alta de mutual, el paciente cubierto y el rechazo sin moneda.
+- **Decisiones tomadas sin consultar.** Escritura del catálogo con `tenant:settings`; moneda y
+  cobertura obligatorias en la API sin default; la moneda no se preselecciona en la UI; una mutual
+  dada de baja conserva a sus pacientes; el CUIT de la mutual es opcional (11 dígitos cuando se
+  carga); el catálogo no pagina; la respuesta del paciente trae `insurerId` y la UI resuelve el
+  nombre contra el catálogo.
+- **Verificación.** `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e` 22 de 22 contra una API
+  con el código nuevo (`127.0.0.1:8080`). Commit solo cuando se pida.

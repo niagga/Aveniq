@@ -19,6 +19,7 @@ import (
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
@@ -30,6 +31,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
+	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -103,6 +105,11 @@ type Deps struct {
 	GetVoucher             *billingapp.GetUseCase
 	ListVouchers           *billingapp.ListUseCase
 	SearchSubjects         *billingapp.SearchSubjectsUseCase
+	ListInsurers           *insurerapp.ListUseCase
+	CreateInsurer          *insurerapp.CreateUseCase
+	UpdateInsurer          *insurerapp.UpdateUseCase
+	DeactivateInsurer      *insurerapp.LifecycleUseCase
+	ActivateInsurer        *insurerapp.LifecycleUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -139,6 +146,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerTenantRoutes(api, deps)
 	registerAuthRoutes(api, deps)
 	registerPatientRoutes(api, deps)
+	registerInsurerRoutes(api, deps)
 	registerClinicalRoutes(api, deps)
 	registerScheduleRoutes(api, deps)
 	registerUserRoutes(api, deps)
@@ -275,6 +283,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var scheduleValidationErr *schedule.ValidationError
 	var iamValidationErr *iam.ValidationError
 	var billingValidationErr *billing.ValidationError
+	var insurerValidationErr *insurer.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -291,6 +300,14 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("A patient with that document already exists in this practice")
 	case errors.Is(err, patient.ErrNotFound):
 		return huma.Error404NotFound("The requested patient does not exist")
+	case errors.As(err, &insurerValidationErr):
+		return huma.Error422UnprocessableEntity(insurerValidationErr.Error())
+	case errors.Is(err, insurer.ErrNotFound):
+		return huma.Error404NotFound("The requested mutual does not exist")
+	case errors.Is(err, insurer.ErrNameTaken):
+		return huma.Error409Conflict("A mutual with that name already exists in this practice")
+	case errors.Is(err, insurer.ErrInvalidTransition):
+		return huma.Error409Conflict("That state transition is not allowed")
 	case errors.Is(err, care.ErrGrantNotFound):
 		return huma.Error404NotFound("The requested clinical grant does not exist")
 	case errors.Is(err, care.ErrForbidden):

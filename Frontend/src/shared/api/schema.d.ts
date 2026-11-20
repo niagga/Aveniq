@@ -274,6 +274,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/insurers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the mutuals of the practice
+         * @description Returns the practice's mutuals ordered by name. The patient forms ask for the active ones only.
+         */
+        get: operations["list-insurers"];
+        put?: never;
+        /** Add a mutual to the catalog */
+        post: operations["create-insurer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insurers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a mutual
+         * @description Replaces the name and the tax id of a mutual. The active flag is changed by the deactivate and activate routes.
+         */
+        patch: operations["update-insurer"];
+        trace?: never;
+    };
+    "/api/v1/insurers/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate a mutual */
+        post: operations["activate-insurer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insurers/{id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate a mutual
+         * @description Stops new coverage on the mutual. Patients it already covers keep it until someone changes their coverage.
+         */
+        post: operations["deactivate-insurer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -954,6 +1032,46 @@ export interface components {
              */
             professionalId: string;
         };
+        InsurerBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InsurerBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: uuid
+             * @description Mutual identifier.
+             */
+            id: string;
+            /** @description False after a deactivation. Mutuals are never deleted. */
+            isActive: boolean;
+            /** @description Name of the mutual as the practice calls it. */
+            name: string;
+            /** @description CUIT of the mutual, digits only. Empty until the practice knows it. */
+            taxId?: string;
+            /**
+             * Format: uuid
+             * @description Practice the mutual belongs to.
+             */
+            tenantId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        InsurerProfileBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InsurerProfileBody.json
+             */
+            readonly $schema?: string;
+            /** @description Name of the mutual. */
+            name: string;
+            /** @description CUIT of the mutual. Separators are accepted and removed. */
+            taxId?: string;
+        };
         InvitationBody: {
             /** Format: date-time */
             createdAt: string;
@@ -1038,6 +1156,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["GrantBody"][] | null;
         };
+        ListInsurersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListInsurersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["InsurerBody"][] | null;
+        };
         ListInvitationsOutputBody: {
             /**
              * Format: uri
@@ -1120,10 +1247,20 @@ export interface components {
              */
             readonly $schema?: string;
             administrativeNotes?: string;
+            /**
+             * @description Currency the patient's sessions are billed in. Chosen, never derived from the country.
+             * @enum {string}
+             */
+            billingCurrency: "ARS" | "EUR" | "USD";
             /** @description Date of birth, YYYY-MM-DD. */
             birthDate?: string;
             /** @description Country whose rules validate the document and fiscal data. */
             country: string;
+            /**
+             * @description Who pays: a particular patient (private) or a mutual's (insurer).
+             * @enum {string}
+             */
+            coverageKind: "private" | "insurer";
             /** Format: date-time */
             createdAt: string;
             document?: components["schemas"]["PatientDocumentBody"];
@@ -1139,8 +1276,12 @@ export interface components {
              * @description Patient identifier.
              */
             id: string;
+            /** @description The mutual that covers the patient. Empty for a private patient. */
+            insurerId?: string;
             /** @description False after a deactivation. Patients are never deleted. */
             isActive: boolean;
+            /** @description Affiliate number at the mutual. Empty for a private patient. */
+            memberNumber?: string;
             phone?: string;
             taxId?: components["schemas"]["PatientTaxIDBody"];
             /**
@@ -1170,12 +1311,22 @@ export interface components {
             readonly $schema?: string;
             administrativeNotes?: string;
             /**
+             * @description Required. The currency the patient's sessions are billed in; it is chosen, not derived from the country.
+             * @enum {string}
+             */
+            billingCurrency: "ARS" | "EUR" | "USD";
+            /**
              * Format: date
              * @description Optional date of birth, YYYY-MM-DD.
              */
             birthDate?: string;
             /** @description Optional ISO country. Defaults to the practice's. */
             country?: string;
+            /**
+             * @description Required. private for a particular patient, insurer for one covered by a mutual.
+             * @enum {string}
+             */
+            coverageKind: "private" | "insurer";
             /** @description Document kind for the country, for example dni or nie. */
             documentKind?: string;
             /** @description Document number as typed. Separators are accepted and normalized. */
@@ -1187,6 +1338,10 @@ export interface components {
             fiscalCondition?: string;
             /** @description Name of the patient. */
             fullName: string;
+            /** @description Required with coverageKind insurer: the mutual of the practice's catalog. Must be empty for private. */
+            insurerId?: string;
+            /** @description Required with coverageKind insurer: the affiliate number. Must be empty for private. */
+            memberNumber?: string;
             phone?: string;
             taxIdKind?: string;
             taxIdNumber?: string;
@@ -2037,6 +2192,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoucherBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-insurers": {
+        parameters: {
+            query?: {
+                /** @description Exclude deactivated mutuals. */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListInsurersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-insurer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InsurerProfileBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsurerBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-insurer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Mutual identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InsurerProfileBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsurerBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "activate-insurer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Mutual identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsurerBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "deactivate-insurer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Mutual identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsurerBody"];
                 };
             };
             /** @description Error */

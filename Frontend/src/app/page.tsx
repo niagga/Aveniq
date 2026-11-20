@@ -6,6 +6,7 @@ import Link from "next/link";
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { TenantTable } from "@/features/tenants/components/tenant-table";
 import { canReadBilling } from "@/entities/billing/model";
+import { canManageInsurers } from "@/entities/insurer/model";
 import {
   canManageAccounts,
   canReadPractice,
@@ -107,6 +108,14 @@ function Dashboard() {
               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
             >
               Usuarios
+            </Link>
+          ) : null}
+          {canManageInsurers(role) ? (
+            <Link
+              href="/mutuales"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Mutuales
             </Link>
           ) : null}
           <LogoutButton />

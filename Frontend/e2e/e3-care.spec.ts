@@ -66,6 +66,7 @@ async function registerPatient(page: Page, fullName: string) {
   await page.getByRole("button", { name: "Nuevo paciente" }).click();
   await page.getByLabel("Nombre y apellido").fill(fullName);
   await page.getByLabel("Fecha de nacimiento").fill("1990-05-12");
+  await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
   await expect(page.getByRole("cell", { name: fullName })).toBeVisible({ timeout: 10_000 });
 }

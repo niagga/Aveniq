@@ -52,6 +52,16 @@ type Patient struct {
 	// it are decided in domain/care, not here.
 	TreatingProfessionalID *string
 
+	// Coverage says who pays for the sessions. A private patient has no mutual and no
+	// member number; an insured one has both, and the mutual belongs to this practice.
+	CoverageKind Coverage
+	InsurerID    *string
+	MemberNumber *string
+
+	// BillingCurrency is chosen by hand at registration. Nothing derives it from the
+	// country, so an Argentine patient can be billed in dollars.
+	BillingCurrency Currency
+
 	// IsActive is the deactivation flag. Patients are never deleted: clinical
 	// notes will reference this row.
 	IsActive  bool
@@ -81,6 +91,11 @@ type Draft struct {
 	FiscalCondition       *string
 	FiscalAddress         *string
 	AdministrativeNotes   *string
+
+	CoverageKind    Coverage
+	InsurerID       *string
+	MemberNumber    *string
+	BillingCurrency Currency
 }
 
 // New builds a patient and validates every invariant the schema also enforces, so
@@ -131,6 +146,11 @@ type Stored struct {
 
 	TreatingProfessionalID *string
 
+	CoverageKind    Coverage
+	InsurerID       *string
+	MemberNumber    *string
+	BillingCurrency Currency
+
 	IsActive  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -163,6 +183,10 @@ func Reconstitute(stored Stored) (Patient, error) {
 		FiscalAddress:          stored.FiscalAddress,
 		AdministrativeNotes:    stored.AdministrativeNotes,
 		TreatingProfessionalID: stored.TreatingProfessionalID,
+		CoverageKind:           stored.CoverageKind,
+		InsurerID:              stored.InsurerID,
+		MemberNumber:           stored.MemberNumber,
+		BillingCurrency:        stored.BillingCurrency,
 		IsActive:               stored.IsActive,
 		CreatedAt:              stored.CreatedAt.UTC(),
 		UpdatedAt:              stored.UpdatedAt.UTC(),
@@ -208,6 +232,14 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		return Patient{}, &ValidationError{Field: "birth_date", Message: "must not be in the future"}
 	}
 
+	if !ValidCurrency(draft.BillingCurrency) {
+		return Patient{}, &ValidationError{Field: "billing_currency", Message: "must be ARS, EUR or USD"}
+	}
+	coverage, insurerID, memberNumber, err := coverageFromDraft(draft)
+	if err != nil {
+		return Patient{}, err
+	}
+
 	return Patient{
 		ID:                    id,
 		TenantID:              tenantID,
@@ -223,7 +255,40 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		FiscalCondition:       sanitize(draft.FiscalCondition),
 		FiscalAddress:         sanitize(draft.FiscalAddress),
 		AdministrativeNotes:   sanitize(draft.AdministrativeNotes),
+		CoverageKind:          coverage,
+		InsurerID:             insurerID,
+		MemberNumber:          memberNumber,
+		BillingCurrency:       draft.BillingCurrency,
 	}, nil
+}
+
+// coverageFromDraft checks the coverage as a group. A private patient must not name a
+// mutual or a member number, because the schema refuses that row and the caller would
+// otherwise see a SQLSTATE. An insured patient must name both.
+func coverageFromDraft(draft Draft) (Coverage, *string, *string, error) {
+	insurerID := sanitize(draft.InsurerID)
+	memberNumber := sanitize(draft.MemberNumber)
+
+	switch draft.CoverageKind {
+	case CoveragePrivate:
+		if insurerID != nil {
+			return "", nil, nil, &ValidationError{Field: "insurer_id", Message: "must be empty for a private patient"}
+		}
+		if memberNumber != nil {
+			return "", nil, nil, &ValidationError{Field: "member_number", Message: "must be empty for a private patient"}
+		}
+		return CoveragePrivate, nil, nil, nil
+	case CoverageInsurer:
+		if insurerID == nil {
+			return "", nil, nil, &ValidationError{Field: "insurer_id", Message: "is required for a patient with a mutual"}
+		}
+		if memberNumber == nil {
+			return "", nil, nil, &ValidationError{Field: "member_number", Message: "is required for a patient with a mutual"}
+		}
+		return CoverageInsurer, insurerID, memberNumber, nil
+	default:
+		return "", nil, nil, &ValidationError{Field: "coverage_kind", Message: "must be private or insurer"}
+	}
 }
 
 // ChangeProfile applies an edit, keeping identity and creation untouched.

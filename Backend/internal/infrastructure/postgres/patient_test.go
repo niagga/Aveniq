@@ -79,6 +79,8 @@ func newPatient(t *testing.T, catalog *postgres.PatientCatalog, tenantID, fullNa
 		Document:        built,
 		TaxID:           &taxID,
 		FiscalCondition: &condition,
+		CoverageKind:    patient.CoveragePrivate,
+		BillingCurrency: patient.CurrencyARS,
 	}, time.Now())
 	if err != nil {
 		t.Fatalf("cannot build the domain patient: %v", err)
@@ -197,10 +199,12 @@ func TestPatientRepository(t *testing.T) {
 
 		phone := "+54 11 5555-5555"
 		draft := patient.Draft{
-			FullName: "Editable Corregida",
-			Country:  "AR",
-			Document: subject.Document,
-			Phone:    &phone,
+			FullName:        "Editable Corregida",
+			Country:         "AR",
+			Document:        subject.Document,
+			Phone:           &phone,
+			CoverageKind:    patient.CoveragePrivate,
+			BillingCurrency: patient.CurrencyARS,
 		}
 		updated, err := subject.ChangeProfile(draft, time.Now())
 		if err != nil {

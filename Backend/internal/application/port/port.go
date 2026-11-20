@@ -15,6 +15,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/care"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
+	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -75,6 +76,18 @@ type PatientRepository interface {
 	// separate from Update so editing the file and reassigning the patient are two
 	// writes with two permissions.
 	AssignTreating(ctx context.Context, subject patient.Patient) error
+}
+
+// InsurerRepository persists the mutual catalog of a practice. Like the patient
+// repository it runs inside a tenant scope, and it maps its failures onto
+// insurer.ErrNotFound and insurer.ErrNameTaken.
+type InsurerRepository interface {
+	Create(ctx context.Context, subject insurer.Insurer) error
+	ByID(ctx context.Context, id insurer.ID) (insurer.Insurer, error)
+	// List returns the mutuals ordered by name. ActiveOnly hides the deactivated ones,
+	// which the patient forms offer for new coverage.
+	List(ctx context.Context, activeOnly bool) ([]insurer.Insurer, error)
+	Update(ctx context.Context, subject insurer.Insurer) error
 }
 
 // PatientFilter narrows a listing. Search matches a fragment of the name or the

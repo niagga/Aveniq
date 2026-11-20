@@ -49,6 +49,7 @@ test("a professional registers a patient, keeps its clinical record, and books i
   await page.getByRole("button", { name: "Nuevo paciente" }).click();
   await page.getByLabel("Nombre y apellido").fill(patientName);
   await page.getByLabel("Fecha de nacimiento").fill("1990-05-12");
+  await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
   await expect(page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
 

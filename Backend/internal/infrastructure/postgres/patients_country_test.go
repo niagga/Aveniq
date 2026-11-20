@@ -49,8 +49,8 @@ func TestPatientsCountryModel(t *testing.T) {
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (
 					id, tenant_id, full_name, country, document_type, document_number,
-					document_normalized, tax_id_kind, fiscal_condition, created_at, updated_at
-				) VALUES ($1, $2, 'Paciente de prueba', $3, $4, $5, $6, $7, $8, now(), now())`,
+					document_normalized, tax_id_kind, fiscal_condition, billing_currency, created_at, updated_at
+				) VALUES ($1, $2, 'Paciente de prueba', $3, $4, $5, $6, $7, $8, 'ARS', now(), now())`,
 				uuid.NewString(), tenantID, row.country, row.documentType, row.document,
 				row.normalized, row.taxKind, row.fiscalCond)
 			return err

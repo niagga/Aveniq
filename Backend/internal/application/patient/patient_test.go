@@ -11,6 +11,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -173,12 +174,54 @@ type seqIDs struct{ n int }
 
 func (s *seqIDs) NewID() string { s.n++; return fmt.Sprintf("patient-%06d", s.n) }
 
+// fakeInsurerRepository is the mutual catalog of the tests: one practice, in memory.
+type fakeInsurerRepository struct {
+	stored map[insurer.ID]insurer.Insurer
+}
+
+func newFakeInsurerRepository() *fakeInsurerRepository {
+	return &fakeInsurerRepository{stored: make(map[insurer.ID]insurer.Insurer)}
+}
+
+func (f *fakeInsurerRepository) Create(_ context.Context, subject insurer.Insurer) error {
+	f.stored[subject.ID] = subject
+	return nil
+}
+
+func (f *fakeInsurerRepository) ByID(_ context.Context, id insurer.ID) (insurer.Insurer, error) {
+	subject, ok := f.stored[id]
+	if !ok {
+		return insurer.Insurer{}, insurer.ErrNotFound
+	}
+	return subject, nil
+}
+
+func (f *fakeInsurerRepository) List(_ context.Context, activeOnly bool) ([]insurer.Insurer, error) {
+	rows := make([]insurer.Insurer, 0, len(f.stored))
+	for _, subject := range f.stored {
+		if activeOnly && !subject.IsActive {
+			continue
+		}
+		rows = append(rows, subject)
+	}
+	return rows, nil
+}
+
+func (f *fakeInsurerRepository) Update(_ context.Context, subject insurer.Insurer) error {
+	if _, ok := f.stored[subject.ID]; !ok {
+		return insurer.ErrNotFound
+	}
+	f.stored[subject.ID] = subject
+	return nil
+}
+
 // ─── world ───────────────────────────────────────────────────────────────────
 
 const start = "2025-06-15T10:30:00Z"
 
 type world struct {
 	repo       *fakePatientRepository
+	insurers   *fakeInsurerRepository
 	catalog    *fakeDocumentCatalog
 	scope      *fakeScope
 	create     *patientapp.CreateUseCase
@@ -192,6 +235,7 @@ type world struct {
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	repo := newFakePatientRepository()
+	insurers := newFakeInsurerRepository()
 	catalog := newFakeDocumentCatalog()
 	scope := &fakeScope{}
 	now, err := time.Parse(time.RFC3339, start)
@@ -204,10 +248,11 @@ func newWorld(t *testing.T) *world {
 
 	return &world{
 		repo:       repo,
+		insurers:   insurers,
 		catalog:    catalog,
 		scope:      scope,
-		create:     patientapp.NewCreateUseCase(repo, catalog, scope, clock, ids),
-		update:     patientapp.NewUpdateUseCase(repo, catalog, scope, clock, access),
+		create:     patientapp.NewCreateUseCase(repo, insurers, catalog, scope, clock, ids),
+		update:     patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
 		deactivate: patientapp.NewDeactivateUseCase(repo, scope, clock, access),
 		activate:   patientapp.NewActivateUseCase(repo, scope, clock, access),
 		get:        patientapp.NewGetUseCase(scope, access),
@@ -217,7 +262,7 @@ func newWorld(t *testing.T) *world {
 
 func (w *world) createPatient(t *testing.T, mutate func(*patientapp.CreateInput)) patientapp.PatientView {
 	t.Helper()
-	in := patientapp.CreateInput{TenantID: "tenant-1", FullName: "Ana García"}
+	in := patientapp.CreateInput{CoverageKind: "private", BillingCurrency: "ARS", TenantID: "tenant-1", FullName: "Ana García"}
 	if mutate != nil {
 		mutate(&in)
 	}
@@ -244,6 +289,8 @@ func TestCreateResolvesCountryFromPractice(t *testing.T) {
 	w := newWorld(t)
 
 	view, err := w.create.Execute(context.Background(), patientapp.CreateInput{
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
 		TenantID:        "tenant-1",
 		FullName:        "Ana García",
 		DocumentKind:    "dni",
@@ -279,11 +326,13 @@ func TestCreateWithExplicitCountrySkipsTenantLookup(t *testing.T) {
 	w := newWorld(t)
 
 	view, err := w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:       "tenant-es",
-		FullName:       "Ana García",
-		Country:        "ES",
-		DocumentKind:   "nie",
-		DocumentNumber: "x1234567l",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-es",
+		FullName:        "Ana García",
+		Country:         "ES",
+		DocumentKind:    "nie",
+		DocumentNumber:  "x1234567l",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -305,12 +354,14 @@ func TestCreateKeepsTypedDocumentAndStoresCanonicalForm(t *testing.T) {
 	w := newWorld(t)
 
 	view, err := w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:       "tenant-1",
-		FullName:       "Ana García",
-		DocumentKind:   "dni",
-		DocumentNumber: "30.111.222",
-		TaxIDKind:      "cuit",
-		TaxIDNumber:    "20-12345678-6",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		FullName:        "Ana García",
+		DocumentKind:    "dni",
+		DocumentNumber:  "30.111.222",
+		TaxIDKind:       "cuit",
+		TaxIDNumber:     "20-12345678-6",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -337,10 +388,12 @@ func TestCreateKeepsTypedDocumentAndStoresCanonicalForm(t *testing.T) {
 	// The same document without separators is the same canonical number: that is
 	// the whole point of normalizing before storing.
 	second, err := w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:       "tenant-1",
-		FullName:       "Beto López",
-		DocumentKind:   "dni",
-		DocumentNumber: "30111222",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		FullName:        "Beto López",
+		DocumentKind:    "dni",
+		DocumentNumber:  "30111222",
 	})
 	if err != nil {
 		t.Fatalf("create without separators: %v", err)
@@ -354,10 +407,12 @@ func TestCreateRefusesDocumentKindTheCountryDoesNotHave(t *testing.T) {
 	w := newWorld(t)
 
 	_, err := w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:       "tenant-1",
-		FullName:       "Ana García",
-		DocumentKind:   "nie",
-		DocumentNumber: "X1234567L",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		FullName:        "Ana García",
+		DocumentKind:    "nie",
+		DocumentNumber:  "X1234567L",
 	})
 	if !errors.Is(err, patient.ErrDocumentInvalid) {
 		t.Fatalf("error = %v, want patient.ErrDocumentInvalid", err)
@@ -374,6 +429,8 @@ func TestCreateRefusesFiscalConditionTheCountryDoesNotHave(t *testing.T) {
 	w := newWorld(t)
 
 	_, err := w.create.Execute(context.Background(), patientapp.CreateInput{
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
 		TenantID:        "tenant-es",
 		FullName:        "Ana García",
 		FiscalCondition: "monotributo",
@@ -392,10 +449,12 @@ func TestCreateReturnsDomainValidationErrorUntouched(t *testing.T) {
 	// A document whose normalized form is blank: the domain's field error must
 	// reach the caller as-is, so the HTTP layer can answer 422 with a field.
 	_, err := w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:       "tenant-1",
-		FullName:       "Ana García",
-		DocumentKind:   "dni",
-		DocumentNumber: "sin números",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		FullName:        "Ana García",
+		DocumentKind:    "dni",
+		DocumentNumber:  "sin números",
 	})
 	var invalid *patient.ValidationError
 	if !errors.As(err, &invalid) {
@@ -407,10 +466,12 @@ func TestCreateReturnsDomainValidationErrorUntouched(t *testing.T) {
 
 	// A check-digit failure is the document sentinel, not a field error.
 	_, err = w.create.Execute(context.Background(), patientapp.CreateInput{
-		TenantID:    "tenant-1",
-		FullName:    "Ana García",
-		TaxIDKind:   "cuit",
-		TaxIDNumber: "20-12345678-5",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		FullName:        "Ana García",
+		TaxIDKind:       "cuit",
+		TaxIDNumber:     "20-12345678-5",
 	})
 	if !errors.Is(err, patient.ErrDocumentInvalid) {
 		t.Fatalf("error = %v, want patient.ErrDocumentInvalid", err)
@@ -439,13 +500,15 @@ func TestUpdateAppliesProfileAndKeepsCreationUntouched(t *testing.T) {
 	view := w.createPatient(t, nil)
 
 	updated, err := w.update.Execute(context.Background(), patientapp.UpdateInput{
-		TenantID:       "tenant-1",
-		ID:             view.ID,
-		FullName:       "Ana García López",
-		Phone:          "  5411 4444  ",
-		Email:          "ANA@Example.com",
-		DocumentKind:   "dni",
-		DocumentNumber: "30.111.222",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		ID:              view.ID,
+		FullName:        "Ana García López",
+		Phone:           "  5411 4444  ",
+		Email:           "ANA@Example.com",
+		DocumentKind:    "dni",
+		DocumentNumber:  "30.111.222",
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -480,9 +543,11 @@ func TestUpdateMissingPatientIsNotFound(t *testing.T) {
 	w := newWorld(t)
 
 	_, err := w.update.Execute(context.Background(), patientapp.UpdateInput{
-		TenantID: "tenant-1",
-		ID:       "patient-missing",
-		FullName: "Alguien",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1",
+		ID:              "patient-missing",
+		FullName:        "Alguien",
 	})
 	if !errors.Is(err, patient.ErrNotFound) {
 		t.Fatalf("error = %v, want patient.ErrNotFound", err)
@@ -646,7 +711,9 @@ func TestEveryOperationOpensExactlyOneTenantScope(t *testing.T) {
 	w.scope.opened, w.scope.tenants = 0, nil
 
 	if _, err := w.update.Execute(context.Background(), patientapp.UpdateInput{
-		TenantID: "tenant-1", ID: view.ID, FullName: "Ana García López",
+		CoverageKind:    "private",
+		BillingCurrency: "ARS",
+		TenantID:        "tenant-1", ID: view.ID, FullName: "Ana García López",
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}

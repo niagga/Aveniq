@@ -20,6 +20,7 @@ import (
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
@@ -91,6 +92,7 @@ func run() error {
 	invitationRepository := postgres.NewInvitationRepository(pool)
 	sessionRepository := postgres.NewSessionRepository(pool)
 	patientRepository := postgres.NewPatientRepository(pool)
+	insurerRepository := postgres.NewInsurerRepository(pool)
 	patientCatalog := postgres.NewPatientCatalog(pool)
 	clinicalRepository := postgres.NewClinicalRepository(pool)
 	scheduleRepository := postgres.NewScheduleRepository(pool)
@@ -142,8 +144,13 @@ func run() error {
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenantRepository),
 		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenantRepository, clock.New()),
 		Login:                  loginUseCase,
-		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
-		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, patientCatalog, transactor, clock.New(), careAccess),
+		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, insurerRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, insurerRepository, patientCatalog, transactor, clock.New(), careAccess),
+		ListInsurers:           insurerapp.NewListUseCase(insurerRepository, transactor),
+		CreateInsurer:          insurerapp.NewCreateUseCase(insurerRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdateInsurer:          insurerapp.NewUpdateUseCase(insurerRepository, transactor, clock.New()),
+		DeactivateInsurer:      insurerapp.NewDeactivateUseCase(insurerRepository, transactor, clock.New()),
+		ActivateInsurer:        insurerapp.NewActivateUseCase(insurerRepository, transactor, clock.New()),
 		DeactivatePatient:      patientapp.NewDeactivateUseCase(patientRepository, transactor, clock.New(), careAccess),
 		ActivatePatient:        patientapp.NewActivateUseCase(patientRepository, transactor, clock.New(), careAccess),
 		GetPatient:             patientapp.NewGetUseCase(transactor, careAccess),

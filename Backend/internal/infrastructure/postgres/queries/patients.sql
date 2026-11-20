@@ -8,9 +8,11 @@ INSERT INTO patients (
     document_type, document_number, document_normalized,
     phone, email, emergency_contact_name, emergency_contact_phone,
     tax_id, tax_id_kind, fiscal_condition, fiscal_address,
-    administrative_notes, is_active, created_at, updated_at, treating_professional_id
+    administrative_notes, is_active, created_at, updated_at, treating_professional_id,
+    coverage_kind, insurer_id, member_number, billing_currency
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+        $22, $23, $24, $25)
 RETURNING *;
 
 -- name: GetPatientByID :one
@@ -36,7 +38,11 @@ SET country                = $2,
     fiscal_address         = $15,
     administrative_notes   = $16,
     is_active              = $17,
-    updated_at             = $18
+    updated_at             = $18,
+    coverage_kind          = $19,
+    insurer_id             = $20,
+    member_number          = $21,
+    billing_currency       = $22
 WHERE id = $1
 RETURNING *;
 

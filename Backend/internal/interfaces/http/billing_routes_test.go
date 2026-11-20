@@ -234,7 +234,7 @@ func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 	accountant := h.token(t, tenantA, iam.RoleAccountant)
 
 	status, created := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-		"fullName":        "Ana Pérez",
+		"fullName": "Ana Pérez", "coverageKind": "private", "billingCurrency": "ARS",
 		"documentKind":    "dni",
 		"documentNumber":  "30111222",
 		"taxIdKind":       "cuit",

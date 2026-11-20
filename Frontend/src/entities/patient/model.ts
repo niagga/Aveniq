@@ -98,6 +98,34 @@ export const FISCAL_CONDITIONS_BY_COUNTRY: Record<string, string[]> = {
   BR: ["mei", "simples_nacional", "lucro_presumido"],
 };
 
+/**
+ * The billing currencies the MVP bills in (L61). The patient's currency is chosen by
+ * hand, never derived from the country, so the form starts with no choice selected.
+ */
+export const CURRENCIES = ["ARS", "EUR", "USD"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+
+const CURRENCY_LABEL: Record<Currency, string> = {
+  ARS: "Pesos (ARS)",
+  EUR: "Euros (EUR)",
+  USD: "Dólares (USD)",
+};
+
+export function currencyLabel(code: string | undefined): string {
+  if (!code) return "";
+  return CURRENCY_LABEL[code as Currency] ?? code;
+}
+
+/**
+ * Who pays for a patient's sessions. The name of the mutual comes from the catalog,
+ * because the patient response carries only its id.
+ */
+export function coverageText(patient: Patient, insurerName: string | undefined): string {
+  if (patient.coverageKind !== "insurer") return "Particular";
+  const name = insurerName ?? "Mutual";
+  return patient.memberNumber ? `${name} · afiliado ${patient.memberNumber}` : name;
+}
+
 /** Formats a date of birth for display, tolerating an empty value. */
 export function formatBirthDate(value: string | undefined): string {
   if (!value) return "";
