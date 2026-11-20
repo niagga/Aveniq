@@ -133,7 +133,7 @@ en cada transición de tarea.
 | T50 | S16, S2 | E6 | Migración `0016`: catálogo de mutuales por consultorio; cobertura del paciente (particular o mutual con número de afiliado); moneda de cobro (ARS, EUR, USD) obligatoria en el esquema, con backfill a ARS para los pacientes existentes. RLS forzado | inline | `4b8615d` |
 | T51 | S16, S2 | E6 | Contrato: dominio, HTTP y pantallas de mutuales y del paciente con cobertura y moneda. La moneda es obligatoria en la API (cambio de contrato confirmado) | inline | `1e32399` |
 | T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | `5cad1d8` |
-| T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | — |
+| T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | `02bf98a` |
 | T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | — |
 | T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | — |
 | T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | — |
@@ -2318,3 +2318,48 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   nueva (`127.0.0.1:8080`, reiniciada con este build).
 - **Commit.** `5cad1d8`. El registro del hash va en un commit aparte, como en T51.
 - **Pendiente.** T53 es el siguiente.
+
+**L65 — T53: tarifario (valor por profesional × cobertura × modalidad × moneda, con vigencia)**
+
+- **Migración `0019_tariffs.sql`** (aplicada en la base de desarrollo, versión 19). Tabla `tariffs` con
+  RLS forzado. Una fila es un valor que rige desde `valid_from` para un profesional, cobertura, mutual,
+  modalidad y moneda. Índice único con `NULLS NOT DISTINCT` sobre esa clave más el día: dos valores
+  particulares del mismo día chocan. Un valor particular guarda `insurer_minor = 0` y el valor completo
+  en `patient_minor`; un valor de mutual guarda sus dos partes. CHECK: particular sin mutual, mutual con
+  mutual, total mayor que cero, modalidad y moneda conocidas. FK compuestas `(tenant_id, professional_user_id)`
+  y `(tenant_id, insurer_id)`: no se puede apuntar a un profesional o a una mutual de otro consultorio.
+  El Down quita la tabla.
+- **Dominio `pricing`.** `Tariff` con `New`, `Reconstitute` y `ChangeAmounts`. La clave no cambia al editar:
+  solo se cambian los importes; para mover un valor, se quita y se carga de nuevo. Errores: `ValidationError`
+  por campo, `ErrNotFound`, `ErrValidityTaken`, `ErrTenantScopeMissing`.
+- **Aplicación.** `ListUseCase`, `CreateUseCase` (refiere una mutual desconocida o dada de baja con
+  `insurer_id`), `UpdateUseCase` y `DeleteUseCase`. La lista trae el nombre del profesional y de la mutual
+  por JOIN en SQL, porque el accountant no puede leer `/users` ni `/insurers`.
+- **Postgres.** `sqlcgen` regenerado con sqlc v1.31.1. `TestTariffRepository` y `TestTariffSchemaRefusesBrokenRows`
+  cubren RLS entre consultorios, FK cruzadas traducidas a error de campo, unicidad del mismo día, nuevas
+  versiones por vigencia y los CHECK con SQL crudo.
+- **HTTP.** `GET /api/v1/tariffs` con `billing:read` (owner, admin, accountant). `POST`, `PATCH` y
+  `DELETE /api/v1/tariffs/{id}` con `tenant:settings` (owner, admin). Sin permisos nuevos. Los importes son
+  obligatorios en la API (`insurerMinor`, `patientMinor`, enteros no negativos). El alta responde sin
+  nombres; la pantalla recarga la lista. Errores: 422 por campo, 404, 409 para el mismo día.
+- **Frontend.** Pantalla `/tarifario`, con enlace en el panel para quien tiene `billing:read`. Tabla con
+  profesional, cobertura, modalidad, moneda, vigencia, lo que paga la mutual, lo que paga el paciente y el
+  total. Owner y admin cargan un valor, cambian sus importes o lo quitan. Sin preselección: cobertura,
+  modalidad y moneda empiezan vacías. El copago puede ser 0; lo que paga la mutual no. Los importes se leen
+  con `parseAmount` de billing.
+- **Decisiones tomadas sin consultar.** (1) Particular: `insurer_minor = 0` y el valor en `patient_minor`;
+  la API usa `patientMinor` también para particular, y la pantalla lo muestra como "Paga el paciente".
+  (2) Baja definitiva, no lógica: los comprobantes emitidos guardan su importe (T54 lo congela al emitir).
+  (3) Permisos: lectura con `billing:read`, escritura con `tenant:settings`. (4) Copago en 0 permitido.
+  (5) `valid_from` es un día civil; un segundo valor para la misma combinación y día responde 409.
+- **Verificación.** `gofmt` y `go vet ./...` limpios; `go test ./...` completo en verde con las bases de test.
+  Migración 0019 aplicada en la base de desarrollo; API reiniciada en 8080 con este build; `schema.d.ts`
+  regenerado (solo agrega). `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e` 29 de 29: los 22 previos y
+  7 nuevos en `e2e/e7-tariff.spec.ts`.
+- **Ajustes de e2e fuera de T53.** E4, E5 y E6 buscaban al paciente recién creado en la lista, que muestra 50
+  por nombre; la base de desarrollo ya tiene más de 50 pacientes de corridas previas. Ahora lo buscan por su
+  nombre exacto con el buscador de la pantalla. E2 tiene `test.setTimeout(120_000)`: su recorrido de horarios
+  del día siguiente se alarga con los turnos de corridas previas. Limpiar los datos de prueba de la base de
+  desarrollo lo resuelve de raíz; no se hizo.
+- **Commit.** `02bf98a`. El registro del hash va en un commit aparte, como en T51 y T52.
+- **Pendiente.** T54 (emisión con el valor propuesto) es el siguiente.
