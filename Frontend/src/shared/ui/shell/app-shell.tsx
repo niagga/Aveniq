@@ -15,6 +15,7 @@ import {
 import { canManageInsurers } from "@/entities/insurer/model";
 import { canReadTariffs } from "@/entities/tariff/model";
 import { getSessionUser } from "@/shared/auth/session";
+import { ThemeToggle } from "@/shared/ui/theme-toggle";
 
 /**
  * The one shell of the private screens (S1).
@@ -136,13 +137,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </ul>
 
-        <span
-          title={user ? roleLabel(user.role) : "Sin sesión"}
-          aria-label={`Sesión: ${user ? roleLabel(user.role) : "sin sesión"}`}
-          className="hidden h-8 w-8 place-items-center rounded-full border border-border bg-surface-muted text-ink-muted md:mt-auto md:grid"
-        >
-          <PersonIcon />
-        </span>
+        <div className="ml-1 flex items-center gap-1 md:ml-0 md:mt-auto md:flex-col md:gap-2">
+          <ThemeToggle />
+          <span
+            title={user ? roleLabel(user.role) : "Sin sesión"}
+            aria-label={`Sesión: ${user ? roleLabel(user.role) : "sin sesión"}`}
+            className="hidden h-8 w-8 place-items-center rounded-full border border-border bg-surface-muted text-ink-muted md:grid"
+          >
+            <PersonIcon />
+          </span>
+        </div>
       </nav>
 
       <div className="order-1 flex min-w-0 flex-1 flex-col md:order-2">{children}</div>
