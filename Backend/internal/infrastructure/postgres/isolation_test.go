@@ -170,6 +170,26 @@ func migrate(t *testing.T, dsn string) {
 	}
 }
 
+// migrateUpTo applies the migrations up to and including version. A test that
+// reasons about one migration's Up needs the schema frozen at that point, not at
+// the latest one, or later migrations would move its expectations.
+func migrateUpTo(t *testing.T, dsn string, version int64) {
+	t.Helper()
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("cannot open the migration connection: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("cannot set the goose dialect: %v", err)
+	}
+	if err := goose.UpTo(db, migrationsDir, version); err != nil {
+		t.Fatalf("cannot apply the migrations up to %d: %v", version, err)
+	}
+}
+
 // migrateDown rolls back one goose version. Used to prove a migration's Down
 // actually undoes its Up, on a scratch database, never on the development one.
 func migrateDown(t *testing.T, dsn string) {

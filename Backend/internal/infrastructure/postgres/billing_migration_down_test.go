@@ -24,7 +24,7 @@ func TestBillingMigrationsRollBack(t *testing.T) {
 
 	ctx := context.Background()
 	tempOwnerDSN, tempAppDSN := newScratchDatabase(t, ctx, ownerDSN, appDSN)
-	migrate(t, tempOwnerDSN)
+	migrateUpTo(t, tempOwnerDSN, 15)
 	if got := gooseVersion(t, tempOwnerDSN); got != 15 {
 		t.Fatalf("after up: goose version = %d, want 15", got)
 	}
@@ -191,7 +191,7 @@ func TestBillingMigrationsRollBack(t *testing.T) {
 	})
 
 	t.Run("up after the two downs restores 0015", func(t *testing.T) {
-		migrate(t, tempOwnerDSN)
+		migrateUpTo(t, tempOwnerDSN, 15)
 		if got := gooseVersion(t, tempOwnerDSN); got != 15 {
 			t.Fatalf("after up: goose version = %d, want 15", got)
 		}

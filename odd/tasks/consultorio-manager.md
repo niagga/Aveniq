@@ -126,9 +126,22 @@ en cada transición de tarea.
 | T43 | S22, S3 | E4 | Dashboard y menú por rol: accountant entra a facturación y no a pacientes, agenda ni usuarios; professional no ve facturación | inline | `fd0fe24` |
 | T44 | S2, S22 | E4 | E2E de E4: accountant emite y anula; owner lee; admin solo lee; professional y assistant no entran; cierre de E4 | inline | `00bedc8`, `a8b3cd6` |
 | T45 | S5 | E5 | Decisión: qué pasa al vencer el trial. Opción A: solo lectura (L58) | inline | decisión (L58) |
-| T46 | S5 | E5 | API: consultorio con trial vencido no escribe (POST/PUT/PATCH/DELETE responden 403 `trial_expired`); login, refresh y logout siguen. Seed de desarrollo sin vencimiento | inline | — |
-| T47 | S5 | E5 | Frontend: banner de trial vencido con la fecha y formularios de alta deshabilitados | inline | — |
-| T48 | S5 | E5 | E2E: dentro del trial se escribe; con trial vencido solo se lee | inline | — |
+| T46 | S5 | E5 | API: consultorio con trial vencido no escribe (POST/PUT/PATCH/DELETE responden 403 `trial_expired`); login, refresh y logout siguen. Seed de desarrollo sin vencimiento | inline | `447c1b0` |
+| T47 | S5 | E5 | Frontend: banner de trial vencido con la fecha y formularios de alta deshabilitados | inline | `cf482fd` |
+| T48 | S5 | E5 | E2E: dentro del trial se escribe; con trial vencido solo se lee | inline | `efa53eb` |
+| T49 | S2, S5 | E6 | Registrar el plan de tarifas, cobertura e informes en el tablero (L61) | inline | — |
+| T50 | S16, S2 | E6 | Migración `0016`: catálogo de mutuales por consultorio; cobertura del paciente (particular o mutual con número de afiliado); moneda de cobro (ARS, EUR, USD) obligatoria en el esquema, con backfill a ARS para los pacientes existentes. RLS forzado | inline | — |
+| T51 | S16, S2 | E6 | Contrato: dominio, HTTP y pantallas de mutuales y del paciente con cobertura y moneda. La moneda es obligatoria en la API (cambio de contrato confirmado) | inline | — |
+| T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | — |
+| T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | — |
+| T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | — |
+| T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | — |
+| T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | — |
+| T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | — |
+| T58 | S2 | E7 | API de reportes: facturado (emitido, no anulado) y atendido sin facturar (valuado con el tarifario vigente a la fecha del turno; sin valor se cuenta aparte). Totales por moneda, sin conversión. Rango en zona horaria del consultorio. Cortes por profesional, cobertura, mutual, modalidad y período. Alcance "solo lo mío" para el profesional, sin lista de comprobantes | inline | — |
+| T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | — |
+| T60 | S2 | E7 | Informes guardados compartidos dentro del consultorio, con filtros, y exportación CSV | inline | — |
+| T61 | S2, S5 | E7 | E2E de E7 y cierre de E7 | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2166,3 +2179,73 @@ solo deja de ofrecer lo que el servidor va a rechazar.
 - **Contador.** No tiene `tenant:read`, así que no ve el banner con fecha. Un write suyo sigue
   cayendo en 403. Cerrar el hueco implica publicar `status` y `trialEndsAt` en una ruta que el
   contador pueda leer (por ejemplo `/auth/me`); no se hizo aquí para no cambiar el contrato.
+
+**L61 — E6 y E7: tarifas, cobertura, modalidad, liquidación a mutuales e informes (plan aprobado)**
+
+Plan discutido y confirmado el 2026-11-20. Antes de codificar no había nada construido; este
+registro fija el alcance para T50 en adelante.
+
+Decisiones de modelo:
+
+- **Mutuales.** Cada consultorio arma su catálogo. Cada mutual tiene su propio valor.
+- **Cobertura del paciente.** Particular, o una mutual del catálogo con número de afiliado.
+- **Moneda del paciente.** Se elige a mano (ARS, EUR o USD). No hay valor por defecto según el país.
+  Cualquier cobertura y cualquier modalidad admiten cualquier moneda.
+- **Modalidad.** Online o presencial, en el turno y en la serie.
+- **Tarifario.** Por profesional × cobertura × modalidad × moneda, con fecha de vigencia.
+  Particular tiene un valor. Mutual tiene dos partes: lo que paga la mutual y el copago del paciente.
+  Sin valor cargado para una combinación, no se propone nada y el importe se escribe a mano.
+- **Cobro a mutuales.** Liquidación mensual por mutual, que agrupa las sesiones atendidas del
+  período. Una sesión no se liquida dos veces. Anular la liquidación libera sus sesiones.
+- **Emisión.** El valor propuesto por el tarifario se puede editar al emitir. El comprobante guarda
+  una foto de cobertura, modalidad y profesional. El profesional de un comprobante suelto es opcional.
+- **Quién edita el tarifario.** Solo owner y admin. El accountant lee.
+
+Decisiones de reportes:
+
+- **Facturado** = comprobantes emitidos y no anulados.
+- **Atendido sin facturar** = turnos atendidos sin comprobante, valuados con el tarifario vigente a la
+  fecha del turno. Para mutual, incluye lo pendiente de liquidar.
+- **Totales por moneda**, sin conversión. Sin tipo de cambio en el MVP.
+- **Cortes:** profesional, cobertura, mutual, modalidad y período (semana, mes, año o rango libre).
+- **Quién ve:** owner, admin y accountant, todo el consultorio. El profesional ve solo sus totales y
+  cortes, sin lista de comprobantes (permiso nuevo `reports:read:own`).
+- **Informes:** en pantalla con filtros, guardables y compartidos dentro del consultorio, y exportación
+  CSV. Sin PDF. Sin librería de gráficos: SVG o CSS.
+
+Confirmaciones del dueño (2026-11-20):
+
+- Cambio de contrato: la moneda del paciente es obligatoria en la API. Los pacientes existentes se
+  migran a ARS, que es la moneda de todos los consultorios actuales.
+- Avanzar sin dependencias nuevas.
+- Informes guardados compartidos dentro del consultorio.
+- Pendientes de E5.1 (banner del contador, L59; aceptación de invitaciones, L58): después de E7.
+
+Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6) → T57 → T58 → T59 → T60 → T61
+(cierre E7) → E5.1.
+
+**L62 — T50: migración 0016 de cobertura, mutuales y moneda del paciente**
+
+- **Migración `0016_patient_coverage_and_currency.sql`** (aplicada en la base de desarrollo, sin commit):
+  - Tabla `insurers` (mutuales del consultorio): `name` no vacío, único por consultorio sin
+    distinguir mayúsculas ni espacios; `tax_id` opcional (11 dígitos) hasta la liquidación (T55);
+    `is_active`; RLS forzado con la misma política que el resto.
+  - `patients` suma `coverage_kind` (`private` | `insurer`), `insurer_id`, `member_number` y
+    `billing_currency` (`ARS` | `EUR` | `USD`).
+  - Reglas en el esquema: particular sin mutual ni afiliado; con mutual, mutual y afiliado
+    obligatorios; la mutual debe ser del mismo consultorio (FK compuesta `(tenant_id, insurer_id)`).
+- **Desvío respecto de T50, a propósito.** `billing_currency` queda con `DEFAULT 'ARS'` y sin
+  `SET NOT NULL` sin default. Motivo: el código actual (sqlc y `POST /patients`) no envía la moneda,
+  y sin default fallaría el alta de pacientes. El default se quita en T51, junto con el cambio de
+  contrato. Hasta T51 la base nunca queda con moneda nula.
+- **Pruebas.** `TestPatientCoverageMigrationRollsBack` (nueva): backfill de pacientes existentes a
+  ARS, cobertura incoherente rechazada (23514), mutual de otro consultorio rechazada (23503), moneda
+  fuera de la lista rechazada (23514), duplicado de mutual (23505), RLS de `insurers` (42501 y
+  aislamiento de lectura), y Down/Up completos.
+- **Helper nuevo `migrateUpTo`** en `isolation_test.go`. `TestBillingMigrationsRollBack` lo usa para
+  seguir afirmando la versión 15 aunque exista 0016; sin eso la prueba de 0014/0015 fallaría por el
+  número de versión y no por el comportamiento.
+- **Verificación.** `go vet ./...` limpio, `gofmt` sin diferencias, `go test ./...` completo en verde
+  con las bases de test.
+- **Pendiente.** Commit solo cuando se pida. T51 es el siguiente: contrato de dominio, HTTP y pantallas,
+  y quitar el default de la moneda.
