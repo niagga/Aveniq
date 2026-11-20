@@ -84,6 +84,33 @@ func (f *fakeTariffRepository) Delete(_ context.Context, id pricing.ID) error {
 	return nil
 }
 
+// InForce mirrors the adapter: the latest validity that starts on or before the day.
+func (f *fakeTariffRepository) InForce(_ context.Context, query port.TariffQuery) (pricing.Tariff, error) {
+	var found *pricing.Tariff
+	for _, subject := range f.stored {
+		insurerID := ""
+		if subject.InsurerID != nil {
+			insurerID = *subject.InsurerID
+		}
+		if subject.ProfessionalUserID != query.ProfessionalUserID ||
+			string(subject.Coverage) != query.Coverage ||
+			insurerID != query.InsurerID ||
+			string(subject.Modality) != query.Modality ||
+			string(subject.Currency) != query.Currency ||
+			subject.ValidFrom.After(query.Day) {
+			continue
+		}
+		if found == nil || subject.ValidFrom.After(found.ValidFrom) {
+			picked := subject
+			found = &picked
+		}
+	}
+	if found == nil {
+		return pricing.Tariff{}, pricing.ErrNotFound
+	}
+	return *found, nil
+}
+
 // privateTariffBody is a particular price starting on day, for the professional.
 func privateTariffBody(professional, day string) map[string]any {
 	return map[string]any{

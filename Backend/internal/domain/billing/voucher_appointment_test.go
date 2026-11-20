@@ -28,6 +28,12 @@ func TestAnAppointmentNeedsItsPatient(t *testing.T) {
 		draft.PatientID = "3c8d2e5f-0000-4000-8000-000000000002"
 		draft.AppointmentID = "2b9c1f4e-0000-4000-8000-000000000001"
 		draft.BuyerName = &name
+		draft.Photo = billing.Photo{
+			Coverage:         billing.CoveragePrivate,
+			Modality:         billing.ModalityPresencial,
+			ProfessionalID:   "5d1a7c20-0000-4000-8000-000000000003",
+			ProfessionalName: "Demo Profesional",
+		}
 
 		voucher, err := billing.NewIssued(billing.VoucherID("v-2"), "tenant-1", "actor-1", draft, now)
 		if err != nil {

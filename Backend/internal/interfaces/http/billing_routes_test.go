@@ -23,14 +23,108 @@ type fakeBillingRepository struct {
 	patients *fakePatientRepository
 	vouchers map[string]map[billing.VoucherID]billing.Voucher
 	counters map[string]int
+	// sessions and professionals are the appointments and active professionals of each
+	// practice; insurerNames names the mutuals a patient can be covered by.
+	sessions      map[string]map[string]billing.Appointment
+	professionals map[string]map[string]billing.Professional
+	insurerNames  map[string]string
 }
 
 func newFakeBillingRepository(patients *fakePatientRepository) *fakeBillingRepository {
 	return &fakeBillingRepository{
-		patients: patients,
-		vouchers: map[string]map[billing.VoucherID]billing.Voucher{},
-		counters: map[string]int{},
+		patients:      patients,
+		vouchers:      map[string]map[billing.VoucherID]billing.Voucher{},
+		counters:      map[string]int{},
+		sessions:      map[string]map[string]billing.Appointment{},
+		professionals: map[string]map[string]billing.Professional{},
+		insurerNames:  map[string]string{},
 	}
+}
+
+// billedBy returns the issued voucher that bills a session, or "".
+func (r *fakeBillingRepository) billedBy(tenantID, appointmentID string) string {
+	for id, voucher := range r.vouchers[tenantID] {
+		if voucher.AppointmentID == appointmentID && voucher.Status == billing.StatusIssued {
+			return string(id)
+		}
+	}
+	return ""
+}
+
+func (r *fakeBillingRepository) PatientBilling(ctx context.Context, patientID string) (billing.PatientBilling, error) {
+	subject, err := r.patients.ByID(ctx, patient.ID(patientID))
+	if err != nil {
+		return billing.PatientBilling{}, billing.ErrPatientNotVisible
+	}
+	terms := billing.PatientBilling{
+		Coverage: billing.Coverage(subject.CoverageKind),
+		Currency: string(subject.BillingCurrency),
+		Active:   subject.IsActive,
+	}
+	if subject.InsurerID != nil {
+		terms.InsurerID = *subject.InsurerID
+		terms.InsurerName = r.insurerNames[*subject.InsurerID]
+	}
+	return terms, nil
+}
+
+func (r *fakeBillingRepository) Appointment(ctx context.Context, appointmentID string) (billing.Appointment, error) {
+	tenantID, ok := scopedTenant(ctx)
+	if !ok {
+		return billing.Appointment{}, billing.ErrTenantScopeMissing
+	}
+	session, found := r.sessions[tenantID][appointmentID]
+	if !found {
+		return billing.Appointment{}, billing.ErrAppointmentNotVisible
+	}
+	session.BilledVoucherID = r.billedBy(tenantID, appointmentID)
+	return session, nil
+}
+
+// PatientAppointments answers the newest sessions first, the way the adapter orders them.
+func (r *fakeBillingRepository) PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error) {
+	tenantID, ok := scopedTenant(ctx)
+	if !ok {
+		return nil, billing.ErrTenantScopeMissing
+	}
+	var matches []billing.Appointment
+	for _, session := range r.sessions[tenantID] {
+		if session.PatientID != patientID {
+			continue
+		}
+		session.BilledVoucherID = r.billedBy(tenantID, session.ID)
+		matches = append(matches, session)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].StartsAt.After(matches[j].StartsAt) })
+	if int32(len(matches)) > limit {
+		matches = matches[:limit]
+	}
+	return matches, nil
+}
+
+func (r *fakeBillingRepository) Professional(ctx context.Context, userID string) (billing.Professional, error) {
+	tenantID, ok := scopedTenant(ctx)
+	if !ok {
+		return billing.Professional{}, billing.ErrTenantScopeMissing
+	}
+	professional, found := r.professionals[tenantID][userID]
+	if !found {
+		return billing.Professional{}, billing.ErrProfessionalNotVisible
+	}
+	return professional, nil
+}
+
+func (r *fakeBillingRepository) Professionals(ctx context.Context) ([]billing.Professional, error) {
+	tenantID, ok := scopedTenant(ctx)
+	if !ok {
+		return nil, billing.ErrTenantScopeMissing
+	}
+	var matches []billing.Professional
+	for _, professional := range r.professionals[tenantID] {
+		matches = append(matches, professional)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].FullName < matches[j].FullName })
+	return matches, nil
 }
 
 var _ port.BillingRepository = (*fakeBillingRepository)(nil)
@@ -39,6 +133,10 @@ func (r *fakeBillingRepository) Issue(ctx context.Context, voucher billing.Vouch
 	tenantID, ok := scopedTenant(ctx)
 	if !ok {
 		return billing.Voucher{}, billing.ErrTenantScopeMissing
+	}
+	// Like the partial unique index of 0020: a session is billed by one issued voucher.
+	if voucher.AppointmentID != "" && r.billedBy(tenantID, voucher.AppointmentID) != "" {
+		return billing.Voucher{}, billing.ErrAppointmentAlreadyBilled
 	}
 	r.counters[tenantID]++
 	numbered, err := voucher.AssignNumber(r.counters[tenantID])
@@ -137,6 +235,7 @@ func subjectOf(subject patient.Patient) billing.Subject {
 		PatientID:       string(subject.ID),
 		FullName:        subject.FullName,
 		FiscalCondition: subject.FiscalCondition,
+		BillingCurrency: string(subject.BillingCurrency),
 	}
 	if subject.Document != nil {
 		number := subject.Document.Number

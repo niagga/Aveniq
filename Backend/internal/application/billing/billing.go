@@ -46,6 +46,20 @@ type VoucherView struct {
 	VoidedBy             string
 	VoidedAt             *string
 	VoidReason           *string
+	// Photo is nil-fielded for a voucher issued before the photo existed (0020) and for the
+	// parts of the photo that do not apply to it.
+	Photo PhotoView
+}
+
+// PhotoView is the coverage, modality and professional a voucher was issued with. A nil field
+// is not recorded; a voucher without a patient has no coverage.
+type PhotoView struct {
+	Coverage         *string
+	InsurerID        *string
+	InsurerName      *string
+	Modality         *string
+	ProfessionalID   *string
+	ProfessionalName *string
 }
 
 // SubjectView is a billing subject: a patient seen as a buyer.
@@ -55,6 +69,34 @@ type SubjectView struct {
 	DocumentNumber  *string
 	TaxID           *string
 	FiscalCondition *string
+	BillingCurrency string
+}
+
+// AppointmentView is one session of a patient, as the emission screen reads it. Proposal is
+// the amount the tariff proposes for it, nil when the practice has no tariff that prices it.
+type AppointmentView struct {
+	ID               string
+	PatientID        string
+	ProfessionalID   string
+	ProfessionalName string
+	Modality         string
+	StartsAt         string
+	Status           string
+	BilledVoucherID  *string
+	Proposal         *ProposalView
+}
+
+// ProposalView is what the tariff proposes for a session: the total of the tariff (the full fee
+// for a particular patient, the mutual's share plus the copago for a mutual).
+type ProposalView struct {
+	AmountMinor int64
+	Currency    string
+}
+
+// ProfessionalView is an active professional, the only role a voucher may name.
+type ProfessionalView struct {
+	ID       string
+	FullName string
 }
 
 func toVoucherView(voucher billing.Voucher) VoucherView {
@@ -76,7 +118,45 @@ func toVoucherView(voucher billing.Voucher) VoucherView {
 		VoidedBy:             voucher.VoidedBy,
 		VoidedAt:             formatOptional(voucher.VoidedAt),
 		VoidReason:           voucher.VoidReason,
+		Photo:                toPhotoView(voucher.Photo),
 	}
+}
+
+func toPhotoView(photo billing.Photo) PhotoView {
+	return PhotoView{
+		Coverage:         textPointer(string(photo.Coverage)),
+		InsurerID:        textPointer(photo.InsurerID),
+		InsurerName:      textPointer(photo.InsurerName),
+		Modality:         textPointer(photo.Modality),
+		ProfessionalID:   textPointer(photo.ProfessionalID),
+		ProfessionalName: textPointer(photo.ProfessionalName),
+	}
+}
+
+func toAppointmentView(session billing.Appointment, proposal *ProposalView) AppointmentView {
+	return AppointmentView{
+		ID:               session.ID,
+		PatientID:        session.PatientID,
+		ProfessionalID:   session.ProfessionalID,
+		ProfessionalName: session.ProfessionalName,
+		Modality:         session.Modality,
+		StartsAt:         session.StartsAt.UTC().Format(time.RFC3339),
+		Status:           session.Status,
+		BilledVoucherID:  textPointer(session.BilledVoucherID),
+		Proposal:         proposal,
+	}
+}
+
+func toProfessionalView(professional billing.Professional) ProfessionalView {
+	return ProfessionalView{ID: professional.ID, FullName: professional.FullName}
+}
+
+// textPointer maps an empty text to nil, so the API says "not recorded" instead of "".
+func textPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func toSubjectView(subject billing.Subject) SubjectView {
@@ -86,6 +166,7 @@ func toSubjectView(subject billing.Subject) SubjectView {
 		DocumentNumber:  subject.DocumentNumber,
 		TaxID:           subject.TaxID,
 		FiscalCondition: subject.FiscalCondition,
+		BillingCurrency: subject.BillingCurrency,
 	}
 }
 

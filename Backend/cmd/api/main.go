@@ -179,6 +179,8 @@ func run() error {
 		GetVoucher:             billingapp.NewGetUseCase(billingRepository, transactor),
 		ListVouchers:           billingapp.NewListUseCase(billingRepository, transactor),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(billingRepository, transactor),
+		PatientSessions:        billingapp.NewPatientSessionsUseCase(billingRepository, tariffRepository, tenantRepository, transactor),
+		Professionals:          billingapp.NewProfessionalsUseCase(billingRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),

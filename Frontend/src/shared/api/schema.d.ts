@@ -193,6 +193,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/professionals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the professionals a voucher can name
+         * @description The active professionals of the practice, by name. A loose charge may name one of them.
+         */
+        get: operations["list-billing-professionals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/subjects": {
         parameters: {
             query?: never;
@@ -205,6 +225,26 @@ export interface paths {
          * @description A search, not the roster: at least 3 characters, at most 20 matches. Only the fields a receipt prints.
          */
         get: operations["search-billing-subjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/subjects/{patientId}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the sessions a voucher can bill for a patient
+         * @description The newest sessions of the patient, each with the tariff's proposed amount and the voucher that already bills it, if any.
+         */
+        get: operations["list-patient-sessions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1157,19 +1197,27 @@ export interface components {
             readonly $schema?: string;
             /**
              * Format: int64
-             * @description Amount in minor units (centavos).
+             * @description Amount in minor units (centavos). The tariff proposes it for a session; the emission can change it.
              */
             amountMinor: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The session this voucher bills. A session is billed once: an issued voucher that already bills it answers 409.
+             */
             appointmentId?: string;
             concept: string;
-            /** @description ISO 4217 code, for example ARS. */
+            /** @description ISO 4217 code, for example ARS. For a patient it must be the patient's billing currency. */
             currency: string;
             /**
              * Format: uuid
-             * @description Omit for a loose charge with no patient behind it.
+             * @description Omit for a loose charge with no patient behind it. A voucher for an appointment takes the session's patient.
              */
             patientId?: string;
+            /**
+             * Format: uuid
+             * @description The professional of a voucher without an appointment. Optional. A voucher for an appointment takes the session's professional and refuses this field.
+             */
+            professionalUserId?: string;
         };
         IssuedInvitationBody: {
             /**
@@ -1227,6 +1275,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["InvitationBody"][] | null;
         };
+        ListPatientSessionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListPatientSessionsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["PatientSessionBody"][] | null;
+        };
         ListPatientsOutputBody: {
             /**
              * Format: uri
@@ -1235,6 +1292,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["PatientBody"][] | null;
+        };
+        ListProfessionalsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListProfessionalsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ProfessionalBody"][] | null;
         };
         ListSubjectsOutputBody: {
             /**
@@ -1399,11 +1465,47 @@ export interface components {
             taxIdKind?: string;
             taxIdNumber?: string;
         };
+        PatientSessionBody: {
+            /**
+             * Format: uuid
+             * @description The issued voucher that bills the session, null when none does.
+             */
+            billedVoucherId: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            modality: "online" | "presencial";
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            professionalId: string;
+            professionalName: string;
+            proposal: components["schemas"]["ProposalBody"];
+            /** Format: date-time */
+            startsAt: string;
+            /** @enum {string} */
+            status: "scheduled" | "attended" | "cancelled";
+        };
         PatientTaxIDBody: {
             /** @description Tax id kind code for the country, for example cuit or nif. */
             kind: string;
             /** @description Tax id number as typed. */
             number: string;
+        };
+        PhotoBody: {
+            /**
+             * @description private: a particular patient. insurer: covered by a mutual.
+             * @enum {string|null}
+             */
+            coverage: "private" | "insurer" | null;
+            /** Format: uuid */
+            insurerId: string | null;
+            insurerName: string | null;
+            /** @enum {string|null} */
+            modality: "online" | "presencial" | null;
+            /** Format: uuid */
+            professionalId: string | null;
+            professionalName: string | null;
         };
         PreviewBody: {
             /**
@@ -1421,6 +1523,19 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+        };
+        ProfessionalBody: {
+            fullName: string;
+            /** Format: uuid */
+            id: string;
+        };
+        ProposalBody: {
+            /**
+             * Format: int64
+             * @description The patient's share in minor units: the full fee for a particular patient, the copago for a mutual.
+             */
+            amountMinor: number;
+            currency: string;
         };
         RefreshBody: {
             /**
@@ -1580,6 +1695,8 @@ export interface components {
             items: components["schemas"]["DirectoryEntryBody"][] | null;
         };
         SubjectBody: {
+            /** @description The currency the patient's vouchers are issued in. */
+            billingCurrency: string;
             documentNumber?: string;
             fiscalCondition?: string;
             fullName: string;
@@ -1833,6 +1950,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             patientId?: string;
+            /** @description How the patient was covered, the modality of the session and the professional who gave it, as they were at issue. A voucher issued before the photo existed has them all null. */
+            photo: components["schemas"]["PhotoBody"];
             /** @description Stamped from the practice at issue. */
             practiceName: string;
             /** @enum {string} */
@@ -2214,6 +2333,35 @@ export interface operations {
             };
         };
     };
+    "list-billing-professionals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListProfessionalsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "search-billing-subjects": {
         parameters: {
             query?: {
@@ -2235,6 +2383,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListSubjectsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-patient-sessions": {
+        parameters: {
+            query?: {
+                /** @description The newest sessions returned. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The patient whose sessions are listed. */
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPatientSessionsOutputBody"];
                 };
             };
             /** @description Error */

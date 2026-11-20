@@ -112,6 +112,21 @@ type TariffRepository interface {
 	// Update persists the amounts of a tariff. Its key is never rewritten.
 	Update(ctx context.Context, subject pricing.Tariff) error
 	Delete(ctx context.Context, id pricing.ID) error
+	// InForce returns the tariff that prices a session, or pricing.ErrNotFound when the
+	// practice has none for that professional, coverage, modality and currency on that day.
+	InForce(ctx context.Context, query TariffQuery) (pricing.Tariff, error)
+}
+
+// TariffQuery is the key a session is priced by. Coverage and modality are the words of
+// the domain ("private" or "insurer", "online" or "presencial"); InsurerID is empty for a
+// particular patient. Day is the civil day of the session in the practice's timezone.
+type TariffQuery struct {
+	ProfessionalUserID string
+	Coverage           string
+	InsurerID          string
+	Modality           string
+	Currency           string
+	Day                time.Time
 }
 
 // PatientFilter narrows a listing. Search matches a fragment of the name or the
@@ -308,6 +323,19 @@ type BillingRepository interface {
 	// fragment. It is not a roster: the caller must send a fragment, and the page is
 	// bounded.
 	SearchSubjects(ctx context.Context, fragment string, limit int32) ([]billing.Subject, error)
+	// PatientBilling answers how a patient is billed: coverage, mutual and currency. A patient
+	// the practice does not hold is billing.ErrPatientNotVisible.
+	PatientBilling(ctx context.Context, patientID string) (billing.PatientBilling, error)
+	// Appointment reads one session. A session the practice does not hold is
+	// billing.ErrAppointmentNotVisible.
+	Appointment(ctx context.Context, appointmentID string) (billing.Appointment, error)
+	// PatientAppointments returns the newest sessions of one patient, bounded by limit.
+	PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error)
+	// Professional returns an active professional of the practice, or
+	// billing.ErrProfessionalNotVisible.
+	Professional(ctx context.Context, userID string) (billing.Professional, error)
+	// Professionals lists the active professionals of the practice, by name.
+	Professionals(ctx context.Context) ([]billing.Professional, error)
 }
 
 // VoucherFilter narrows the history screen: a date window, an optional patient,

@@ -128,6 +128,7 @@ func TestBillingRepository(t *testing.T) {
 				Currency:     "ARS",
 				PracticeName: "IAM A",
 				BuyerName:    strPtr("Ajena"),
+				Photo:        billing.Photo{Coverage: billing.CoveragePrivate},
 			},
 			now,
 		)
@@ -148,6 +149,49 @@ func TestBillingRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("the photo is stored, read back and not rewritten by a void", func(t *testing.T) {
+		photo := billing.Photo{ProfessionalID: issuerA, ProfessionalName: "Ana Profesional"}
+		saved := issue(t, tenantA, issuerA, billing.IssueDraft{
+			Concept:      "Cargo suelto con profesional",
+			AmountMinor:  1000,
+			Currency:     "ARS",
+			PracticeName: "IAM A",
+			Photo:        photo,
+		})
+
+		read := func(id billing.VoucherID) billing.Voucher {
+			t.Helper()
+			var voucher billing.Voucher
+			if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
+				var inner error
+				voucher, inner = repo.ByID(ctx, id)
+				return inner
+			}); err != nil {
+				t.Fatalf("cannot read %s: %v", id, err)
+			}
+			return voucher
+		}
+
+		if got := read(saved.ID).Photo; got != photo {
+			t.Fatalf("stored photo = %+v, want %+v", got, photo)
+		}
+
+		voided, err := saved.Void(issuerA, "Error de carga", now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("domain void: %v", err)
+		}
+		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
+			var inner error
+			voided, inner = repo.Void(ctx, voided)
+			return inner
+		}); err != nil {
+			t.Fatalf("cannot void: %v", err)
+		}
+		if got := read(saved.ID).Photo; got != photo {
+			t.Fatalf("void rewrote the photo: %+v, want %+v", got, photo)
+		}
+	})
+
 	t.Run("the buyer snapshot is stored and not rewritten by a void", func(t *testing.T) {
 		name := "Ana Pérez"
 		draft := billing.IssueDraft{
@@ -157,6 +201,7 @@ func TestBillingRepository(t *testing.T) {
 			Currency:     "ARS",
 			PracticeName: "IAM A",
 			BuyerName:    &name,
+			Photo:        billing.Photo{Coverage: billing.CoveragePrivate},
 		}
 		saved := issue(t, tenantA, issuerA, draft)
 		if saved.BuyerName == nil || *saved.BuyerName != "Ana Pérez" {

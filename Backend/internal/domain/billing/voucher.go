@@ -41,6 +41,10 @@ type Voucher struct {
 	BuyerTaxID           *string
 	BuyerFiscalCondition *string
 
+	// Photo is the coverage, modality and professional at issue. Like the buyer, it is never
+	// rewritten: Void does not touch it.
+	Photo Photo
+
 	Status   Status
 	IssuedBy string
 	IssuedAt time.Time
@@ -67,6 +71,10 @@ type IssueDraft struct {
 	BuyerName            *string
 	BuyerTaxID           *string
 	BuyerFiscalCondition *string
+
+	// Photo is stamped by the application from the patient, the appointment and the
+	// professional, never copied from the request.
+	Photo Photo
 }
 
 // NewIssued validates and builds an issued voucher with no number yet.
@@ -123,6 +131,11 @@ func NewIssued(id VoucherID, tenantID tenant.ID, issuedBy string, draft IssueDra
 		return Voucher{}, &ValidationError{Field: "buyer_name", Message: "a voucher for a patient must carry the buyer snapshot"}
 	}
 
+	photo := draft.Photo.normalized()
+	if err := photo.validate(patientID != "", appointmentID != ""); err != nil {
+		return Voucher{}, err
+	}
+
 	when := stored(now)
 	return Voucher{
 		ID:                   id,
@@ -136,6 +149,7 @@ func NewIssued(id VoucherID, tenantID tenant.ID, issuedBy string, draft IssueDra
 		BuyerName:            buyerName,
 		BuyerTaxID:           buyerTaxID,
 		BuyerFiscalCondition: buyerFiscal,
+		Photo:                photo,
 		Status:               StatusIssued,
 		IssuedBy:             strings.TrimSpace(issuedBy),
 		IssuedAt:             when,
@@ -197,6 +211,7 @@ func Reconstitute(
 	currency string,
 	practiceName string,
 	buyerName, buyerTaxID, buyerFiscalCondition *string,
+	photo Photo,
 	status Status,
 	issuedBy string,
 	issuedAt time.Time,
@@ -221,6 +236,7 @@ func Reconstitute(
 		BuyerName:            buyerName,
 		BuyerTaxID:           buyerTaxID,
 		BuyerFiscalCondition: buyerFiscalCondition,
+		Photo:                photo.normalized(),
 		Status:               status,
 		IssuedBy:             issuedBy,
 		IssuedAt:             issuedAt.UTC(),

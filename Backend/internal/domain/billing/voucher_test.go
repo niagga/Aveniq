@@ -122,6 +122,7 @@ func TestNewIssuedWithPatientSnapshot(t *testing.T) {
 	draft.PatientID = uuid.NewString()
 	draft.BuyerName = &name
 	draft.BuyerTaxID = &tax
+	draft.Photo = billing.Photo{Coverage: billing.CoveragePrivate}
 
 	voucher := newIssued(t, draft)
 	if voucher.BuyerName == nil || *voucher.BuyerName != "Ana Pérez" {
@@ -200,7 +201,7 @@ func TestReconstitute(t *testing.T) {
 
 	got, err := billing.Reconstitute(
 		id, tenantID, 3, "", "", "Sesión", 1000, "ARS", "Norte",
-		nil, nil, nil, billing.StatusIssued, uuid.NewString(), now,
+		nil, nil, nil, billing.Photo{}, billing.StatusIssued, uuid.NewString(), now,
 		"", nil, nil, now, now,
 	)
 	if err != nil {
@@ -209,7 +210,7 @@ func TestReconstitute(t *testing.T) {
 	if got.ID != id || got.Number != 3 || got.Concept != "Sesión" {
 		t.Fatalf("got = %+v, want the stored values", got)
 	}
-	if _, err := billing.Reconstitute("", tenantID, 1, "", "", "x", 1, "ARS", "N", nil, nil, nil, billing.StatusIssued, "", now, "", nil, nil, now, now); err == nil {
+	if _, err := billing.Reconstitute("", tenantID, 1, "", "", "x", 1, "ARS", "N", nil, nil, nil, billing.Photo{}, billing.StatusIssued, "", now, "", nil, nil, now, now); err == nil {
 		t.Fatal("Reconstitute without an id must fail")
 	}
 }

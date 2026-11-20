@@ -3,8 +3,11 @@
 import { useId, useState } from "react";
 
 import {
+  coverageText,
   formatDateTime,
   formatMoney,
+  modalityName,
+  photoField,
   statusLabel,
   voucherNumber,
   type Voucher,
@@ -105,6 +108,23 @@ export function VoucherDetail({
         <Item label="CUIT / CUIL" value={voucher.buyerTaxId ?? "—"} />
         <Item label="Condición fiscal" value={voucher.buyerFiscalCondition ?? "—"} />
       </dl>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Al emitir
+        </h3>
+        <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+          <Item label="Cobertura" value={coverageText(voucher)} />
+          <Item
+            label="Modalidad"
+            value={photoField(voucher, modalityName(voucher.photo.modality))}
+          />
+          <Item
+            label="Profesional"
+            value={photoField(voucher, voucher.photo.professionalName)}
+          />
+        </dl>
+      </div>
 
       {voided ? (
         <div className="mt-4 rounded-md border border-border bg-surface-muted p-3 text-sm">

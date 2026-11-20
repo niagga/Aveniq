@@ -367,6 +367,8 @@ func newHarness(t *testing.T) *harness {
 		GetVoucher:             billingapp.NewGetUseCase(vouchers, scope),
 		ListVouchers:           billingapp.NewListUseCase(vouchers, scope),
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
+		PatientSessions:        billingapp.NewPatientSessionsUseCase(vouchers, tariffs, tenants, scope),
+		Professionals:          billingapp.NewProfessionalsUseCase(vouchers, scope),
 	})
 
 	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs}

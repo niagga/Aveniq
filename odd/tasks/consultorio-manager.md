@@ -2363,3 +2363,55 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   desarrollo lo resuelve de raíz; no se hizo.
 - **Commit.** `02bf98a`. El registro del hash va en un commit aparte, como en T51 y T52.
 - **Pendiente.** T54 (emisión con el valor propuesto) es el siguiente.
+
+**L66 — T54: emisión desde el turno con el valor propuesto, comprobante con foto y profesional opcional**
+
+- **Migración `0020_voucher_photo.sql`** (aplicada en la base de desarrollo, versión 20). Agrega a `vouchers`
+  la foto del momento de emitir: cobertura (`coverage_kind`: particular o mutual, con `insurer_id` e
+  `insurer_name`), modalidad y profesional (`professional_user_id`, `professional_name`). CHECK: cobertura
+  conocida, paciente con cobertura, mutual solo con cobertura de mutual, modalidad conocida, profesional
+  completo. FK compuestas `(tenant_id, insurer_id)` y `(tenant_id, professional_user_id)`. Los CHECK de
+  paciente y de turno son `NOT VALID`: los comprobantes anteriores no tienen foto y no se reescriben.
+  `vouchers_guard()` protege las columnas nuevas igual que las previas: un comprobante emitido no cambia la
+  foto. El Down restaura el guard de 0014.
+- **Un comprobante emitido por turno.** Índice único parcial sobre `(tenant_id, appointment_id)` con
+  `status = 'issued'`. Un segundo cobro del mismo turno responde 409 ("Ya facturado"); anular el primero lo libera.
+- **Dominio.** `billing.Photo` (cobertura, mutual, modalidad, profesional) validada en `NewIssued`: el
+  paciente exige cobertura, la mutual exige su nombre, el comprobante suelto no exige profesional.
+  `billing.Appointment` con `CheckBillable(patientID)`: paciente distinto, turno cancelado o ya facturado.
+  `Professional` y `PatientBilling` como vistas de lectura para la aplicación.
+- **Aplicación.** `IssueUseCase` toma paciente, modalidad y profesional del turno cuando se emite desde
+  uno; si es suelto, el profesional es opcional y se valida contra los profesionales activos. Si hay
+  paciente, la moneda del comprobante debe ser la de facturación del paciente. `PatientSessionsUseCase` lista
+  los turnos del paciente con el valor propuesto: el tarifario vigente el día civil del turno (zona horaria
+  del consultorio), con `InForce` (el `valid_from` más reciente que no supera el día). Sin tarifa, la
+  propuesta es nula. `ProfessionalsUseCase` lista los profesionales activos.
+- **Postgres.** Consultas `GetPatientBilling`, `GetBillingAppointment`, `ListPatientAppointments` (con el
+  comprobante que lo factura), `GetBillingProfessional`, `ListBillingProfessionals`, `TariffInForce`.
+  `CreateVoucher` guarda la foto. El 23505 del índice y la FK de profesional se traducen a error de dominio.
+  `billing_schema_test` prueba: dos comprobantes emitidos del mismo turno (23505), anular libera, paciente
+  sin cobertura (23514).
+- **HTTP.** `GET /api/v1/billing/subjects/{patientId}/sessions` y `GET /api/v1/billing/professionals`, con
+  `billing:issue`. `POST /api/v1/billing/vouchers` acepta `appointmentId` o `professionalUserId`. El sujeto
+  de facturación trae `billingCurrency`. Errores: 409 para turno ya facturado, 422 para profesional que no
+  es de la práctica.
+- **Frontend.** `issue-form.tsx` reescrito: al elegir paciente carga sus turnos; al elegir un turno precarga
+  concepto (`Sesión del dd/mm/yyyy`) e importe propuesto, editable, con la pista "Propuesto por el
+  tarifario". Los turnos cancelados o ya facturados aparecen deshabilitados con el motivo. El profesional
+  queda fijo al turno. `voucher-detail.tsx` muestra "Al emitir" con cobertura, modalidad y profesional.
+- **Reglas que inventé (a revisar).** (1) Turno cancelado: no se factura. (2) La moneda del comprobante es la
+  de facturación del paciente. (3) La propuesta es el total del tarifario (`insurerMinor + patientMinor`):
+  particular, el valor completo; mutual, lo que paga la mutual más el copago. (4) El profesional de un
+  comprobante suelto debe tener rol `professional` y estar activo. (5) La lista de turnos del paciente y la de
+  profesionales piden `billing:issue`.
+- **Decisiones del dueño del producto.** (a) Un turno programado se factura (no hace falta que esté atendido).
+  (b) Un turno se factura una sola vez: un segundo cobro responde 409 "Ya facturado". (c) El contador ve la
+  lista completa de turnos del paciente (fecha, profesional, modalidad e importe), como está hoy. (d) La
+  propuesta de mutual es el total del tarifario.
+- **Preguntas abiertas.** Ninguna.
+- **Verificación.** `gofmt` y `go vet ./...` limpios; `go test ./...` completo en verde con las bases de
+  test. Migración 0020 aplicada en desarrollo; API reconstruida y corriendo en 8080 con este build. OpenAPI
+  regenerado. `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e`: 29 de 29 previos en verde, y 4 nuevos en
+  `e2e/e8-emission.spec.ts` (tarifario del día, paciente y turno de la profesional, emisión del contador con el
+  importe propuesto y "Ya facturado", y el detalle del comprobante con su foto).
+- **Commit.** Pendiente. La fila T54 queda en `—` hasta que se commitee; el hash va en un commit aparte.

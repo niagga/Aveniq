@@ -17,16 +17,18 @@ INSERT INTO vouchers (
     id, tenant_id, number, patient_id, appointment_id,
     concept, amount_minor, currency,
     practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition,
+    coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name,
     status, issued_by, issued_at,
     created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8,
     $9, $10, $11, $12,
-    $13, $14, $15,
-    $16, $17
+    $13, $14, $15, $16, $17, $18,
+    $19, $20, $21,
+    $22, $23
 )
-RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at
+RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
 `
 
 type CreateVoucherParams struct {
@@ -42,6 +44,12 @@ type CreateVoucherParams struct {
 	BuyerName            *string
 	BuyerTaxID           *string
 	BuyerFiscalCondition *string
+	CoverageKind         *string
+	InsurerID            pgtype.UUID
+	InsurerName          *string
+	Modality             *string
+	ProfessionalUserID   pgtype.UUID
+	ProfessionalName     *string
 	Status               string
 	IssuedBy             pgtype.UUID
 	IssuedAt             time.Time
@@ -63,6 +71,12 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 		arg.BuyerName,
 		arg.BuyerTaxID,
 		arg.BuyerFiscalCondition,
+		arg.CoverageKind,
+		arg.InsurerID,
+		arg.InsurerName,
+		arg.Modality,
+		arg.ProfessionalUserID,
+		arg.ProfessionalName,
 		arg.Status,
 		arg.IssuedBy,
 		arg.IssuedAt,
@@ -91,12 +105,86 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverageKind,
+		&i.InsurerID,
+		&i.InsurerName,
+		&i.Modality,
+		&i.ProfessionalUserID,
+		&i.ProfessionalName,
 	)
 	return i, err
 }
 
+const getBillingAppointment = `-- name: GetBillingAppointment :one
+SELECT a.id,
+       a.patient_id,
+       a.professional_user_id,
+       u.full_name AS professional_name,
+       a.modality,
+       a.starts_at,
+       a.status,
+       (SELECT v.id
+          FROM vouchers v
+         WHERE v.tenant_id = a.tenant_id
+           AND v.appointment_id = a.id
+           AND v.status = 'issued') AS billed_voucher_id
+FROM appointments a
+JOIN users u
+  ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
+WHERE a.id = $1
+`
+
+type GetBillingAppointmentRow struct {
+	ID                 pgtype.UUID
+	PatientID          pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	ProfessionalName   string
+	Modality           string
+	StartsAt           time.Time
+	Status             string
+	BilledVoucherID    pgtype.UUID
+}
+
+// One session, with its professional's name and the issued voucher that bills it, if any.
+func (q *Queries) GetBillingAppointment(ctx context.Context, id pgtype.UUID) (GetBillingAppointmentRow, error) {
+	row := q.db.QueryRow(ctx, getBillingAppointment, id)
+	var i GetBillingAppointmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.PatientID,
+		&i.ProfessionalUserID,
+		&i.ProfessionalName,
+		&i.Modality,
+		&i.StartsAt,
+		&i.Status,
+		&i.BilledVoucherID,
+	)
+	return i, err
+}
+
+const getBillingProfessional = `-- name: GetBillingProfessional :one
+SELECT id, full_name
+FROM users
+WHERE id = $1
+  AND role_code = 'professional'
+  AND is_active
+`
+
+type GetBillingProfessionalRow struct {
+	ID       pgtype.UUID
+	FullName string
+}
+
+// An active professional of the practice: the only role a voucher may name.
+func (q *Queries) GetBillingProfessional(ctx context.Context, id pgtype.UUID) (GetBillingProfessionalRow, error) {
+	row := q.db.QueryRow(ctx, getBillingProfessional, id)
+	var i GetBillingProfessionalRow
+	err := row.Scan(&i.ID, &i.FullName)
+	return i, err
+}
+
 const getBillingSubject = `-- name: GetBillingSubject :one
-SELECT id, full_name, document_number, tax_id, fiscal_condition
+SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency
 FROM patients
 WHERE id = $1
 `
@@ -107,6 +195,7 @@ type GetBillingSubjectRow struct {
 	DocumentNumber  *string
 	TaxID           *string
 	FiscalCondition *string
+	BillingCurrency string
 }
 
 // The billing identity of one patient. Only the fields a receipt prints: the clinical
@@ -120,12 +209,48 @@ func (q *Queries) GetBillingSubject(ctx context.Context, id pgtype.UUID) (GetBil
 		&i.DocumentNumber,
 		&i.TaxID,
 		&i.FiscalCondition,
+		&i.BillingCurrency,
+	)
+	return i, err
+}
+
+const getPatientBilling = `-- name: GetPatientBilling :one
+SELECT p.coverage_kind,
+       p.insurer_id,
+       i.name AS insurer_name,
+       p.billing_currency,
+       p.is_active
+FROM patients p
+LEFT JOIN insurers i
+  ON i.tenant_id = p.tenant_id AND i.id = p.insurer_id
+WHERE p.id = $1
+`
+
+type GetPatientBillingRow struct {
+	CoverageKind    string
+	InsurerID       pgtype.UUID
+	InsurerName     *string
+	BillingCurrency string
+	IsActive        bool
+}
+
+// How a patient is billed. The insurer name is read here, not from a second call, so the
+// photo of a voucher is taken from one consistent read.
+func (q *Queries) GetPatientBilling(ctx context.Context, id pgtype.UUID) (GetPatientBillingRow, error) {
+	row := q.db.QueryRow(ctx, getPatientBilling, id)
+	var i GetPatientBillingRow
+	err := row.Scan(
+		&i.CoverageKind,
+		&i.InsurerID,
+		&i.InsurerName,
+		&i.BillingCurrency,
+		&i.IsActive,
 	)
 	return i, err
 }
 
 const getVoucher = `-- name: GetVoucher :one
-SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at
+SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
 FROM vouchers
 WHERE id = $1
 `
@@ -154,12 +279,119 @@ func (q *Queries) GetVoucher(ctx context.Context, id pgtype.UUID) (Voucher, erro
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverageKind,
+		&i.InsurerID,
+		&i.InsurerName,
+		&i.Modality,
+		&i.ProfessionalUserID,
+		&i.ProfessionalName,
 	)
 	return i, err
 }
 
+const listBillingProfessionals = `-- name: ListBillingProfessionals :many
+SELECT id, full_name
+FROM users
+WHERE role_code = 'professional'
+  AND is_active
+ORDER BY lower(full_name), id
+`
+
+type ListBillingProfessionalsRow struct {
+	ID       pgtype.UUID
+	FullName string
+}
+
+func (q *Queries) ListBillingProfessionals(ctx context.Context) ([]ListBillingProfessionalsRow, error) {
+	rows, err := q.db.Query(ctx, listBillingProfessionals)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBillingProfessionalsRow{}
+	for rows.Next() {
+		var i ListBillingProfessionalsRow
+		if err := rows.Scan(&i.ID, &i.FullName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPatientAppointments = `-- name: ListPatientAppointments :many
+SELECT a.id,
+       a.patient_id,
+       a.professional_user_id,
+       u.full_name AS professional_name,
+       a.modality,
+       a.starts_at,
+       a.status,
+       (SELECT v.id
+          FROM vouchers v
+         WHERE v.tenant_id = a.tenant_id
+           AND v.appointment_id = a.id
+           AND v.status = 'issued') AS billed_voucher_id
+FROM appointments a
+JOIN users u
+  ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
+WHERE a.patient_id = $1
+ORDER BY a.starts_at DESC, a.id
+LIMIT $2
+`
+
+type ListPatientAppointmentsParams struct {
+	PatientID pgtype.UUID
+	Lim       int32
+}
+
+type ListPatientAppointmentsRow struct {
+	ID                 pgtype.UUID
+	PatientID          pgtype.UUID
+	ProfessionalUserID pgtype.UUID
+	ProfessionalName   string
+	Modality           string
+	StartsAt           time.Time
+	Status             string
+	BilledVoucherID    pgtype.UUID
+}
+
+// The newest sessions of one patient, for the emission screen. Cancelled ones are listed too:
+// the screen shows why a session cannot be billed.
+func (q *Queries) ListPatientAppointments(ctx context.Context, arg ListPatientAppointmentsParams) ([]ListPatientAppointmentsRow, error) {
+	rows, err := q.db.Query(ctx, listPatientAppointments, arg.PatientID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPatientAppointmentsRow{}
+	for rows.Next() {
+		var i ListPatientAppointmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.ProfessionalUserID,
+			&i.ProfessionalName,
+			&i.Modality,
+			&i.StartsAt,
+			&i.Status,
+			&i.BilledVoucherID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVouchers = `-- name: ListVouchers :many
-SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at
+SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
 FROM vouchers
 WHERE ($1::timestamptz IS NULL OR issued_at >= $1)
   AND ($2::timestamptz IS NULL OR issued_at < $2)
@@ -215,6 +447,12 @@ func (q *Queries) ListVouchers(ctx context.Context, arg ListVouchersParams) ([]V
 			&i.VoidReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CoverageKind,
+			&i.InsurerID,
+			&i.InsurerName,
+			&i.Modality,
+			&i.ProfessionalUserID,
+			&i.ProfessionalName,
 		); err != nil {
 			return nil, err
 		}
@@ -246,7 +484,7 @@ func (q *Queries) NextVoucherNumber(ctx context.Context, tenantID pgtype.UUID) (
 }
 
 const searchBillingSubjects = `-- name: SearchBillingSubjects :many
-SELECT id, full_name, document_number, tax_id, fiscal_condition
+SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency
 FROM patients
 WHERE is_active
   AND (full_name ILIKE $1
@@ -269,6 +507,7 @@ type SearchBillingSubjectsRow struct {
 	DocumentNumber  *string
 	TaxID           *string
 	FiscalCondition *string
+	BillingCurrency string
 }
 
 // Active patients whose name contains the pattern, or whose document or tax id contains
@@ -292,6 +531,7 @@ func (q *Queries) SearchBillingSubjects(ctx context.Context, arg SearchBillingSu
 			&i.DocumentNumber,
 			&i.TaxID,
 			&i.FiscalCondition,
+			&i.BillingCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -312,7 +552,7 @@ SET status = 'voided',
     updated_at = $5
 WHERE id = $1
   AND status = 'issued'
-RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at
+RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
 `
 
 type VoidVoucherParams struct {
@@ -353,6 +593,12 @@ func (q *Queries) VoidVoucher(ctx context.Context, arg VoidVoucherParams) (Vouch
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverageKind,
+		&i.InsurerID,
+		&i.InsurerName,
+		&i.Modality,
+		&i.ProfessionalUserID,
+		&i.ProfessionalName,
 	)
 	return i, err
 }

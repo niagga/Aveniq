@@ -87,6 +87,35 @@ func (f *fakeTariffs) Delete(_ context.Context, id pricing.ID) error {
 	return nil
 }
 
+// InForce mirrors the adapter: the latest validity that starts on or before the day.
+func (f *fakeTariffs) InForce(_ context.Context, query port.TariffQuery) (pricing.Tariff, error) {
+	var found *pricing.Tariff
+	for _, subject := range f.stored {
+		if subject.ProfessionalUserID != query.ProfessionalUserID ||
+			string(subject.Coverage) != query.Coverage ||
+			string(subject.Modality) != query.Modality ||
+			string(subject.Currency) != query.Currency ||
+			subject.ValidFrom.After(query.Day) {
+			continue
+		}
+		insurerID := ""
+		if subject.InsurerID != nil {
+			insurerID = *subject.InsurerID
+		}
+		if insurerID != query.InsurerID {
+			continue
+		}
+		if found == nil || subject.ValidFrom.After(found.ValidFrom) {
+			picked := subject
+			found = &picked
+		}
+	}
+	if found == nil {
+		return pricing.Tariff{}, pricing.ErrNotFound
+	}
+	return *found, nil
+}
+
 type fakeInsurers struct {
 	stored map[insurer.ID]insurer.Insurer
 }

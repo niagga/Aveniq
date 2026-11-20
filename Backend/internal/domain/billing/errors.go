@@ -27,6 +27,12 @@ var (
 	// in this tenant: another practice's, another patient's, or nonexistent. They are one answer
 	// on purpose, so a voucher cannot be used to probe which appointments exist.
 	ErrAppointmentNotVisible = errors.New("billing: the appointment is not visible in this tenant scope")
+	// ErrAppointmentAlreadyBilled reports a session that an issued voucher already bills. A void
+	// frees the session again.
+	ErrAppointmentAlreadyBilled = errors.New("billing: the appointment already has an issued voucher")
+	// ErrProfessionalNotVisible reports a professional UUID that is not an active professional of
+	// this practice. A voucher names only those.
+	ErrProfessionalNotVisible = errors.New("billing: the professional is not an active professional of this practice")
 	// ErrActorNotVisible reports an issuer or voider UUID that is not in this tenant.
 	ErrActorNotVisible = errors.New("billing: the actor is not visible in this tenant scope")
 	// ErrTenantScopeMissing reports an operation attempted without WithTenant.

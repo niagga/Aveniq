@@ -268,6 +268,12 @@ type Voucher struct {
 	VoidReason           *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	CoverageKind         *string
+	InsurerID            pgtype.UUID
+	InsurerName          *string
+	Modality             *string
+	ProfessionalUserID   pgtype.UUID
+	ProfessionalName     *string
 }
 
 type VoucherCounter struct {

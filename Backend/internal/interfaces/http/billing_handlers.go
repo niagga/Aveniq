@@ -17,23 +17,34 @@ import (
 // voucherBody is one internal voucher. The buyer and the practice name are a snapshot
 // taken at issue: they are read here, never written by the client.
 type voucherBody struct {
-	ID                   string  `json:"id" format:"uuid"`
-	Number               int     `json:"number" doc:"Consecutive per practice. A void keeps it."`
-	Status               string  `json:"status" enum:"issued,voided"`
-	Concept              string  `json:"concept"`
-	AmountMinor          int64   `json:"amountMinor" doc:"Amount in minor units (centavos)."`
-	Currency             string  `json:"currency" doc:"ISO 4217 code."`
-	PatientID            string  `json:"patientId,omitempty" format:"uuid"`
-	AppointmentID        string  `json:"appointmentId,omitempty" format:"uuid"`
-	PracticeName         string  `json:"practiceName" doc:"Stamped from the practice at issue."`
-	BuyerName            *string `json:"buyerName,omitempty" doc:"Snapshot of the patient at issue."`
-	BuyerTaxID           *string `json:"buyerTaxId,omitempty"`
-	BuyerFiscalCondition *string `json:"buyerFiscalCondition,omitempty"`
-	IssuedBy             string  `json:"issuedBy" format:"uuid"`
-	IssuedAt             string  `json:"issuedAt" format:"date-time"`
-	VoidedBy             string  `json:"voidedBy,omitempty" format:"uuid"`
-	VoidedAt             *string `json:"voidedAt,omitempty" format:"date-time"`
-	VoidReason           *string `json:"voidReason,omitempty"`
+	ID                   string    `json:"id" format:"uuid"`
+	Number               int       `json:"number" doc:"Consecutive per practice. A void keeps it."`
+	Status               string    `json:"status" enum:"issued,voided"`
+	Concept              string    `json:"concept"`
+	AmountMinor          int64     `json:"amountMinor" doc:"Amount in minor units (centavos)."`
+	Currency             string    `json:"currency" doc:"ISO 4217 code."`
+	PatientID            string    `json:"patientId,omitempty" format:"uuid"`
+	AppointmentID        string    `json:"appointmentId,omitempty" format:"uuid"`
+	PracticeName         string    `json:"practiceName" doc:"Stamped from the practice at issue."`
+	BuyerName            *string   `json:"buyerName,omitempty" doc:"Snapshot of the patient at issue."`
+	BuyerTaxID           *string   `json:"buyerTaxId,omitempty"`
+	BuyerFiscalCondition *string   `json:"buyerFiscalCondition,omitempty"`
+	Photo                photoBody `json:"photo" doc:"How the patient was covered, the modality of the session and the professional who gave it, as they were at issue. A voucher issued before the photo existed has them all null."`
+	IssuedBy             string    `json:"issuedBy" format:"uuid"`
+	IssuedAt             string    `json:"issuedAt" format:"date-time"`
+	VoidedBy             string    `json:"voidedBy,omitempty" format:"uuid"`
+	VoidedAt             *string   `json:"voidedAt,omitempty" format:"date-time"`
+	VoidReason           *string   `json:"voidReason,omitempty"`
+}
+
+// photoBody is the photo of a voucher. A field the voucher does not carry is null.
+type photoBody struct {
+	Coverage         *string `json:"coverage" enum:"private,insurer" doc:"private: a particular patient. insurer: covered by a mutual."`
+	InsurerID        *string `json:"insurerId" format:"uuid"`
+	InsurerName      *string `json:"insurerName"`
+	Modality         *string `json:"modality" enum:"online,presencial"`
+	ProfessionalID   *string `json:"professionalId" format:"uuid"`
+	ProfessionalName *string `json:"professionalName"`
 }
 
 type listVouchersOutput struct {
@@ -42,14 +53,60 @@ type listVouchersOutput struct {
 	}
 }
 
-// issueVoucherBody asks for a voucher. There is no buyer and no practice name: the
-// server takes both from the patient and the practice.
+// issueVoucherBody asks for a voucher. There is no buyer, no practice name and no photo:
+// the server takes the buyer and the practice name from the patient and the practice, and
+// the photo from the patient, the session and the professional.
+//
+// A voucher for a session names the appointment, and its patient is the session's. A loose
+// charge names no appointment; it may name a patient, and a professional who is optional.
 type issueVoucherBody struct {
-	PatientID     string `json:"patientId,omitempty" format:"uuid" doc:"Omit for a loose charge with no patient behind it."`
-	AppointmentID string `json:"appointmentId,omitempty" format:"uuid"`
-	Concept       string `json:"concept" minLength:"1" maxLength:"200"`
-	AmountMinor   int64  `json:"amountMinor" minimum:"1" doc:"Amount in minor units (centavos)."`
-	Currency      string `json:"currency" pattern:"^[A-Z]{3}$" doc:"ISO 4217 code, for example ARS."`
+	PatientID          string `json:"patientId,omitempty" format:"uuid" doc:"Omit for a loose charge with no patient behind it. A voucher for an appointment takes the session's patient."`
+	AppointmentID      string `json:"appointmentId,omitempty" format:"uuid" doc:"The session this voucher bills. A session is billed once: an issued voucher that already bills it answers 409."`
+	ProfessionalUserID string `json:"professionalUserId,omitempty" format:"uuid" doc:"The professional of a voucher without an appointment. Optional. A voucher for an appointment takes the session's professional and refuses this field."`
+	Concept            string `json:"concept" minLength:"1" maxLength:"200"`
+	AmountMinor        int64  `json:"amountMinor" minimum:"1" doc:"Amount in minor units (centavos). The tariff proposes it for a session; the emission can change it."`
+	Currency           string `json:"currency" pattern:"^[A-Z]{3}$" doc:"ISO 4217 code, for example ARS. For a patient it must be the patient's billing currency."`
+}
+
+// patientSessionBody is one session of a patient on the emission screen. Proposal is the amount the
+// tariff proposes for it, null when the practice has no tariff that prices it.
+type patientSessionBody struct {
+	ID               string        `json:"id" format:"uuid"`
+	PatientID        string        `json:"patientId" format:"uuid"`
+	ProfessionalID   string        `json:"professionalId" format:"uuid"`
+	ProfessionalName string        `json:"professionalName"`
+	Modality         string        `json:"modality" enum:"online,presencial"`
+	StartsAt         string        `json:"startsAt" format:"date-time"`
+	Status           string        `json:"status" enum:"scheduled,attended,cancelled"`
+	BilledVoucherID  *string       `json:"billedVoucherId" format:"uuid" doc:"The issued voucher that bills the session, null when none does."`
+	Proposal         *proposalBody `json:"proposal"`
+}
+
+type proposalBody struct {
+	AmountMinor int64  `json:"amountMinor" doc:"The tariff's total in minor units: the full fee for a particular patient, the mutual's share plus the copago for a mutual."`
+	Currency    string `json:"currency"`
+}
+
+type listPatientSessionsOutput struct {
+	Body struct {
+		Items []patientSessionBody `json:"items"`
+	}
+}
+
+type professionalBody struct {
+	ID       string `json:"id" format:"uuid"`
+	FullName string `json:"fullName"`
+}
+
+type listProfessionalsOutput struct {
+	Body struct {
+		Items []professionalBody `json:"items"`
+	}
+}
+
+type patientSessionsInput struct {
+	PatientID string `path:"patientId" format:"uuid" doc:"The patient whose sessions are listed."`
+	Limit     int32  `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The newest sessions returned."`
 }
 
 type voidVoucherBody struct {
@@ -62,6 +119,7 @@ type subjectBody struct {
 	DocumentNumber  *string `json:"documentNumber,omitempty"`
 	TaxID           *string `json:"taxId,omitempty"`
 	FiscalCondition *string `json:"fiscalCondition,omitempty"`
+	BillingCurrency string  `json:"billingCurrency" pattern:"^[A-Z]{3}$" doc:"The currency the patient's vouchers are issued in."`
 }
 
 type listSubjectsOutput struct {
@@ -106,12 +164,14 @@ type searchSubjectsInput struct {
 // ─── handlers ────────────────────────────────────────────────────────────────
 
 type billingHandlers struct {
-	issue    *billingapp.IssueUseCase
-	void     *billingapp.VoidUseCase
-	get      *billingapp.GetUseCase
-	list     *billingapp.ListUseCase
-	subjects *billingapp.SearchSubjectsUseCase
-	logger   *slog.Logger
+	issue       *billingapp.IssueUseCase
+	void        *billingapp.VoidUseCase
+	get         *billingapp.GetUseCase
+	list        *billingapp.ListUseCase
+	subjects    *billingapp.SearchSubjectsUseCase
+	sessions    *billingapp.PatientSessionsUseCase
+	professions *billingapp.ProfessionalsUseCase
+	logger      *slog.Logger
 }
 
 // registerBillingRoutes declares the internal voucher endpoints. The HTTP guard is the
@@ -119,12 +179,14 @@ type billingHandlers struct {
 // admin read, and the clinical roles are refused before a handler runs.
 func registerBillingRoutes(api huma.API, deps Deps) {
 	handlers := &billingHandlers{
-		issue:    deps.IssueVoucher,
-		void:     deps.VoidVoucher,
-		get:      deps.GetVoucher,
-		list:     deps.ListVouchers,
-		subjects: deps.SearchSubjects,
-		logger:   deps.Logger,
+		issue:       deps.IssueVoucher,
+		void:        deps.VoidVoucher,
+		get:         deps.GetVoucher,
+		list:        deps.ListVouchers,
+		subjects:    deps.SearchSubjects,
+		sessions:    deps.PatientSessions,
+		professions: deps.Professionals,
+		logger:      deps.Logger,
 	}
 
 	readGuard := permissionGuard(api, deps.AccessTokens, iam.PermBillingRead)
@@ -190,6 +252,67 @@ func registerBillingRoutes(api huma.API, deps Deps) {
 		Security:      secured,
 		Middlewares:   readGuard,
 	}, handlers.searchSubjectsHandler)
+
+	// The emission screen reads a patient's sessions and the professionals a loose charge can
+	// name. Both belong to issuing: the accountant emits, and an owner or admin who only reads
+	// the history does not need the patient's schedule.
+	huma.Register(api, huma.Operation{
+		OperationID:   "list-patient-sessions",
+		Method:        http.MethodGet,
+		Path:          APIPrefix + "/billing/subjects/{patientId}/sessions",
+		Summary:       "List the sessions a voucher can bill for a patient",
+		Description:   "The newest sessions of the patient, each with the tariff's proposed amount and the voucher that already bills it, if any.",
+		Tags:          []string{"billing"},
+		DefaultStatus: http.StatusOK,
+		Security:      secured,
+		Middlewares:   issueGuard,
+	}, handlers.listSessionsHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "list-billing-professionals",
+		Method:        http.MethodGet,
+		Path:          APIPrefix + "/billing/professionals",
+		Summary:       "List the professionals a voucher can name",
+		Description:   "The active professionals of the practice, by name. A loose charge may name one of them.",
+		Tags:          []string{"billing"},
+		DefaultStatus: http.StatusOK,
+		Security:      secured,
+		Middlewares:   issueGuard,
+	}, handlers.listProfessionalsHandler)
+}
+
+func (h *billingHandlers) listSessionsHandler(ctx context.Context, in *patientSessionsInput) (*listPatientSessionsOutput, error) {
+	who := identityOf(ctx)
+	views, err := h.sessions.Execute(ctx, billingapp.PatientSessionsInput{
+		TenantID:  who.TenantID,
+		PatientID: in.PatientID,
+		Limit:     in.Limit,
+	})
+	if err != nil {
+		return nil, problem(ctx, h.logger, err)
+	}
+
+	out := &listPatientSessionsOutput{}
+	out.Body.Items = make([]patientSessionBody, 0, len(views))
+	for _, view := range views {
+		out.Body.Items = append(out.Body.Items, toPatientSessionBody(view))
+	}
+	return out, nil
+}
+
+func (h *billingHandlers) listProfessionalsHandler(ctx context.Context, _ *struct{}) (*listProfessionalsOutput, error) {
+	who := identityOf(ctx)
+	views, err := h.professions.Execute(ctx, who.TenantID)
+	if err != nil {
+		return nil, problem(ctx, h.logger, err)
+	}
+
+	out := &listProfessionalsOutput{}
+	out.Body.Items = make([]professionalBody, 0, len(views))
+	for _, view := range views {
+		out.Body.Items = append(out.Body.Items, professionalBody{ID: view.ID, FullName: view.FullName})
+	}
+	return out, nil
 }
 
 func (h *billingHandlers) listVouchersHandler(ctx context.Context, in *listVouchersInput) (*listVouchersOutput, error) {
@@ -236,13 +359,14 @@ func (h *billingHandlers) getVoucherHandler(ctx context.Context, in *voucherIDIn
 func (h *billingHandlers) issueVoucherHandler(ctx context.Context, in *issueVoucherInput) (*voucherOutput, error) {
 	who := identityOf(ctx)
 	view, err := h.issue.Execute(ctx, billingapp.IssueInput{
-		TenantID:      who.TenantID,
-		ActorID:       who.UserID,
-		PatientID:     in.Body.PatientID,
-		AppointmentID: in.Body.AppointmentID,
-		Concept:       in.Body.Concept,
-		AmountMinor:   in.Body.AmountMinor,
-		Currency:      in.Body.Currency,
+		TenantID:           who.TenantID,
+		ActorID:            who.UserID,
+		PatientID:          in.Body.PatientID,
+		AppointmentID:      in.Body.AppointmentID,
+		ProfessionalUserID: in.Body.ProfessionalUserID,
+		Concept:            in.Body.Concept,
+		AmountMinor:        in.Body.AmountMinor,
+		Currency:           in.Body.Currency,
 	})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
@@ -284,6 +408,7 @@ func (h *billingHandlers) searchSubjectsHandler(ctx context.Context, in *searchS
 			DocumentNumber:  view.DocumentNumber,
 			TaxID:           view.TaxID,
 			FiscalCondition: view.FiscalCondition,
+			BillingCurrency: view.BillingCurrency,
 		})
 	}
 	return out, nil
@@ -316,10 +441,35 @@ func toVoucherBody(view billingapp.VoucherView) voucherBody {
 		BuyerName:            view.BuyerName,
 		BuyerTaxID:           view.BuyerTaxID,
 		BuyerFiscalCondition: view.BuyerFiscalCondition,
-		IssuedBy:             view.IssuedBy,
-		IssuedAt:             view.IssuedAt,
-		VoidedBy:             view.VoidedBy,
-		VoidedAt:             view.VoidedAt,
-		VoidReason:           view.VoidReason,
+		Photo: photoBody{
+			Coverage:         view.Photo.Coverage,
+			InsurerID:        view.Photo.InsurerID,
+			InsurerName:      view.Photo.InsurerName,
+			Modality:         view.Photo.Modality,
+			ProfessionalID:   view.Photo.ProfessionalID,
+			ProfessionalName: view.Photo.ProfessionalName,
+		},
+		IssuedBy:   view.IssuedBy,
+		IssuedAt:   view.IssuedAt,
+		VoidedBy:   view.VoidedBy,
+		VoidedAt:   view.VoidedAt,
+		VoidReason: view.VoidReason,
 	}
+}
+
+func toPatientSessionBody(view billingapp.AppointmentView) patientSessionBody {
+	body := patientSessionBody{
+		ID:               view.ID,
+		PatientID:        view.PatientID,
+		ProfessionalID:   view.ProfessionalID,
+		ProfessionalName: view.ProfessionalName,
+		Modality:         view.Modality,
+		StartsAt:         view.StartsAt,
+		Status:           view.Status,
+		BilledVoucherID:  view.BilledVoucherID,
+	}
+	if view.Proposal != nil {
+		body.Proposal = &proposalBody{AmountMinor: view.Proposal.AmountMinor, Currency: view.Proposal.Currency}
+	}
+	return body
 }

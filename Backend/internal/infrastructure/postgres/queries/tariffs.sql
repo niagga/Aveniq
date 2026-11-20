@@ -40,3 +40,18 @@ LEFT JOIN insurers i
   ON i.tenant_id = t.tenant_id AND i.id = t.insurer_id
 ORDER BY lower(u.full_name) ASC, t.coverage ASC, lower(i.name) ASC NULLS FIRST,
          t.modality ASC, t.billing_currency ASC, t.valid_from DESC, t.id ASC;
+
+-- name: TariffInForce :one
+-- The tariff that prices one session: for its professional, coverage, mutual, modality and
+-- currency, the latest validity that starts on or before the session's civil day. A particular
+-- tariff has no mutual, so the comparison is IS NOT DISTINCT FROM.
+SELECT *
+FROM tariffs
+WHERE professional_user_id = sqlc.arg('professional_user_id')
+  AND coverage = sqlc.arg('coverage')
+  AND insurer_id IS NOT DISTINCT FROM sqlc.narg('insurer_id')::uuid
+  AND modality = sqlc.arg('modality')
+  AND billing_currency = sqlc.arg('billing_currency')::char(3)
+  AND valid_from <= sqlc.arg('day')::date
+ORDER BY valid_from DESC
+LIMIT 1;

@@ -219,6 +219,31 @@ func translateTariffError(err error) error {
 	return err
 }
 
+// InForce returns the tariff that prices a session, or pricing.ErrNotFound when the practice
+// has none for that professional, coverage, mutual, modality, currency and day.
+func (r *TariffRepository) InForce(ctx context.Context, query port.TariffQuery) (pricing.Tariff, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return pricing.Tariff{}, err
+	}
+	professional, err := toTariffUUID(query.ProfessionalUserID, "professional_user_id")
+	if err != nil {
+		return pricing.Tariff{}, err
+	}
+	row, err := queries.TariffInForce(ctx, sqlcgen.TariffInForceParams{
+		ProfessionalUserID: professional,
+		Coverage:           query.Coverage,
+		InsurerID:          optionalID(query.InsurerID),
+		Modality:           query.Modality,
+		BillingCurrency:    query.Currency,
+		Day:                pgtype.Date{Time: query.Day, Valid: true},
+	})
+	if err != nil {
+		return pricing.Tariff{}, translateTariffError(err)
+	}
+	return tariffToDomain(row)
+}
+
 // toTariffID converts the domain identity into the pgx type. An identity that is not a
 // UUID becomes the zero value, which matches no row: the caller sees not-found.
 func toTariffID(id pricing.ID) pgtype.UUID {

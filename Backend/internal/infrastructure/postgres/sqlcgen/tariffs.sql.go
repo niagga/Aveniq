@@ -179,6 +179,58 @@ func (q *Queries) ListTariffs(ctx context.Context) ([]ListTariffsRow, error) {
 	return items, nil
 }
 
+const tariffInForce = `-- name: TariffInForce :one
+SELECT id, tenant_id, professional_user_id, coverage, insurer_id, modality, billing_currency, valid_from, insurer_minor, patient_minor, created_at, updated_at
+FROM tariffs
+WHERE professional_user_id = $1
+  AND coverage = $2
+  AND insurer_id IS NOT DISTINCT FROM $3::uuid
+  AND modality = $4
+  AND billing_currency = $5::char(3)
+  AND valid_from <= $6::date
+ORDER BY valid_from DESC
+LIMIT 1
+`
+
+type TariffInForceParams struct {
+	ProfessionalUserID pgtype.UUID
+	Coverage           string
+	InsurerID          pgtype.UUID
+	Modality           string
+	BillingCurrency    string
+	Day                pgtype.Date
+}
+
+// The tariff that prices one session: for its professional, coverage, mutual, modality and
+// currency, the latest validity that starts on or before the session's civil day. A particular
+// tariff has no mutual, so the comparison is IS NOT DISTINCT FROM.
+func (q *Queries) TariffInForce(ctx context.Context, arg TariffInForceParams) (Tariff, error) {
+	row := q.db.QueryRow(ctx, tariffInForce,
+		arg.ProfessionalUserID,
+		arg.Coverage,
+		arg.InsurerID,
+		arg.Modality,
+		arg.BillingCurrency,
+		arg.Day,
+	)
+	var i Tariff
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProfessionalUserID,
+		&i.Coverage,
+		&i.InsurerID,
+		&i.Modality,
+		&i.BillingCurrency,
+		&i.ValidFrom,
+		&i.InsurerMinor,
+		&i.PatientMinor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateTariffAmounts = `-- name: UpdateTariffAmounts :one
 UPDATE tariffs
 SET insurer_minor = $2,

@@ -107,6 +107,8 @@ type Deps struct {
 	GetVoucher             *billingapp.GetUseCase
 	ListVouchers           *billingapp.ListUseCase
 	SearchSubjects         *billingapp.SearchSubjectsUseCase
+	PatientSessions        *billingapp.PatientSessionsUseCase
+	Professionals          *billingapp.ProfessionalsUseCase
 	ListInsurers           *insurerapp.ListUseCase
 	CreateInsurer          *insurerapp.CreateUseCase
 	UpdateInsurer          *insurerapp.UpdateUseCase
@@ -363,6 +365,10 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error404NotFound("The requested patient does not exist")
 	case errors.Is(err, billing.ErrAppointmentNotVisible):
 		return huma.Error404NotFound("The requested appointment does not exist")
+	case errors.Is(err, billing.ErrAppointmentAlreadyBilled):
+		return huma.Error409Conflict("That session is already billed by an issued voucher")
+	case errors.Is(err, billing.ErrProfessionalNotVisible):
+		return huma.Error422UnprocessableEntity("The professional must be an active professional of this practice")
 	case errors.Is(err, billing.ErrAlreadyVoided):
 		return huma.Error409Conflict("That voucher is already voided")
 	case errors.Is(err, billing.ErrImmutable):

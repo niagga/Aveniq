@@ -12,6 +12,8 @@ type Subject struct {
 	DocumentNumber  *string
 	TaxID           *string
 	FiscalCondition *string
+	// BillingCurrency is the currency the patient is billed in: the currency of its vouchers.
+	BillingCurrency string
 }
 
 // MinIdentifierLength is how many letters or digits a fragment needs before it is also

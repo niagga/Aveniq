@@ -9,9 +9,9 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 )
 
-// An appointment is one patient's: a voucher that names an appointment must name its patient,
-// and the API says so with a 422 before the database is asked anything.
-func TestAnAppointmentNeedsItsPatient(t *testing.T) {
+// A voucher names a session of the practice. A session the practice does not hold answers
+// 404, the same as one that does not exist: another practice's session is not visible.
+func TestAVoucherNamesASessionOfThePractice(t *testing.T) {
 	h := newHarness(t)
 	tenantA := h.tenantID(t, "practica-a")
 	accountant := h.token(t, tenantA, iam.RoleAccountant)
@@ -22,7 +22,7 @@ func TestAnAppointmentNeedsItsPatient(t *testing.T) {
 		"amountMinor":   1000,
 		"currency":      "ARS",
 	})
-	if status != http.StatusUnprocessableEntity {
-		t.Fatalf("appointment without a patient = %d, want 422: %v", status, body)
+	if status != http.StatusNotFound {
+		t.Fatalf("appointment the practice does not hold = %d, want 404: %v", status, body)
 	}
 }

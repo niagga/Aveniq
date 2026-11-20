@@ -62,8 +62,8 @@ func TestBillingSchema(t *testing.T) {
 			_, err := app.Exec(ctx, `
 				INSERT INTO vouchers (
 					id, tenant_id, number, patient_id, concept, amount_minor, currency,
-					practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
-				) VALUES ($1, $2, $3, $4, $5, 150000, 'ARS', 'Consultorio Test', $6, $7, now(), now(), now())`,
+					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, $3, $4, $5, 150000, 'ARS', 'Consultorio Test', $6, CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END, $7, now(), now(), now())`,
 				uuid.NewString(), tenantID, number, patientID, concept, buyerName, users[tenantID])
 			return err
 		})
@@ -215,14 +215,21 @@ func TestBillingSchema(t *testing.T) {
 		}
 
 		// insertFor issues a patient voucher with the given appointment, as the application does.
+		// insertFor writes the photo the application takes from the session: coverage from the
+		// patient, modality and professional from the appointment.
 		insertFor := func(number int, patientID *string, appointmentID *string) error {
 			return withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 				_, err := app.Exec(ctx, `
 					INSERT INTO vouchers (
 						id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency,
-						practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
-					) VALUES ($1, $2, $3, $4, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6, $7, now(), now(), now())`,
-					uuid.NewString(), scratchTenantA, number, patientID, appointmentID, ptr("Paciente"), users[scratchTenantA])
+						practice_name, buyer_name, coverage_kind, modality, professional_user_id, professional_name,
+						issued_by, issued_at, created_at, updated_at
+					) VALUES (
+						$1, $2, $3, $4, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6,
+						CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END,
+						'presencial', $8, 'Demo Profesional',
+						$7, now(), now(), now())`,
+					uuid.NewString(), scratchTenantA, number, patientID, appointmentID, ptr("Paciente"), users[scratchTenantA], users[scratchTenantA])
 				return err
 			})
 		}
@@ -237,6 +244,31 @@ func TestBillingSchema(t *testing.T) {
 		if err := insertFor(32, ptr(patients[scratchTenantA]), ptr(appointment)); err != nil {
 			t.Fatalf("cannot issue a voucher for the appointment's own patient: %v", err)
 		}
+
+		// A session is billed once: a second issued voucher for it is refused by the index,
+		// and a void frees it.
+		expectCode(t, insertFor(33, ptr(patients[scratchTenantA]), ptr(appointment)), "23505", "second issued voucher for the session")
+
+		affected, err := void(ctx, scratchTenantA, scratchTenantA, 32, "Error de carga")
+		if err != nil || affected != 1 {
+			t.Fatalf("void of the session's voucher: affected=%d err=%v, want 1 row", affected, err)
+		}
+		if err := insertFor(33, ptr(patients[scratchTenantA]), ptr(appointment)); err != nil {
+			t.Fatalf("after the void the session is free to bill again: %v", err)
+		}
+	})
+
+	t.Run("a patient voucher must carry its coverage", func(t *testing.T) {
+		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO vouchers (
+					id, tenant_id, number, patient_id, concept, amount_minor, currency,
+					practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, 40, $3, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', $4, now(), now(), now())`,
+				uuid.NewString(), scratchTenantA, patients[scratchTenantA], users[scratchTenantA])
+			return err
+		})
+		expectCode(t, err, "23514", "patient voucher without its coverage")
 	})
 
 	t.Run("a practice cannot see or void another practice's vouchers", func(t *testing.T) {

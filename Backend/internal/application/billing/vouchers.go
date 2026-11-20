@@ -10,16 +10,22 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
-// IssueInput asks to issue one voucher. There is no buyer and no practice name on the
-// way in: the server takes both from the patient and the tenant.
+// IssueInput asks to issue one voucher. There is no buyer, no practice name and no photo on
+// the way in: the server takes the buyer and the practice name from the patient and the
+// tenant, and the photo from the patient, the session and the professional.
+//
+// A voucher for a session names the session and takes its patient, modality and professional
+// from it; PatientID is then optional and must agree with the session. A loose charge names
+// no session: it may name a patient, and a professional who is optional.
 type IssueInput struct {
-	TenantID      string
-	ActorID       string
-	PatientID     string
-	AppointmentID string
-	Concept       string
-	AmountMinor   int64
-	Currency      string
+	TenantID           string
+	ActorID            string
+	PatientID          string
+	AppointmentID      string
+	ProfessionalUserID string
+	Concept            string
+	AmountMinor        int64
+	Currency           string
 }
 
 // IssueUseCase issues a voucher with the next number of the practice.
@@ -63,13 +69,53 @@ func (uc *IssueUseCase) Execute(ctx context.Context, in IssueInput) (VoucherView
 
 	var view VoucherView
 	err = uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
-		if in.PatientID != "" {
-			subject, err := uc.billing.Subject(ctx, in.PatientID)
+		patientID := in.PatientID
+		var photo billing.Photo
+
+		if in.AppointmentID != "" {
+			session, err := uc.billing.Appointment(ctx, in.AppointmentID)
+			if err != nil {
+				return err
+			}
+			if err := session.CheckBillable(in.PatientID); err != nil {
+				return err
+			}
+			patientID = session.PatientID
+			photo.Modality = session.Modality
+			photo.ProfessionalID = session.ProfessionalID
+			photo.ProfessionalName = session.ProfessionalName
+		} else if in.ProfessionalUserID != "" {
+			professional, err := uc.billing.Professional(ctx, in.ProfessionalUserID)
+			if err != nil {
+				return err
+			}
+			photo.ProfessionalID = professional.ID
+			photo.ProfessionalName = professional.FullName
+		}
+
+		if patientID != "" {
+			subject, err := uc.billing.Subject(ctx, patientID)
 			if err != nil {
 				return err
 			}
 			draft = subject.ApplyBuyer(draft)
+
+			terms, err := uc.billing.PatientBilling(ctx, patientID)
+			if err != nil {
+				return err
+			}
+			// A patient's vouchers are issued in the currency the patient is billed in. The
+			// currency of a loose charge is free; the patient's is not.
+			if strings.ToUpper(strings.TrimSpace(in.Currency)) != terms.Currency {
+				return &billing.ValidationError{Field: "currency", Message: "must be the billing currency of the patient"}
+			}
+			photo.Coverage = terms.Coverage
+			if terms.Coverage == billing.CoverageInsurer {
+				photo.InsurerID = terms.InsurerID
+				photo.InsurerName = terms.InsurerName
+			}
 		}
+		draft.Photo = photo
 
 		voucher, err := billing.NewIssued(
 			billing.VoucherID(uc.ids.NewID()),

@@ -21,10 +21,15 @@ import (
 const (
 	restrictViolationCode = "23001"
 
-	vouchersPatientFK     = "vouchers_patient_same_tenant"
-	vouchersAppointmentFK = "vouchers_appointment_of_patient"
-	vouchersIssuerFK      = "vouchers_issuer_same_tenant"
-	vouchersVoiderFK      = "vouchers_voider_same_tenant"
+	vouchersPatientFK      = "vouchers_patient_same_tenant"
+	vouchersAppointmentFK  = "vouchers_appointment_of_patient"
+	vouchersIssuerFK       = "vouchers_issuer_same_tenant"
+	vouchersVoiderFK       = "vouchers_voider_same_tenant"
+	vouchersProfessionalFK = "vouchers_professional_same_tenant"
+
+	// vouchersOneIssuedPerAppointment is the partial unique index of 0020: a session is billed
+	// by one issued voucher at a time.
+	vouchersOneIssuedPerAppointment = "vouchers_one_issued_per_appointment"
 )
 
 const defaultVoucherPage = int32(100)
@@ -197,6 +202,14 @@ func createVoucherParams(voucher billing.Voucher) (sqlcgen.CreateVoucherParams, 
 	if err != nil {
 		return sqlcgen.CreateVoucherParams{}, err
 	}
+	insurerID, err := optionalBillingUUID(voucher.Photo.InsurerID, "insurer_id")
+	if err != nil {
+		return sqlcgen.CreateVoucherParams{}, err
+	}
+	professionalID, err := optionalBillingUUID(voucher.Photo.ProfessionalID, "professional_user_id")
+	if err != nil {
+		return sqlcgen.CreateVoucherParams{}, err
+	}
 	return sqlcgen.CreateVoucherParams{
 		ID:                   id,
 		TenantID:             tenantID,
@@ -210,12 +223,42 @@ func createVoucherParams(voucher billing.Voucher) (sqlcgen.CreateVoucherParams, 
 		BuyerName:            voucher.BuyerName,
 		BuyerTaxID:           voucher.BuyerTaxID,
 		BuyerFiscalCondition: voucher.BuyerFiscalCondition,
+		CoverageKind:         optionalText(string(voucher.Photo.Coverage)),
+		InsurerID:            insurerID,
+		InsurerName:          optionalText(voucher.Photo.InsurerName),
+		Modality:             optionalText(voucher.Photo.Modality),
+		ProfessionalUserID:   professionalID,
+		ProfessionalName:     optionalText(voucher.Photo.ProfessionalName),
 		Status:               string(voucher.Status),
 		IssuedBy:             issuedBy,
 		IssuedAt:             voucher.IssuedAt,
 		CreatedAt:            voucher.CreatedAt,
 		UpdatedAt:            voucher.UpdatedAt,
 	}, nil
+}
+
+// optionalText maps an empty field to NULL.
+func optionalText(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+// textOrEmpty reads a nullable text column as the domain's empty string.
+func textOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// optionalBillingUUID maps an empty reference to NULL and rejects a malformed one.
+func optionalBillingUUID(value, field string) (pgtype.UUID, error) {
+	if value == "" {
+		return pgtype.UUID{}, nil
+	}
+	return parseBillingUUID(value, field)
 }
 
 func voucherToDomain(row sqlcgen.Voucher) (billing.Voucher, error) {
@@ -232,6 +275,14 @@ func voucherToDomain(row sqlcgen.Voucher) (billing.Voucher, error) {
 		row.BuyerName,
 		row.BuyerTaxID,
 		row.BuyerFiscalCondition,
+		billing.Photo{
+			Coverage:         billing.Coverage(textOrEmpty(row.CoverageKind)),
+			InsurerID:        uuidText(row.InsurerID),
+			InsurerName:      textOrEmpty(row.InsurerName),
+			Modality:         textOrEmpty(row.Modality),
+			ProfessionalID:   uuidText(row.ProfessionalUserID),
+			ProfessionalName: textOrEmpty(row.ProfessionalName),
+		},
 		billing.Status(row.Status),
 		row.IssuedBy.String(),
 		row.IssuedAt,
@@ -259,8 +310,14 @@ func translateBillingError(err error) error {
 				return fmt.Errorf("%w: constraint %s", billing.ErrAppointmentNotVisible, pgErr.ConstraintName)
 			case vouchersIssuerFK, vouchersVoiderFK:
 				return fmt.Errorf("%w: constraint %s", billing.ErrActorNotVisible, pgErr.ConstraintName)
+			case vouchersProfessionalFK:
+				return fmt.Errorf("%w: constraint %s", billing.ErrProfessionalNotVisible, pgErr.ConstraintName)
 			default:
 				return fmt.Errorf("%w: constraint %s", billing.ErrPatientNotVisible, pgErr.ConstraintName)
+			}
+		case uniqueViolationCode:
+			if pgErr.ConstraintName == vouchersOneIssuedPerAppointment {
+				return fmt.Errorf("%w: constraint %s", billing.ErrAppointmentAlreadyBilled, pgErr.ConstraintName)
 			}
 		case restrictViolationCode:
 			return fmt.Errorf("%w: %s", billing.ErrImmutable, pgErr.Message)
@@ -304,6 +361,141 @@ func timestamptzFromTime(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: value, Valid: true}
 }
 
+// PatientBilling returns how a patient of this practice is billed, or
+// billing.ErrPatientNotVisible.
+func (r *BillingRepository) PatientBilling(ctx context.Context, patientID string) (billing.PatientBilling, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.PatientBilling{}, err
+	}
+	parsed, err := parseBillingUUID(patientID, "patient_id")
+	if err != nil {
+		return billing.PatientBilling{}, err
+	}
+	row, err := queries.GetPatientBilling(ctx, parsed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.PatientBilling{}, billing.ErrPatientNotVisible
+	}
+	if err != nil {
+		return billing.PatientBilling{}, translateBillingError(err)
+	}
+	return billing.PatientBilling{
+		Coverage:    billing.Coverage(row.CoverageKind),
+		InsurerID:   uuidText(row.InsurerID),
+		InsurerName: textOrEmpty(row.InsurerName),
+		Currency:    row.BillingCurrency,
+		Active:      row.IsActive,
+	}, nil
+}
+
+// Appointment reads one session of this practice, or billing.ErrAppointmentNotVisible.
+func (r *BillingRepository) Appointment(ctx context.Context, appointmentID string) (billing.Appointment, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Appointment{}, err
+	}
+	parsed, err := parseBillingUUID(appointmentID, "appointment_id")
+	if err != nil {
+		return billing.Appointment{}, err
+	}
+	row, err := queries.GetBillingAppointment(ctx, parsed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.Appointment{}, billing.ErrAppointmentNotVisible
+	}
+	if err != nil {
+		return billing.Appointment{}, translateBillingError(err)
+	}
+	return sessionOf(
+		row.ID, row.PatientID, row.ProfessionalUserID, row.ProfessionalName,
+		row.Modality, row.StartsAt, row.Status, row.BilledVoucherID,
+	), nil
+}
+
+// PatientAppointments returns the newest sessions of one patient, bounded by limit.
+func (r *BillingRepository) PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := parseBillingUUID(patientID, "patient_id")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries.ListPatientAppointments(ctx, sqlcgen.ListPatientAppointmentsParams{
+		PatientID: parsed,
+		Lim:       limit,
+	})
+	if err != nil {
+		return nil, translateBillingError(err)
+	}
+	out := make([]billing.Appointment, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, sessionOf(
+			row.ID, row.PatientID, row.ProfessionalUserID, row.ProfessionalName,
+			row.Modality, row.StartsAt, row.Status, row.BilledVoucherID,
+		))
+	}
+	return out, nil
+}
+
+// Professional returns an active professional of this practice, or
+// billing.ErrProfessionalNotVisible.
+func (r *BillingRepository) Professional(ctx context.Context, userID string) (billing.Professional, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return billing.Professional{}, err
+	}
+	parsed, err := parseBillingUUID(userID, "professional_user_id")
+	if err != nil {
+		return billing.Professional{}, err
+	}
+	row, err := queries.GetBillingProfessional(ctx, parsed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.Professional{}, billing.ErrProfessionalNotVisible
+	}
+	if err != nil {
+		return billing.Professional{}, translateBillingError(err)
+	}
+	return billing.Professional{ID: row.ID.String(), FullName: row.FullName}, nil
+}
+
+// Professionals lists the active professionals of this practice, by name.
+func (r *BillingRepository) Professionals(ctx context.Context) ([]billing.Professional, error) {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries.ListBillingProfessionals(ctx)
+	if err != nil {
+		return nil, translateBillingError(err)
+	}
+	out := make([]billing.Professional, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, billing.Professional{ID: row.ID.String(), FullName: row.FullName})
+	}
+	return out, nil
+}
+
+// sessionOf maps the session columns every appointment read returns.
+func sessionOf(
+	id, patientID, professionalID pgtype.UUID,
+	professionalName, modality string,
+	startsAt time.Time,
+	status string,
+	billedVoucherID pgtype.UUID,
+) billing.Appointment {
+	return billing.Appointment{
+		ID:               id.String(),
+		PatientID:        patientID.String(),
+		ProfessionalID:   professionalID.String(),
+		ProfessionalName: professionalName,
+		Modality:         modality,
+		StartsAt:         startsAt,
+		Status:           status,
+		BilledVoucherID:  uuidText(billedVoucherID),
+	}
+}
+
 // Subject returns the billing identity of a patient of this practice, or
 // billing.ErrPatientNotVisible: a patient of another practice is indistinguishable from
 // one that does not exist.
@@ -329,6 +521,7 @@ func (r *BillingRepository) Subject(ctx context.Context, patientID string) (bill
 		DocumentNumber:  row.DocumentNumber,
 		TaxID:           row.TaxID,
 		FiscalCondition: row.FiscalCondition,
+		BillingCurrency: row.BillingCurrency,
 	}, nil
 }
 
@@ -363,6 +556,7 @@ func (r *BillingRepository) SearchSubjects(ctx context.Context, fragment string,
 			DocumentNumber:  row.DocumentNumber,
 			TaxID:           row.TaxID,
 			FiscalCondition: row.FiscalCondition,
+			BillingCurrency: row.BillingCurrency,
 		})
 	}
 	return out, nil

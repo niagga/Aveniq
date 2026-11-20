@@ -7,6 +7,10 @@ import type { components } from "@/shared/api/schema";
 export type Voucher = components["schemas"]["VoucherBody"];
 export type Subject = components["schemas"]["SubjectBody"];
 export type VoucherStatus = Voucher["status"];
+/** A session of a patient, as the emission screen lists it, with the tariff's proposal. */
+export type Session = components["schemas"]["PatientSessionBody"];
+export type Professional = components["schemas"]["ProfessionalBody"];
+export type Photo = components["schemas"]["PhotoBody"];
 
 /**
  * Owner, admin and accountant hold billing:read. The admin only reads: issuing and voiding
@@ -70,6 +74,58 @@ const STATUS_LABEL: Record<VoucherStatus, string> = {
 
 export function statusLabel(status: string): string {
   return STATUS_LABEL[status as VoucherStatus] ?? status;
+}
+
+const MODALITY_LABEL: Record<string, string> = {
+  online: "Online",
+  presencial: "Presencial",
+};
+
+/**
+ * Why a session cannot be billed, or null when it can. A cancelled session is never billed,
+ * and a session that an issued voucher already bills is billed once: the API refuses the
+ * second voucher with a 409, so the list says so before the person picks it.
+ */
+export function sessionBlockReason(session: Session): string | null {
+  if (session.status === "cancelled") return "Cancelado";
+  if (session.billedVoucherId !== null) return "Ya facturado";
+  return null;
+}
+
+/** The modality as a person reads it, or null when the voucher does not carry one. */
+export function modalityName(modality: string | null): string | null {
+  if (modality === null) return null;
+  return MODALITY_LABEL[modality] ?? modality;
+}
+
+/** One session as a line of the picker: when, with whom, and in which modality. */
+export function sessionLabel(session: Session): string {
+  return `${formatDateTime(session.startsAt)} · ${session.professionalName} · ${modalityName(session.modality)}`;
+}
+
+/** The day of a session as the concept of its voucher names it: 20/11/2026. */
+export function formatDay(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/**
+ * The coverage a voucher was issued with, as the photo reads it. A voucher for a patient that
+ * carries no coverage was issued before the photo existed: the screen says so instead of
+ * showing a particular patient it cannot know. A loose charge has no coverage at all.
+ */
+export function coverageText(voucher: Voucher): string {
+  const coverage = voucher.photo.coverage;
+  if (coverage === "private") return "Particular";
+  if (coverage === "insurer") return voucher.photo.insurerName ?? "Mutual";
+  return voucher.patientId ? "Sin registrar" : "—";
+}
+
+/** A field of the photo, or what stands in for it when the voucher does not carry one. */
+export function photoField(voucher: Voucher, value: string | null): string {
+  if (voucher.patientId && voucher.photo.coverage === null) return "Sin registrar";
+  return value ?? "—";
 }
 
 /** The number as the practice reads it: consecutive, padded, never reused after a void. */
