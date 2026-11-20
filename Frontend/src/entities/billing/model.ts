@@ -216,3 +216,47 @@ export function startOfNextDay(dateInput: string): string | undefined {
   parsed.setDate(parsed.getDate() + 1);
   return parsed.toISOString();
 }
+
+/**
+ * The monthly settlements to the mutuales (T55). The same roles as the vouchers: the owner and
+ * the accountant issue and void, and the admin reads.
+ */
+export type SettlementInsurer = components["schemas"]["SettlementInsurerBody"];
+export type Settlement = components["schemas"]["SettlementBody"];
+export type SettlementItem = components["schemas"]["SettlementItemBody"];
+export type SettlementPreview = components["schemas"]["SettlementPreviewBody"];
+export type CurrencyTotal = components["schemas"]["CurrencyTotalBody"];
+export type UnvaluedSession = components["schemas"]["UnvaluedSessionBody"];
+
+/** The API's page for the settlements: 50 at most per request. */
+export const SETTLEMENT_PAGE_SIZE = 50;
+
+const SETTLEMENT_STATUS_LABEL: Record<string, string> = {
+  issued: "Emitida",
+  voided: "Anulada",
+};
+
+export function settlementStatusLabel(status: string): string {
+  return SETTLEMENT_STATUS_LABEL[status] ?? status;
+}
+
+/** The month as a person reads it: noviembre de 2026. */
+export function periodName(period: string): string {
+  const parsed = new Date(`${period}-01T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return period;
+  return parsed.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+}
+
+/**
+ * The totals as a line, one per currency. Currencies are never converted: the MVP has no
+ * exchange rate, so "ARS 16.000,00 · USD 120,00" is the honest sum.
+ */
+export function totalsText(totals: CurrencyTotal[]): string {
+  if (totals.length === 0) return "Sin importe";
+  return totals.map((total) => formatMoney(total.amountMinor, total.currency)).join(" · ");
+}
+
+/** A session count as a person reads it: 1 sesión, 2 sesiones. */
+export function sessionCountText(count: number): string {
+  return count === 1 ? "1 sesión" : `${count} sesiones`;
+}

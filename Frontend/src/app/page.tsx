@@ -103,6 +103,14 @@ function Dashboard() {
               Facturación
             </Link>
           ) : null}
+          {canReadBilling(role) ? (
+            <Link
+              href="/liquidaciones"
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium"
+            >
+              Liquidaciones
+            </Link>
+          ) : null}
           {canReadTariffs(role) ? (
             <Link
               href="/tarifario"

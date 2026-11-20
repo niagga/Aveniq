@@ -285,6 +285,7 @@ type harness struct {
 	limiter     *fakeRateLimiter
 	vouchers    *fakeBillingRepository
 	tariffs     *fakeTariffRepository
+	settlements *fakeSettlementRepository
 }
 
 func newHarness(t *testing.T) *harness {
@@ -321,6 +322,7 @@ func newHarness(t *testing.T) *harness {
 	invitations := newFakeInvitationRepository()
 	limiter := &fakeRateLimiter{hits: map[string]int64{}}
 	vouchers := newFakeBillingRepository(repo)
+	settlements := newFakeSettlementRepository(insurers, repo, vouchers)
 
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -369,9 +371,15 @@ func newHarness(t *testing.T) *harness {
 		SearchSubjects:         billingapp.NewSearchSubjectsUseCase(vouchers, scope),
 		PatientSessions:        billingapp.NewPatientSessionsUseCase(vouchers, tariffs, tenants, scope),
 		Professionals:          billingapp.NewProfessionalsUseCase(vouchers, scope),
+		SettlementInsurers:     billingapp.NewSettlementInsurersUseCase(settlements, scope),
+		PreviewSettlement:      billingapp.NewSettlementPreviewUseCase(settlements, tariffs, tenants, scope),
+		ListSettlements:        billingapp.NewListSettlementsUseCase(settlements, scope),
+		GetSettlement:          billingapp.NewGetSettlementUseCase(settlements, scope),
+		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlements, tariffs, tenants, scope, audit, clock, uuidIDs{}),
+		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlements, scope, audit, clock),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs}
+	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the

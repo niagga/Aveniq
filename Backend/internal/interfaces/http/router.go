@@ -118,6 +118,12 @@ type Deps struct {
 	CreateTariff           *pricingapp.CreateUseCase
 	UpdateTariff           *pricingapp.UpdateUseCase
 	DeleteTariff           *pricingapp.DeleteUseCase
+	SettlementInsurers     *billingapp.SettlementInsurersUseCase
+	PreviewSettlement      *billingapp.SettlementPreviewUseCase
+	ListSettlements        *billingapp.ListSettlementsUseCase
+	GetSettlement          *billingapp.GetSettlementUseCase
+	IssueSettlement        *billingapp.IssueSettlementUseCase
+	VoidSettlement         *billingapp.VoidSettlementUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -163,6 +169,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerSignupRoutes(api, deps)
 	registerCareRoutes(api, deps)
 	registerBillingRoutes(api, deps)
+	registerSettlementRoutes(api, deps)
 
 	return router
 }
@@ -367,6 +374,10 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error404NotFound("The requested appointment does not exist")
 	case errors.Is(err, billing.ErrAppointmentAlreadyBilled):
 		return huma.Error409Conflict("That session is already billed by an issued voucher")
+	case errors.Is(err, billing.ErrAppointmentAlreadySettled):
+		return huma.Error409Conflict("That session is already in an active settlement")
+	case errors.Is(err, billing.ErrInsurerNotVisible):
+		return huma.Error422UnprocessableEntity("The mutual must be a mutual of this practice")
 	case errors.Is(err, billing.ErrProfessionalNotVisible):
 		return huma.Error422UnprocessableEntity("The professional must be an active professional of this practice")
 	case errors.Is(err, billing.ErrAlreadyVoided):
