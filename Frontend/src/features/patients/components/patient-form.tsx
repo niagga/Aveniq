@@ -78,6 +78,23 @@ function fieldsFrom(patient: Patient | null | undefined): Fields {
  * refused by the server with a 422 that names the field, but stopping it here saves a
  * round trip and says it in the language of the form.
  */
+/**
+ * The latest date a patient can have been born: yesterday.
+ *
+ * A birth date of today or later describes someone zero days old or not born yet, and the
+ * practice has no such patient. It is computed in local time so the picker's `max` and the
+ * check in `validate()` agree with the date the user sees.
+ *
+ * The API only rejects the future (internal/domain/patient/patient.go:231), so this bound is
+ * deliberately stricter on purpose until the backend enforces the same one (T11).
+ */
+function birthDateCeiling(): string {
+  const limit = new Date();
+  limit.setDate(limit.getDate() - 1);
+  const local = new Date(limit.getTime() - limit.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
 export function PatientForm({
   patient,
   insurers,
@@ -141,6 +158,9 @@ export function PatientForm({
 
   function validate(): string | null {
     if (fields.fullName.trim() === "") return "El nombre es obligatorio.";
+    if (fields.birthDate !== "" && fields.birthDate > birthDateCeiling()) {
+      return "La fecha de nacimiento tiene que ser anterior a hoy.";
+    }
     if (fields.documentKind !== "" && fields.documentNumber.trim() === "") {
       return "Elegiste un tipo de documento sin número.";
     }
@@ -264,6 +284,7 @@ export function PatientForm({
           <input
             id={id("birthDate")}
             type="date"
+            max={birthDateCeiling()}
             value={fields.birthDate}
             onChange={(event) => set("birthDate", event.target.value)}
             className={inputClass}
