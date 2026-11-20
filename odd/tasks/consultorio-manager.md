@@ -134,7 +134,7 @@ en cada transición de tarea.
 | T51 | S16, S2 | E6 | Contrato: dominio, HTTP y pantallas de mutuales y del paciente con cobertura y moneda. La moneda es obligatoria en la API (cambio de contrato confirmado) | inline | `1e32399` |
 | T52 | S6, S15 | E6 | Modalidad del turno y de la serie (online o presencial): migración, dominio, HTTP y agenda. Los turnos existentes quedan presenciales | inline | `5cad1d8` |
 | T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | `02bf98a` |
-| T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | — |
+| T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | `3ae6518` |
 | T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | — |
 | T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | — |
 | T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | — |
@@ -2414,4 +2414,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   regenerado. `pnpm typecheck` y `pnpm build` verdes. `pnpm e2e`: 29 de 29 previos en verde, y 4 nuevos en
   `e2e/e8-emission.spec.ts` (tarifario del día, paciente y turno de la profesional, emisión del contador con el
   importe propuesto y "Ya facturado", y el detalle del comprobante con su foto).
-- **Commit.** Pendiente. La fila T54 queda en `—` hasta que se commitee; el hash va en un commit aparte.
+- **Commit.** `3ae6518`. El registro del hash va en un commit aparte, como en T51 y T52.
