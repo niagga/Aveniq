@@ -5,6 +5,7 @@ import {
   formatDateTime,
   formatMoney,
   voucherNumber,
+  type BillingFilters,
   type Voucher,
 } from "@/entities/billing/model";
 import { StatusBadge } from "@/features/billing/components/voucher-detail";
@@ -18,11 +19,14 @@ export function VoucherTable({
   vouchers,
   selectedID,
   filtered,
+  filters,
 }: {
   vouchers: Voucher[];
   selectedID: string | null;
   /** Whether a filter is on, so an empty list can say why it is empty. */
   filtered: boolean;
+  /** Carried into every link, so opening a voucher does not throw the filters away. */
+  filters: BillingFilters;
 }) {
   if (vouchers.length === 0) {
     return (
@@ -78,7 +82,7 @@ export function VoucherTable({
                 </td>
                 <td className="px-4 py-3">
                   <Link
-                    href={billingHref(voucher.id)}
+                    href={billingHref(voucher.id, filters)}
                     aria-label={`Ver el comprobante ${voucherNumber(voucher.number)}`}
                     className="rounded-md border border-border px-2 py-1 text-xs font-medium"
                   >

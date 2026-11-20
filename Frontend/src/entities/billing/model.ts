@@ -32,27 +32,54 @@ export function canVoidVouchers(role: string | undefined): boolean {
 }
 
 /**
+ * The filters of the history. They live in the URL so a filtered view survives a reload and
+ * can be shared, which is what a worklist is for; the voucher id rides with them instead of
+ * replacing them.
+ */
+export type BillingFilters = {
+  status: "" | VoucherStatus;
+  from: string;
+  to: string;
+};
+
+export const EMPTY_FILTERS: BillingFilters = { status: "", from: "", to: "" };
+
+/**
  * The screen of the history, optionally opened on one voucher. The id rides in the query so
  * a voucher can be linked without being on the current page of the list; GET /vouchers/{id}
  * is what loads it. The shape is a Next.js location (pathname + query), not a string: typed
  * routes only know `/facturacion`.
  */
-export function billingHref(voucherId: string | null): {
+export function billingHref(
+  voucherId: string | null,
+  filters: BillingFilters = EMPTY_FILTERS,
+): {
   pathname: "/facturacion";
-  query?: { voucher: string };
+  query?: Record<string, string>;
 } {
-  if (voucherId === null || voucherId === "") return { pathname: "/facturacion" };
-  return { pathname: "/facturacion", query: { voucher: voucherId } };
+  const query: Record<string, string> = {};
+  if (filters.status !== "") query.estado = filters.status;
+  if (filters.from !== "") query.desde = filters.from;
+  if (filters.to !== "") query.hasta = filters.to;
+  if (voucherId !== null && voucherId !== "") query.voucher = voucherId;
+
+  return Object.keys(query).length === 0
+    ? { pathname: "/facturacion" }
+    : { pathname: "/facturacion", query };
 }
 
 /**
  * The same location as a string, for `router.replace`. Typed routes only know `/facturacion`,
  * so the query is asserted onto that path: it is still `/facturacion`, with a search.
  */
-export function billingUrl(voucherId: string | null): "/facturacion" {
-  const href = billingHref(voucherId);
+export function billingUrl(
+  voucherId: string | null,
+  filters: BillingFilters = EMPTY_FILTERS,
+): "/facturacion" {
+  const href = billingHref(voucherId, filters);
   if (href.query === undefined) return href.pathname;
-  return `${href.pathname}?voucher=${encodeURIComponent(href.query.voucher)}` as "/facturacion";
+  const search = new URLSearchParams(href.query).toString();
+  return `${href.pathname}?${search}` as "/facturacion";
 }
 
 /**

@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import { canReadBilling } from "@/entities/billing/model";
 import { BillingScreen } from "@/features/billing/components/billing-screen";
 import { RoleGate } from "@/shared/auth/role-gate";
-import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 /**
  * Internal vouchers (T42). A Client Component, like the other screens: the access token
@@ -14,12 +13,10 @@ import { ScreenFrame } from "@/shared/ui/shell/app-shell";
  */
 export default function BillingPage() {
   return (
-    <ScreenFrame>
-      <RoleGate allowed={canReadBilling}>
-        <Suspense fallback={<p className="text-sm text-ink-muted">Cargando facturación…</p>}>
-          <BillingScreen />
-        </Suspense>
-      </RoleGate>
-    </ScreenFrame>
+    <RoleGate allowed={canReadBilling}>
+      <Suspense fallback={<p className="text-sm text-ink-muted">Cargando facturación…</p>}>
+        <BillingScreen />
+      </Suspense>
+    </RoleGate>
   );
 }

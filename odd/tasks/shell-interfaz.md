@@ -25,6 +25,7 @@ No toca Backend ni contratos de API. El estado de sesión, permisos y trial sigu
 | T7 | S2 | Control de tema en la UI, persistencia y respeto de `prefers-color-scheme` | worker |
 | T8 | S1, S2, S3, S5 | Barrido responsive y de accesibilidad, y actualización de los e2e afectados | worker |
 | T9 | S1 | Mover el aviso de trial al pie del rail: `PracticeProvider` lo inyecta global hoy y el shell necesita leer el consultorio | worker |
+| T10 | — | **Requiere autorización aparte.** `GET /billing/unbilled` en el Backend: sesiones atendidas sin comprobante, con total y rango. Sin ese endpoint el panel de Facturación no puede mostrar contadores reales y el artboard sólo se cumple en estructura | Backend + Frontend |
 
 ### Evidencia de commits
 
@@ -33,6 +34,7 @@ No toca Backend ni contratos de API. El estado de sesión, permisos y trial sigu
 | T1 | `040b9e0` — tokens de control, valores oscuros y foco visible |
 | T2 | `4018b41` — shell con rail, layout privado y fin de los wrappers duplicados |
 | T3 | `6af924e` — primitivas `Button`, `ConfirmDialog`, `EmptyState`, `LoadingState`, `Badge` y error inline en `Field` |
+| T7 | `b6aa2a1` — interruptor de tema con script sin flash y verificación de capas sobre el CSS compilado |
 
 ## Log
 
