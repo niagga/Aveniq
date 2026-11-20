@@ -40,7 +40,7 @@ export function TenantTable({ tenants }: { tenants: Tenant[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-panel)] border border-border bg-surface">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
       <table className="w-full text-left text-sm">
         <caption className="sr-only">Consultorios registrados</caption>
         <thead className="bg-surface-muted text-xs tracking-wide text-ink-muted uppercase">

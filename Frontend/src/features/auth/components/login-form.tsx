@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 
 import { homePathFor } from "@/entities/iam/model";
 import { getSessionUser, login } from "@/shared/auth/session";
+import { inputClass } from "@/shared/ui/field";
 
 /**
  * Sign-in form.
@@ -82,7 +83,7 @@ export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: stri
             autoCorrect="off"
             spellCheck={false}
             placeholder="consultorio-sur"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
 
@@ -100,7 +101,7 @@ export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: stri
             maxLength={320}
             autoComplete="username"
             placeholder="ana@consultorio.test"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
 
@@ -117,7 +118,7 @@ export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: stri
             required
             maxLength={1024}
             autoComplete="current-password"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
       </div>

@@ -154,7 +154,7 @@ function UserRow({
             disabled={lockReason !== null || busy}
             title={lockReason ?? undefined}
             onChange={(event) => setRole(event.target.value as Role)}
-            className="rounded-md border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-brand disabled:opacity-60"
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand disabled:opacity-60"
           >
             {ROLES.map((code) => (
               <option key={code} value={code} disabled={code === "owner" && viewerRole !== "owner"}>

@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import type { Insurer, InsurerProfile } from "@/entities/insurer/model";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { inputClass } from "@/shared/ui/field";
 
 /**
  * Create and edit share this form: the API takes the same profile for both. The tax id
@@ -85,7 +86,7 @@ export function InsurerForm({
             required
             maxLength={120}
             placeholder="OSDE"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
 
@@ -99,7 +100,7 @@ export function InsurerForm({
             onChange={(event) => setTaxId(event.target.value)}
             maxLength={20}
             placeholder="30-12345678-9"
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-brand"
+            className={inputClass}
           />
         </div>
       </div>
