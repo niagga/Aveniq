@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { canReadBilling } from "@/entities/billing/model";
 import {
@@ -19,6 +19,7 @@ import { getSessionUser } from "@/shared/auth/session";
 import { usePractice } from "@/shared/auth/practice";
 import { canCountUnbilled, unbilledLabel, useUnbilledCount } from "@/features/billing/use-unbilled";
 import { TrialExpiredBanner } from "@/features/tenants/components/trial-expired-banner";
+import { Modal } from "@/shared/ui/modal";
 import { Notice } from "@/shared/ui/notice";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
 
@@ -42,7 +43,7 @@ type Section = {
 
 const SECTIONS: readonly Section[] = [
   {
-    href: "/",
+    href: "/panel",
     label: "Inicio",
     icon: <HomeIcon />,
     allow: () => true,
@@ -97,13 +98,19 @@ const SECTIONS: readonly Section[] = [
   },
 ];
 
-/** How many destinations the bottom bar keeps on a narrow screen before folding the rest. */
+/**
+ * How many destinations the bottom bar keeps on a narrow screen. The rest sit behind "Más", a
+ * popup with the same links: before T63 they were simply hidden and a phone could not reach them.
+ */
 const NARROW_VISIBLE = 4;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const user = getSessionUser();
   const visible = SECTIONS.filter((section) => section.allow(user?.role));
+  const folded = visible.slice(NARROW_VISIBLE);
+  const foldedActive = folded.some((section) => section.href === pathname);
+  const [moreOpen, setMoreOpen] = useState(false);
   const { status: trial, expired } = usePractice();
   const unbilled = unbilledLabel(useUnbilledCount(canCountUnbilled(user?.role)));
 
@@ -127,17 +134,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-full flex-col md:flex-row">
       <nav
         aria-label="Secciones del consultorio"
-        className="order-2 flex shrink-0 items-stretch gap-1 border-t border-border bg-surface px-1 py-1 md:order-1 md:w-16 md:flex-col md:items-center md:border-r md:border-t-0 md:px-0 md:py-3"
+        className="order-2 flex shrink-0 items-stretch gap-1 border-t border-border bg-surface px-1 py-1 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 md:order-1 md:w-16 md:flex-col md:items-center md:border-r md:border-t-0 md:px-0 md:py-3 lg:w-56 lg:items-stretch lg:px-3"
       >
         <Link
-          href="/"
+          href="/panel"
           aria-label="Aveniq"
-          className="hidden rounded-control bg-brand px-2 py-1 text-xs font-bold text-brand-ink md:mb-2 md:grid md:h-8 md:w-8 md:place-items-center md:px-0 md:py-0"
+          className="hidden rounded-control bg-brand px-2 py-1 text-xs font-bold text-brand-ink md:mb-2 md:grid md:h-8 md:w-8 md:place-items-center md:px-0 md:py-0 lg:flex lg:h-auto lg:w-full lg:justify-start lg:px-3 lg:py-2 lg:text-sm"
         >
-          A
+          <span className="lg:hidden">A</span>
+          <span className="hidden lg:inline">Aveniq</span>
         </Link>
 
-        <ul className="flex flex-1 items-stretch gap-1 md:flex-none md:flex-col md:items-center">
+        <ul className="flex flex-1 items-stretch gap-1 md:flex-none md:flex-col md:items-center lg:items-stretch lg:gap-0.5">
           {visible.map((section, index) => {
             const active = pathname === section.href;
 
@@ -157,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       ? `${section.label}, ${unbilled} sesiones sin facturar`
                       : undefined
                   }
-                  className={`relative flex w-full flex-col items-center gap-0.5 rounded-control px-2 py-1.5 text-[10px] font-medium md:w-11 md:gap-0 md:px-0 md:py-2 ${
+                  className={`relative flex w-full flex-col items-center gap-0.5 rounded-control px-2 py-1.5 text-[10px] font-medium md:w-11 md:gap-0 md:px-0 md:py-2 lg:w-full lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-2 lg:text-sm ${
                     active
                       ? "bg-brand/10 text-brand"
                       : "text-ink-muted hover:bg-surface-muted hover:text-ink"
@@ -170,11 +178,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     />
                   ) : null}
                   {section.icon}
-                  <span className="md:sr-only">{section.label}</span>
+                  <span className="md:sr-only lg:not-sr-only">{section.label}</span>
                   {section.href === "/facturacion" && unbilled !== "" ? (
                     <span
                       aria-hidden="true"
-                      className="absolute right-1 top-0.5 rounded-full bg-brand px-1 text-[9px] font-semibold leading-4 text-brand-ink md:right-0.5"
+                      className="absolute right-1 top-0.5 rounded-full bg-brand px-1 text-[9px] font-semibold leading-4 text-brand-ink md:right-0.5 lg:right-2 lg:top-1/2 lg:-translate-y-1/2 lg:text-[11px]"
                     >
                       {unbilled}
                     </span>
@@ -183,9 +191,33 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
             );
           })}
+          {folded.length > 0 ? (
+            <li className="relative flex flex-1 md:hidden">
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen(true)}
+                className={`relative flex w-full flex-col items-center gap-0.5 rounded-control px-2 py-1.5 text-[10px] font-medium ${
+                  foldedActive
+                    ? "bg-brand/10 text-brand"
+                    : "text-ink-muted hover:bg-surface-muted hover:text-ink"
+                }`}
+              >
+                {foldedActive ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-2 top-0 h-0.5 rounded bg-brand"
+                  />
+                ) : null}
+                <MoreIcon />
+                <span>Más</span>
+              </button>
+            </li>
+          ) : null}
         </ul>
 
-        <div className="ml-1 flex items-center gap-1 md:ml-0 md:mt-auto md:flex-col md:gap-2">
+        <div className="ml-1 flex items-center gap-1 md:ml-0 md:mt-auto md:flex-col md:gap-2 lg:ml-0 lg:mt-auto lg:w-full lg:flex-row lg:justify-between lg:px-1">
           {trialLabel === null ? null : (
             <span
               title={trialLabel}
@@ -209,6 +241,37 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
         </div>
       </nav>
+
+      {/* The sections that do not fit the bottom bar on a phone. Only a phone opens it: from md
+          the rail shows every section, and the button is hidden. */}
+      <Modal
+        open={moreOpen}
+        title="Más secciones"
+        size="sm"
+        onClose={() => setMoreOpen(false)}
+      >
+        <ul className="grid gap-1">
+          {folded.map((section) => {
+            const active = pathname === section.href;
+
+            return (
+              <li key={section.href}>
+                <Link
+                  href={section.href}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setMoreOpen(false)}
+                  className={`flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium ${
+                    active ? "bg-brand/10 text-brand" : "text-ink hover:bg-surface-muted"
+                  }`}
+                >
+                  {section.icon}
+                  {section.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </Modal>
 
       <div className="order-1 flex min-w-0 flex-1 flex-col md:order-2">
         {expired && trial !== null ? (
@@ -329,6 +392,16 @@ function UsersIcon() {
       <circle cx="6" cy="5.5" r="2.2" />
       <path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" />
       <path d="M11 5.5h3M12.5 4v3" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <circle cx="3.5" cy="8" r="1.4" />
+      <circle cx="8" cy="8" r="1.4" />
+      <circle cx="12.5" cy="8" r="1.4" />
     </svg>
   );
 }

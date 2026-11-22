@@ -28,11 +28,12 @@ export const PASSWORD_MIN_LENGTH = 12;
 
 /**
  * The screen a role lands on after signing in. The accountant's whole job is billing, so it
- * lands there; every other role lands on the dashboard. The dashboard stays reachable for
- * the accountant too: it is the menu, and it shows only what the accountant may open.
+ * lands there; every other role lands on the dashboard at `/panel` (T63: `/` is now the public
+ * landing). The dashboard stays reachable for the accountant too: it is the menu, and it shows
+ * only what the accountant may open.
  */
-export function homePathFor(role: string | undefined): "/" | "/facturacion" {
-  return role === "accountant" ? "/facturacion" : "/";
+export function homePathFor(role: string | undefined): "/panel" | "/facturacion" {
+  return role === "accountant" ? "/facturacion" : "/panel";
 }
 
 /** Owner and admin hold users:read and users:manage; the other roles hold neither. */

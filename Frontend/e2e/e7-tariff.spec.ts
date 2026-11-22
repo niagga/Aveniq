@@ -115,7 +115,7 @@ test("the owner prices a mutual session: what the mutual pays and the copago", a
 test("the accountant reads the fee schedule and cannot change it", async ({ page }) => {
   // The accountant lands on billing after signing in; the dashboard is where the link lives.
   await signInAs(page, ACCOUNTS.accountant);
-  await page.goto("/");
+  await page.goto("/panel");
   await page.getByRole("link", { name: "Tarifario" }).click();
   await expect(page.getByRole("heading", { name: "Tarifario" })).toBeVisible();
 

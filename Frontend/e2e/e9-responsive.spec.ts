@@ -14,7 +14,7 @@ import { ACCOUNTS, signInAs } from "./helpers";
 const NARROW = { width: 390, height: 844 };
 
 const PRIVATE_PATHS = [
-  "/",
+  "/panel",
   "/patients",
   "/agenda",
   "/facturacion",

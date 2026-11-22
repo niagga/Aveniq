@@ -139,7 +139,7 @@ test("the dashboard and the CSV say what the report says", async ({ browser }) =
     expect(Number(cells[3])).toBe(report.vouchers);
 
     // The dashboard reads the same month with the same rule.
-    await page.goto("/");
+    await page.goto("/panel");
     await expect(page.getByRole("heading", { name: "Cifras del consultorio" })).toBeVisible({ timeout: 15_000 });
     // The headline card comes before the charts, which repeat the word in their legends.
     const card = page.getByText("Facturado", { exact: true }).first().locator("xpath=..");
@@ -154,7 +154,7 @@ test("the accountant and the administration read the whole practice from the das
   for (const account of [ACCOUNTS.accountant, ACCOUNTS.admin]) {
     const { page, close } = await openAs(browser, account);
     try {
-      await page.goto("/");
+      await page.goto("/panel");
       await expect(page.getByRole("heading", { name: "Cifras del consultorio" })).toBeVisible({
         timeout: 15_000,
       });
@@ -182,7 +182,7 @@ test("the professional reads only their own figures, never more than the practic
     expect(own.minor).toBeLessThanOrEqual(practice.minor - KEPT_MINOR);
     expect(own.vouchers).toBeLessThan(practice.vouchers);
 
-    await professional.page.goto("/");
+    await professional.page.goto("/panel");
     await expect(professional.page.getByRole("heading", { name: "Tus cifras" })).toBeVisible({
       timeout: 15_000,
     });
@@ -206,7 +206,7 @@ test("the assistant has neither the figures nor the report", async ({ browser })
   const { page, close } = await openAs(browser, ACCOUNTS.assistant);
   const token = watchBearer(page);
   try {
-    await page.goto("/");
+    await page.goto("/panel");
     await expect(page.getByRole("heading", { name: /^Cifras|^Tus cifras/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Informes", exact: true })).toHaveCount(0);
 

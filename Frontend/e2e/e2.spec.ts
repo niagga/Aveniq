@@ -18,7 +18,7 @@ test("two tabs can refresh at once without killing the session", async ({ contex
   await signIn(page);
 
   const other = await context.newPage();
-  await other.goto("/");
+  await other.goto("/panel");
   await expect(other.getByRole("button", { name: "Cerrar sesión" })).toBeVisible({
     timeout: 15_000,
   });

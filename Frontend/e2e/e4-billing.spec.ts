@@ -168,7 +168,7 @@ test("the accountant's voucher can name a patient, and the buyer comes from the 
 test("the accountant's dashboard shows billing only, and the clinical screens refuse it", async ({ browser }) => {
   const { page, close } = await openAs(browser, ACCOUNTS.accountant);
   try {
-    await page.goto("/");
+    await page.goto("/panel");
     // Positive control first: the dashboard has loaded and offers billing.
     await expect(page.getByRole("link", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("link", { name: "Pacientes" })).toHaveCount(0);
@@ -228,7 +228,7 @@ for (const [label, account] of [
   test(`${label} has no billing link and is refused the billing screen`, async ({ browser }) => {
     const { page, close } = await openAs(browser, account);
     try {
-      await page.goto("/");
+      await page.goto("/panel");
       // Positive control: the dashboard has loaded and shows the patients link.
       await expect(page.getByRole("link", { name: "Pacientes" })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole("link", { name: "Facturación" })).toHaveCount(0);
