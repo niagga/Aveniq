@@ -38,6 +38,18 @@ SET status = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: RescheduleAppointment :one
+-- A scheduled slot only. The overlap exclusion re-checks the new interval.
+UPDATE appointments
+SET starts_at = $2,
+    ends_at = $3,
+    modality = $4,
+    notes = $5,
+    updated_at = $6
+WHERE id = $1
+  AND status = 'scheduled'
+RETURNING *;
+
 -- name: CreateAppointmentSeries :one
 INSERT INTO appointment_series (
     id, tenant_id, professional_user_id, patient_id,

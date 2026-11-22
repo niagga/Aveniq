@@ -53,10 +53,42 @@ func TestScheduleSchema(t *testing.T) {
 
 	start := time.Date(2026, 11, 16, 15, 0, 0, 0, time.UTC)
 
+	reschedule := func(ctx context.Context, tenantID, appointmentID string, start time.Time) error {
+		return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				UPDATE appointments
+				SET starts_at = $2, ends_at = $3, updated_at = now()
+				WHERE id = $1 AND status = 'scheduled'`,
+				appointmentID, start, start.Add(45*time.Minute))
+			return err
+		})
+	}
+
+	firstID := func(ctx context.Context, tenantID string) (string, error) {
+		var id string
+		err := withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+			return app.QueryRow(ctx, `SELECT id FROM appointments WHERE tenant_id = $1 LIMIT 1`, tenantID).Scan(&id)
+		})
+		return id, err
+	}
+
 	t.Run("the application role can write appointments", func(t *testing.T) {
 		if err := insert(ctx, scratchTenantA, users[scratchTenantA], patients[scratchTenantA], start); err != nil {
 			t.Fatalf("cannot insert an appointment: %v — default privileges did not reach 0009", err)
 		}
+	})
+
+	t.Run("rescheduling into an occupied interval is refused", func(t *testing.T) {
+		at := start.Add(6 * time.Hour)
+		if err := insert(ctx, scratchTenantA, users[scratchTenantA], patients[scratchTenantA], at); err != nil {
+			t.Fatalf("second slot: %v", err)
+		}
+		id, err := firstID(ctx, scratchTenantA)
+		if err != nil {
+			t.Fatalf("first id: %v", err)
+		}
+		err = reschedule(ctx, scratchTenantA, id, at.Add(15*time.Minute))
+		expectCode(t, err, "23P01", "reschedule into overlap")
 	})
 
 	t.Run("overlapping live slots of the same professional are refused", func(t *testing.T) {

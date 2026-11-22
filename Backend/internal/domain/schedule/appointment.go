@@ -71,18 +71,8 @@ func NewAppointment(id AppointmentID, tenantID tenant.ID, draft AppointmentDraft
 
 	starts := draft.StartsAt.UTC()
 	ends := draft.EndsAt.UTC()
-	if starts.IsZero() {
-		return Appointment{}, &ValidationError{Field: "starts_at", Message: "must not be empty"}
-	}
-	if !ends.After(starts) {
-		return Appointment{}, &ValidationError{Field: "ends_at", Message: "must be after starts_at"}
-	}
-	duration := ends.Sub(starts)
-	if duration < minDuration {
-		return Appointment{}, &ValidationError{Field: "ends_at", Message: "the slot is shorter than 5 minutes"}
-	}
-	if duration > maxDuration {
-		return Appointment{}, &ValidationError{Field: "ends_at", Message: "the slot is longer than 8 hours"}
+	if err := validateInterval(starts, ends); err != nil {
+		return Appointment{}, err
 	}
 
 	return Appointment{
@@ -165,6 +155,57 @@ func (a Appointment) Cancel(now time.Time) (Appointment, error) {
 	a.Status = StatusCancelled
 	a.UpdatedAt = now.UTC()
 	return a, nil
+}
+
+// Reschedule moves a live slot to another interval. Only scheduled slots move; attended and
+// cancelled ones are frozen.
+type ReschedulePatch struct {
+	StartsAt time.Time
+	EndsAt   time.Time
+	Modality Modality // when empty the current modality is kept
+	Notes    *string  // when nil the current notes are kept
+}
+
+// Reschedule applies a new interval (and optionally modality or notes) to a scheduled slot.
+func (a Appointment) Reschedule(patch ReschedulePatch, now time.Time) (Appointment, error) {
+	if a.Status != StatusScheduled {
+		return Appointment{}, ErrInvalidTransition
+	}
+	starts := patch.StartsAt.UTC()
+	ends := patch.EndsAt.UTC()
+	if err := validateInterval(starts, ends); err != nil {
+		return Appointment{}, err
+	}
+	a.StartsAt = starts
+	a.EndsAt = ends
+	if patch.Modality != "" {
+		if !patch.Modality.Valid() {
+			return Appointment{}, &ValidationError{Field: "modality", Message: "must be online or presencial"}
+		}
+		a.Modality = patch.Modality
+	}
+	if patch.Notes != nil {
+		a.Notes = sanitizeNotes(patch.Notes)
+	}
+	a.UpdatedAt = now.UTC()
+	return a, nil
+}
+
+func validateInterval(starts, ends time.Time) error {
+	if starts.IsZero() {
+		return &ValidationError{Field: "starts_at", Message: "must not be empty"}
+	}
+	if !ends.After(starts) {
+		return &ValidationError{Field: "ends_at", Message: "must be after starts_at"}
+	}
+	duration := ends.Sub(starts)
+	if duration < minDuration {
+		return &ValidationError{Field: "ends_at", Message: "the slot is shorter than 5 minutes"}
+	}
+	if duration > maxDuration {
+		return &ValidationError{Field: "ends_at", Message: "the slot is longer than 8 hours"}
+	}
+	return nil
 }
 
 func sanitizeNotes(value *string) *string {

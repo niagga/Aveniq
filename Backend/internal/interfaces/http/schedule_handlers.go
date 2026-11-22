@@ -73,6 +73,7 @@ func toSeriesBody(view scheduleapp.SeriesView) seriesBody {
 type scheduleHandlers struct {
 	create       *scheduleapp.CreateAppointmentUseCase
 	list         *scheduleapp.ListAppointmentsUseCase
+	reschedule   *scheduleapp.RescheduleAppointmentUseCase
 	attend       *scheduleapp.AttendAppointmentUseCase
 	cancel       *scheduleapp.CancelAppointmentUseCase
 	createSeries *scheduleapp.CreateSeriesUseCase
@@ -85,6 +86,7 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 	handlers := &scheduleHandlers{
 		create:       deps.CreateAppointment,
 		list:         deps.ListAppointments,
+		reschedule:   deps.RescheduleAppointment,
 		attend:       deps.AttendAppointment,
 		cancel:       deps.CancelAppointment,
 		createSeries: deps.CreateSeries,
@@ -119,6 +121,18 @@ func registerScheduleRoutes(api huma.API, deps Deps) {
 		Security:      secured,
 		Middlewares:   writeGuard,
 	}, handlers.createHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "reschedule-appointment",
+		Method:        http.MethodPost,
+		Path:          APIPrefix + "/appointments/{id}/reschedule",
+		Summary:       "Reschedule an appointment",
+		Description:   "Moves a scheduled appointment to a new interval. Attended and cancelled slots cannot move. Overlap is refused.",
+		Tags:          []string{"schedule"},
+		DefaultStatus: http.StatusOK,
+		Security:      secured,
+		Middlewares:   writeGuard,
+	}, handlers.rescheduleHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "attend-appointment",
@@ -191,6 +205,18 @@ type listAppointmentsOutput struct {
 
 type appointmentIDInput struct {
 	ID string `path:"id" format:"uuid"`
+}
+
+type rescheduleAppointmentInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body rescheduleAppointmentBody
+}
+
+type rescheduleAppointmentBody struct {
+	StartsAt string  `json:"startsAt" format:"date-time"`
+	EndsAt   string  `json:"endsAt" format:"date-time"`
+	Modality string  `json:"modality,omitempty" enum:"online,presencial"`
+	Notes    *string `json:"notes,omitempty"`
 }
 
 type appointmentOutput struct {
@@ -271,6 +297,35 @@ func (h *scheduleHandlers) createHandler(ctx context.Context, in *createAppointm
 		EndsAt:             ends,
 		Modality:           in.Body.Modality,
 		Notes:              in.Body.Notes,
+	})
+	if err != nil {
+		return nil, problem(ctx, h.logger, err)
+	}
+	out := &appointmentOutput{}
+	out.Body = toAppointmentBody(view)
+	return out, nil
+}
+
+func (h *scheduleHandlers) rescheduleHandler(ctx context.Context, in *rescheduleAppointmentInput) (*appointmentOutput, error) {
+	starts, err := time.Parse(time.RFC3339, in.Body.StartsAt)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity("startsAt must be an RFC 3339 timestamp")
+	}
+	ends, err := time.Parse(time.RFC3339, in.Body.EndsAt)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity("endsAt must be an RFC 3339 timestamp")
+	}
+
+	who := identityOf(ctx)
+	view, err := h.reschedule.Execute(ctx, scheduleapp.RescheduleAppointmentInput{
+		TenantID: who.TenantID,
+		ActorID:  who.UserID,
+		Role:     who.Role,
+		ID:       in.ID,
+		StartsAt: starts,
+		EndsAt:   ends,
+		Modality: in.Body.Modality,
+		Notes:    in.Body.Notes,
 	})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)

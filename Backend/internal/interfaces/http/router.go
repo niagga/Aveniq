@@ -90,6 +90,7 @@ type Deps struct {
 	ListAppointments       *scheduleapp.ListAppointmentsUseCase
 	AttendAppointment      *scheduleapp.AttendAppointmentUseCase
 	CancelAppointment      *scheduleapp.CancelAppointmentUseCase
+	RescheduleAppointment  *scheduleapp.RescheduleAppointmentUseCase
 	CreateSeries           *scheduleapp.CreateSeriesUseCase
 	UpdateSeries           *scheduleapp.UpdateSeriesUseCase
 	CancelSeries           *scheduleapp.CancelSeriesUseCase

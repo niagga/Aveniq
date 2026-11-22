@@ -61,19 +61,38 @@ func (i *fakeIDs) NewID() string {
 
 type fakeSlots struct {
 	created []schedule.Appointment
+	byID    map[schedule.AppointmentID]schedule.Appointment
+}
+
+func (f *fakeSlots) store(slot schedule.Appointment) {
+	if f.byID == nil {
+		f.byID = map[schedule.AppointmentID]schedule.Appointment{}
+	}
+	f.byID[slot.ID] = slot
 }
 
 func (f *fakeSlots) CreateAppointment(_ context.Context, slot schedule.Appointment) error {
 	f.created = append(f.created, slot)
+	f.store(slot)
 	return nil
 }
-func (f *fakeSlots) AppointmentByID(context.Context, schedule.AppointmentID) (schedule.Appointment, error) {
+func (f *fakeSlots) AppointmentByID(_ context.Context, id schedule.AppointmentID) (schedule.Appointment, error) {
+	if slot, ok := f.byID[id]; ok {
+		return slot, nil
+	}
 	return schedule.Appointment{}, schedule.ErrNotFound
 }
 func (f *fakeSlots) ListAppointments(context.Context, port.AppointmentFilter) ([]schedule.Appointment, error) {
 	return f.created, nil
 }
-func (f *fakeSlots) SaveAppointment(context.Context, schedule.Appointment) error { return nil }
+func (f *fakeSlots) SaveAppointment(_ context.Context, slot schedule.Appointment) error {
+	f.store(slot)
+	return nil
+}
+func (f *fakeSlots) RescheduleAppointment(_ context.Context, slot schedule.Appointment) error {
+	f.store(slot)
+	return nil
+}
 func (f *fakeSlots) CreateSeries(context.Context, schedule.Series) error         { return nil }
 func (f *fakeSlots) SeriesByID(context.Context, schedule.SeriesID) (schedule.Series, error) {
 	return schedule.Series{}, schedule.ErrNotFound
@@ -97,6 +116,58 @@ func (f fakeTenants) BySlug(context.Context, string) (tenant.Tenant, error) {
 func (f fakeTenants) ByID(context.Context, tenant.ID) (tenant.Tenant, error) { return f.row, nil }
 func (f fakeTenants) List(context.Context, int32, int32) ([]tenant.Tenant, error) {
 	return nil, nil
+}
+
+type fakeAudit struct {
+	events []port.AuditEvent
+}
+
+func (f *fakeAudit) Record(_ context.Context, event port.AuditEvent) error {
+	f.events = append(f.events, event)
+	return nil
+}
+
+func TestRescheduleWritesAuditTrail(t *testing.T) {
+	now := time.Date(2026, 11, 16, 15, 0, 0, 0, time.UTC)
+	slots := &fakeSlots{}
+	audit := &fakeAudit{}
+	slot, err := schedule.NewAppointment(
+		schedule.AppointmentID("11111111-1111-1111-1111-111111111111"),
+		tenant.ID("22222222-2222-2222-2222-222222222222"),
+		schedule.AppointmentDraft{
+			ProfessionalUserID: "33333333-3333-3333-3333-333333333333",
+			PatientID:          "44444444-4444-4444-4444-444444444444",
+			StartsAt:           now,
+			EndsAt:             now.Add(45 * time.Minute),
+			Modality:           schedule.ModalityPresencial,
+		},
+		now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slots.store(slot)
+
+	uc := scheduleapp.NewRescheduleAppointmentUseCase(slots, fakeScope{}, fakeClock{now}, audit)
+	later := now.Add(24 * time.Hour)
+	view, err := uc.Execute(context.Background(), scheduleapp.RescheduleAppointmentInput{
+		TenantID: "22222222-2222-2222-2222-222222222222",
+		ActorID:  "33333333-3333-3333-3333-333333333333",
+		Role:     "owner",
+		ID:       string(slot.ID),
+		StartsAt: later,
+		EndsAt:   later.Add(45 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	wantStart := later.UTC().Format(time.RFC3339)
+	if view.StartsAt != wantStart {
+		t.Fatalf("starts = %s, want %s", view.StartsAt, wantStart)
+	}
+	if len(audit.events) != 1 || audit.events[0].Action != "appointment.rescheduled" {
+		t.Fatalf("audit = %+v, want appointment.rescheduled", audit.events)
+	}
 }
 
 func TestCreateAppointmentPersistsAScheduledSlot(t *testing.T) {

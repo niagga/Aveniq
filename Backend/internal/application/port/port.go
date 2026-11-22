@@ -233,6 +233,8 @@ type ScheduleRepository interface {
 	AppointmentByID(ctx context.Context, id schedule.AppointmentID) (schedule.Appointment, error)
 	ListAppointments(ctx context.Context, filter AppointmentFilter) ([]schedule.Appointment, error)
 	SaveAppointment(ctx context.Context, slot schedule.Appointment) error
+	// RescheduleAppointment moves a scheduled slot to a new interval. Overlap maps to schedule.ErrOverlap.
+	RescheduleAppointment(ctx context.Context, slot schedule.Appointment) error
 
 	CreateSeries(ctx context.Context, series schedule.Series) error
 	SeriesByID(ctx context.Context, id schedule.SeriesID) (schedule.Series, error)

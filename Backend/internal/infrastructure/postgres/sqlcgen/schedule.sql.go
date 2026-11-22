@@ -400,3 +400,51 @@ func (q *Queries) UpdateAppointmentStatus(ctx context.Context, arg UpdateAppoint
 	)
 	return i, err
 }
+
+const rescheduleAppointment = `-- name: RescheduleAppointment :one
+UPDATE appointments
+SET starts_at = $2,
+    ends_at = $3,
+    modality = $4,
+    notes = $5,
+    updated_at = $6
+WHERE id = $1
+  AND status = 'scheduled'
+RETURNING id, tenant_id, professional_user_id, patient_id, series_id, starts_at, ends_at, status, notes, created_at, updated_at, modality
+`
+
+type RescheduleAppointmentParams struct {
+	ID        pgtype.UUID
+	StartsAt  time.Time
+	EndsAt    time.Time
+	Modality  string
+	Notes     *string
+	UpdatedAt time.Time
+}
+
+func (q *Queries) RescheduleAppointment(ctx context.Context, arg RescheduleAppointmentParams) (Appointment, error) {
+	row := q.db.QueryRow(ctx, rescheduleAppointment,
+		arg.ID,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.Modality,
+		arg.Notes,
+		arg.UpdatedAt,
+	)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProfessionalUserID,
+		&i.PatientID,
+		&i.SeriesID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Status,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Modality,
+	)
+	return i, err
+}

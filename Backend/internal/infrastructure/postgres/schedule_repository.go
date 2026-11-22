@@ -110,6 +110,27 @@ func (r *ScheduleRepository) ListAppointments(ctx context.Context, filter port.A
 	return slots, nil
 }
 
+// RescheduleAppointment moves a scheduled slot. Overlap is 23P01 from appointments_no_overlap.
+func (r *ScheduleRepository) RescheduleAppointment(ctx context.Context, slot schedule.Appointment) error {
+	queries, err := r.scoped(ctx)
+	if err != nil {
+		return err
+	}
+	parsed, err := parseScheduleUUID(string(slot.ID), "id")
+	if err != nil {
+		return err
+	}
+	_, err = queries.RescheduleAppointment(ctx, sqlcgen.RescheduleAppointmentParams{
+		ID:        parsed,
+		StartsAt:  slot.StartsAt,
+		EndsAt:    slot.EndsAt,
+		Modality:  string(slot.Modality),
+		Notes:     slot.Notes,
+		UpdatedAt: slot.UpdatedAt,
+	})
+	return translateScheduleError(err)
+}
+
 // SaveAppointment writes a status change.
 func (r *ScheduleRepository) SaveAppointment(ctx context.Context, slot schedule.Appointment) error {
 	queries, err := r.scoped(ctx)

@@ -185,6 +185,80 @@ func (uc *AttendAppointmentUseCase) Execute(ctx context.Context, in TransitionIn
 	})
 }
 
+// RescheduleAppointmentInput moves one scheduled slot.
+type RescheduleAppointmentInput struct {
+	TenantID string
+	ActorID  string
+	Role     string
+	ID       string
+	StartsAt time.Time
+	EndsAt   time.Time
+	Modality string
+	Notes    *string
+}
+
+// RescheduleAppointmentUseCase changes when a scheduled slot happens and records the move.
+type RescheduleAppointmentUseCase struct {
+	slots port.ScheduleRepository
+	scope port.TenantScope
+	clock port.Clock
+	audit port.AuditLog
+}
+
+// NewRescheduleAppointmentUseCase wires the use case.
+func NewRescheduleAppointmentUseCase(
+	slots port.ScheduleRepository,
+	scope port.TenantScope,
+	clock port.Clock,
+	audit port.AuditLog,
+) *RescheduleAppointmentUseCase {
+	return &RescheduleAppointmentUseCase{slots: slots, scope: scope, clock: clock, audit: audit}
+}
+
+// Execute reschedules the slot. Overlap is refused by the database.
+func (uc *RescheduleAppointmentUseCase) Execute(ctx context.Context, in RescheduleAppointmentInput) (AppointmentView, error) {
+	who := careapp.Viewer(in.ActorID, in.Role)
+	var modality schedule.Modality
+	if in.Modality != "" {
+		modality = schedule.Modality(in.Modality)
+	}
+
+	var view AppointmentView
+	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
+		slot, err := ownedSlot(ctx, uc.slots, who, in.ID)
+		if err != nil {
+			return err
+		}
+		updated, err := slot.Reschedule(schedule.ReschedulePatch{
+			StartsAt: in.StartsAt,
+			EndsAt:   in.EndsAt,
+			Modality: modality,
+			Notes:    in.Notes,
+		}, uc.clock.Now())
+		if err != nil {
+			return err
+		}
+		if err := uc.slots.RescheduleAppointment(ctx, updated); err != nil {
+			return err
+		}
+		if err := uc.audit.Record(ctx, port.AuditEvent{
+			TenantID: in.TenantID,
+			ActorID:  in.ActorID,
+			Action:   "appointment.rescheduled",
+			Entity:   "appointment",
+			EntityID: in.ID,
+		}); err != nil {
+			return err
+		}
+		view = toAppointmentView(updated)
+		return nil
+	})
+	if err != nil {
+		return AppointmentView{}, err
+	}
+	return view, nil
+}
+
 // CancelAppointmentUseCase frees a scheduled slot.
 type CancelAppointmentUseCase struct {
 	slots port.ScheduleRepository

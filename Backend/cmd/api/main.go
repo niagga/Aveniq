@@ -177,6 +177,7 @@ func run() error {
 		ListAppointments:       scheduleapp.NewListAppointmentsUseCase(scheduleRepository, transactor),
 		AttendAppointment:      scheduleapp.NewAttendAppointmentUseCase(scheduleRepository, transactor, clock.New()),
 		CancelAppointment:      scheduleapp.NewCancelAppointmentUseCase(scheduleRepository, transactor, clock.New()),
+		RescheduleAppointment:  scheduleapp.NewRescheduleAppointmentUseCase(scheduleRepository, transactor, clock.New(), auditLog),
 		CreateSeries:           scheduleapp.NewCreateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}, careAccess),
 		AssignTreating:         careapp.NewAssignTreatingUseCase(patientRepository, userRepository, transactor, auditLog, clock.New(), careAccess),
 		GrantClinical:          careapp.NewGrantClinicalUseCase(clinicalGrantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),

@@ -51,6 +51,56 @@ func TestNewAppointmentRequiresAKnownModality(t *testing.T) {
 	}
 }
 
+func TestRescheduleMovesAScheduledSlot(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	slot, err := schedule.NewAppointment("apt-1", tenant.ID("tenant-1"), schedule.AppointmentDraft{
+		ProfessionalUserID: "pro-1",
+		PatientID:          "pat-1",
+		StartsAt:           now,
+		EndsAt:             now.Add(45 * time.Minute),
+		Modality:           schedule.ModalityPresencial,
+	}, now)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	later := now.Add(24 * time.Hour)
+	moved, err := slot.Reschedule(schedule.ReschedulePatch{
+		StartsAt: later,
+		EndsAt:   later.Add(time.Hour),
+	}, later)
+	if err != nil {
+		t.Fatalf("reschedule: %v", err)
+	}
+	if !moved.StartsAt.Equal(later) {
+		t.Fatalf("starts = %v, want %v", moved.StartsAt, later)
+	}
+}
+
+func TestRescheduleRefusesAttendedSlots(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	slot, err := schedule.NewAppointment("apt-1", tenant.ID("tenant-1"), schedule.AppointmentDraft{
+		ProfessionalUserID: "pro-1",
+		PatientID:          "pat-1",
+		StartsAt:           now,
+		EndsAt:             now.Add(45 * time.Minute),
+		Modality:           schedule.ModalityPresencial,
+	}, now)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	attended, err := slot.Attend(now)
+	if err != nil {
+		t.Fatalf("attend: %v", err)
+	}
+	if _, err := attended.Reschedule(schedule.ReschedulePatch{
+		StartsAt: now.Add(time.Hour),
+		EndsAt:   now.Add(2 * time.Hour),
+	}, now); !errors.Is(err, schedule.ErrInvalidTransition) {
+		t.Fatalf("reschedule attended: %v, want %v", err, schedule.ErrInvalidTransition)
+	}
+}
+
 func TestAttendThenCancelIsRefused(t *testing.T) {
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	slot, err := schedule.NewAppointment("apt-1", tenant.ID("tenant-1"), schedule.AppointmentDraft{
