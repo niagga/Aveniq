@@ -156,7 +156,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | `6f08cb5` |
 | T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | `d4b0e15` |
 | T58 | S2 | E7 | API de reportes: facturado (emitido, no anulado) y atendido sin facturar (valuado con el tarifario vigente a la fecha del turno; sin valor se cuenta aparte). Totales por moneda, sin conversión. Rango en zona horaria del consultorio. Cortes por profesional, cobertura, mutual, modalidad y período. Alcance "solo lo mío" para el profesional, sin lista de comprobantes | inline | `28f2e68` |
-| T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | — |
+| T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | `74f751a` |
 | T60 | S2 | E7 | Informes guardados compartidos dentro del consultorio, con filtros, y exportación CSV | inline | — |
 | T61 | S2, S5 | E7 | E2E de E7 y cierre de E7 | inline | — |
 | T62 | S25 | E8 | Base de UI: `Modal` y `FormModal` (`<dialog>` nativo con blur, Esc, foco, aviso de cambios sin guardar, hoja a pantalla completa en celular), `FilterBar`, control segmentado y cabecera con acción primaria. `ConfirmDialog` pasa a usar el `Modal` | inline | — |
@@ -2521,4 +2521,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Reglas que inventé (a revisar).** (1) El corte por defecto es cobertura. (2) Los comprobantes sin cobertura registrada (cargos sueltos y comprobantes anteriores a la foto) se rotulan "Sin cobertura registrada" y los de mutual sin nombre "Particular o sin mutual", en vez de una fila en blanco. (3) Un grupo sin importe en la moneda mostrada no se dibuja.
 - **Preguntas abiertas.** Ninguna.
 - **Verificación.** `tsc --noEmit` sin errores en `src/` (en el repo hay errores viejos en `.next/types`, un caché de rutas anteriores a `(private)`, que no vienen de este cambio). Capturas con datos reales para dueño, profesional (120.000 propios contra 136.502,50 del consultorio), contador y recepción (sin bloque). Capturas con respuestas simuladas solo en el navegador para dos monedas, pendiente, sesiones sin tarifa, cambio de corte, ancho de celular y tema oscuro. `pnpm e2e`: 46 de 46 en verde, con la API de 8080 reiniciada (sirve la ruta de T58). No se agregó un e2e propio: lo escribe T61 junto con los datos que necesita. No corrí `next build`, porque comparte la carpeta `.next` con el `pnpm dev` que está corriendo.
-- **Commit.** Pendiente: la fila de T59 queda en `—` hasta que lo pidas.
+- **Commit.** `74f751a` (`feat: add billing figures and charts to the dashboard (E7 T59)`). El registro del hash va en un commit aparte.
