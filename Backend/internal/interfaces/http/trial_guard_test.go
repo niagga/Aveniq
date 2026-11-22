@@ -102,3 +102,38 @@ func TestTheGuardFailsClosedWhenThePracticeCannotBeRead(t *testing.T) {
 		t.Fatalf("unknown practice write = %d %v, want 503 trial_unavailable", status, body)
 	}
 }
+
+// TestEveryRoleCanReadTheStateOfItsPractice: L59. The accountant and the other roles without
+// tenant:read need to know that the trial ended, so the screen stops offering writes. The
+// answer is the server's, on its own clock, and names nothing the role could not see.
+func TestEveryRoleCanReadTheStateOfItsPractice(t *testing.T) {
+	h := newHarness(t)
+	expired := h.expiredPractice(t)
+	active := h.tenantID(t, "practica-a")
+
+	roles := []iam.RoleCode{iam.RoleOwner, iam.RoleAdmin, iam.RoleProfessional, iam.RoleAssistant, iam.RoleAccountant}
+	for _, role := range roles {
+		status, body := h.do(t, http.MethodGet, "/api/v1/practice/status", h.token(t, expired, role), nil)
+		if status != http.StatusOK || body["expired"] != true || body["status"] != "trial" {
+			t.Errorf("%s of the expired practice = %d %v, want 200 expired", role, status, body)
+		}
+		status, body = h.do(t, http.MethodGet, "/api/v1/practice/status", h.token(t, active, role), nil)
+		if status != http.StatusOK || body["expired"] != false {
+			t.Errorf("%s of the active practice = %d %v, want 200 not expired", role, status, body)
+		}
+	}
+
+	_, body := h.do(t, http.MethodGet, "/api/v1/practice/status", h.token(t, expired, iam.RoleAccountant), nil)
+	for _, leaked := range []string{"id", "slug", "name", "createdAt"} {
+		if _, found := body[leaked]; found {
+			t.Errorf("the status must not carry %q: it belongs to tenant:read", leaked)
+		}
+	}
+	if body["trialEndsAt"] == "" || body["timezone"] == "" {
+		t.Errorf("the status must carry the trial end and the time zone: %v", body)
+	}
+
+	if status, _ := h.do(t, http.MethodGet, "/api/v1/practice/status", "", nil); status != http.StatusUnauthorized {
+		t.Errorf("without a token = %d, want 401", status)
+	}
+}

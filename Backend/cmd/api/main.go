@@ -149,6 +149,7 @@ func run() error {
 		RateLimiter:            redisx.NewRateLimiter(redisClient),
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenantRepository),
 		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenantRepository, clock.New()),
+		PracticeStatus:         tenantapp.NewPracticeStatusUseCase(tenantRepository, clock.New()),
 		Login:                  loginUseCase,
 		CreatePatient:          patientapp.NewCreateUseCase(patientRepository, insurerRepository, patientCatalog, transactor, clock.New(), idgen.UUIDGenerator{}),
 		UpdatePatient:          patientapp.NewUpdateUseCase(patientRepository, insurerRepository, patientCatalog, transactor, clock.New(), careAccess),

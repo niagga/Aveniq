@@ -333,6 +333,7 @@ func newHarness(t *testing.T) *harness {
 		RateLimiter:            limiter,
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
 		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenants, clock),
+		PracticeStatus:         tenantapp.NewPracticeStatusUseCase(tenants, clock),
 		CreatePatient:          patientapp.NewCreateUseCase(repo, insurers, catalog, scope, clock, uuidIDs{}),
 		UpdatePatient:          patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
 		ListInsurers:           insurerapp.NewListUseCase(insurers, scope),

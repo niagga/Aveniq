@@ -40,8 +40,8 @@ import { Segmented } from "@/shared/ui/segmented";
 export function ReportsScreen() {
   const role = getSessionUser()?.role;
   const ownOnly = role === "professional";
-  const { practice } = usePractice();
-  const zone = practice?.timezone || DEFAULT_ZONE;
+  const { status } = usePractice();
+  const zone = status?.timezone || DEFAULT_ZONE;
   const today = useMemo(() => civilToday(zone), [zone]);
   const writesLocked = useWritesLocked();
   const prefix = useId();

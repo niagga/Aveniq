@@ -175,6 +175,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T75 | S25 | E8 | Pacientes: crear y editar en popup y página de ficha `/patients/[id]` con pestañas | inline | — |
 | T76 | S25 | E8 | Facturación: "Emitir comprobante" y detalle en popup, barra de filtros fija arriba y tarjeta "Sin facturar" | inline | — |
 | T77 | S25, S5 | E8 | Reescribir los E2E por fatia, suite completa y cierre de E8 | inline | — |
+| T78 | S5 | E5 | E5.1 (L59): el estado del trial llega a todo usuario autenticado (`GET /api/v1/practice/status`), de modo que el contador y los demás roles sin `tenant:read` ven el banner y los formularios deshabilitados | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2547,3 +2548,13 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Cierre de E7.** T57 (permiso), T58 (API), T59 (cifras en el inicio), T60 (informes guardados y CSV) y T61 (E2E) están hechos. Pendiente heredado para E8: el menú de celular muestra solo 4 secciones y "Informes" no entra ahí; lo resuelve T63 (barra con "Más").
 - **Siguiente.** E5.1 (L58 aceptación de invitaciones, L59 aviso del contador) según el orden de L61, y luego E8.
 - **Commit.** `796e6c2` (`test: add E7 closing e2e for report figures and role scope (E7 T61)`). El registro del hash va en un commit aparte.
+
+**L75 — T78: el estado del trial llega a todo usuario autenticado (E5.1, aviso del contador)**
+
+- **El hueco.** El frontend de T47 leía `GET /tenants` para saber si el trial había vencido, y ese permiso (`tenant:read`) no lo tiene el contador: ni el contador ni ningún rol sin él veía el banner ni los formularios deshabilitados, y solo se enteraba por un 403 después de escribir.
+- **Decisión (del dueño).** Mostrarlo a todo usuario autenticado, también recepción y contador. El estado del trial no es un dato del consultorio sino una condición de uso que cualquiera que trabaje ahí necesita para no perder lo que escribió.
+- **Ruta nueva `GET /api/v1/practice/status`.** Solo exige estar autenticado (sin permiso). Devuelve `status`, `timezone`, `trialEndsAt` y `expired`, calculado en el servidor con su reloj y la misma regla de dominio que el guard (`TrialExpired`). No lleva id, slug, nombre ni fecha de alta: eso sigue siendo de `tenant:read`. Caso de uso `PracticeStatusUseCase` en `application/tenant`.
+- **Frontend.** `PracticeProvider` lee el estado para todos y `GET /tenants` solo para quien puede (lo que ya mostraba el nombre del consultorio). `expired` sale del estado del servidor; el shell, el inicio y la pantalla de informes toman de ahí la zona horaria y el aviso. `schema.d.ts` regenerado.
+- **Seed.** El consultorio vencido tiene ahora un contador, `contador-vencido@aveniq.local`, con la misma contraseña de desarrollo que las demás cuentas, para poder probarlo.
+- **Tests.** HTTP `TestEveryRoleCanReadTheStateOfItsPractice`: los 5 roles, con consultorio vencido y con consultorio vigente, comprobando que no se filtran campos de `tenant:read` y que sin token responde 401. E2E (`e5-trial`): el contador del consultorio vencido llega a facturación, ve el banner y tiene "Concepto" y "Emitir comprobante" deshabilitados. El contador del consultorio demo (dentro del trial) sigue emitiendo en `e4-billing`, sin banner.
+- **Commit.** Pendiente.

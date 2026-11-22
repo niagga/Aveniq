@@ -791,6 +791,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/practice/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the state of the caller's practice
+         * @description Status, time zone and trial of the practice the session belongs to, for every role. It names no one and holds nothing the roles without tenant:read should not see.
+         */
+        get: operations["get-practice-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/billing": {
         parameters: {
             query?: never;
@@ -1759,6 +1779,28 @@ export interface components {
             /** Format: uuid */
             professionalId: string | null;
             professionalName: string | null;
+        };
+        PracticeStatusBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PracticeStatusBody.json
+             */
+            readonly $schema?: string;
+            /** @description True when the practice is on trial and the trial has ended: it reads, it does not write. Decided on the server's clock. */
+            expired: boolean;
+            /**
+             * @description Lifecycle state.
+             * @enum {string}
+             */
+            status: "trial" | "active" | "suspended";
+            /** @description IANA time zone in which the practice reads its days. */
+            timezone: string;
+            /**
+             * Format: date-time
+             * @description End of the trial, RFC 3339 in UTC.
+             */
+            trialEndsAt: string;
         };
         PreviewBody: {
             /**
@@ -4097,6 +4139,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TreatingBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-practice-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeStatusBody"];
                 };
             };
             /** @description Error */

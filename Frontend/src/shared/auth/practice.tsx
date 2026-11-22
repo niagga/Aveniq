@@ -3,32 +3,54 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { Tenant } from "@/entities/tenant/model";
+import type { components } from "@/shared/api/schema";
 import { trialExpired } from "@/entities/tenant/trial";
 import { canReadPractice } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
 
+/** The state of the practice every role may read (GET /practice/status). */
+export type PracticeStatus = components["schemas"]["PracticeStatusBody"];
+
 type PracticeState = {
+  /** The practice as tenant:read roles see it, with its name and slug. Null for the others. */
   practice: Tenant | null;
-  /** True when the API says this practice is on trial and trialEndsAt has passed. */
+  /** The trial and the time zone of the practice, for every role. Null until it is read. */
+  status: PracticeStatus | null;
+  /** True when the practice is on trial and the trial has ended. */
   expired: boolean;
 };
 
-const PracticeContext = createContext<PracticeState>({ practice: null, expired: false });
+const PracticeContext = createContext<PracticeState>({ practice: null, status: null, expired: false });
 
 /**
  * Loads the current practice so authenticated screens can show the trial banner
  * and stop offering writes the API will refuse.
  *
- * GET /tenants needs tenant:read. The accountant does not hold it, so this
- * provider stays silent there: billing forms stay enabled until a write comes
- * back 403 trial_expired. That gap is recorded in L59; closing it needs the
- * trial fields on a route the accountant can read.
+ * Two reads, because two things are true. The state of the practice (trial, time zone, and
+ * whether the trial ended on the server's clock) is readable by every role, accountant
+ * included: it is what keeps a screen from offering a write that will answer 403 (L59). The
+ * practice itself, with its name and slug, needs tenant:read and is only read by the roles
+ * that hold it.
  */
 export function PracticeProvider({ children }: { children: ReactNode }) {
   const [practice, setPractice] = useState<Tenant | null>(null);
+  const [status, setStatus] = useState<PracticeStatus | null>(null);
   const user = getSessionUser();
   const mayRead = canReadPractice(user?.role);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      const { data, response } = await browserApi.GET("/api/v1/practice/status");
+      if (active && response.ok && data !== undefined) setStatus(data);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.tenantId]);
 
   useEffect(() => {
     if (!mayRead) return;
@@ -48,14 +70,15 @@ export function PracticeProvider({ children }: { children: ReactNode }) {
     };
   }, [mayRead, user?.tenantId]);
 
-  const expired = practice !== null && trialExpired(practice);
-  const value = useMemo(() => ({ practice, expired }), [practice, expired]);
+  // The server's answer wins. If the status could not be read, the practice's own dates give
+  // the same rule for the roles that can read it, as before.
+  const expired = status !== null ? status.expired : practice !== null && trialExpired(practice);
+  const value = useMemo(() => ({ practice, status, expired }), [practice, status, expired]);
 
   return (
     <PracticeContext.Provider value={value}>{children}</PracticeContext.Provider>
   );
 }
-
 /**
  * The current practice, for the shell that shows it.
  *

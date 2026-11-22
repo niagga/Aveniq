@@ -42,6 +42,12 @@ export type Account = { email: string; password: string; name: string };
 export const EXPIRED = {
   tenant: "demo-vencido",
   owner: { email: "vencido@aveniq.local", password: DEMO.password, name: "Demo Vencido" },
+  // The accountant of that practice (L59): no tenant:read, so only the status route tells it.
+  accountant: {
+    email: "contador-vencido@aveniq.local",
+    password: DEMO.password,
+    name: "Demo Contador Vencido",
+  },
 } as const;
 
 /** Signs in as the given account through the product form and waits for the dashboard. */

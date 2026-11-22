@@ -40,8 +40,8 @@ export default function DashboardPage() {
 function Dashboard() {
   const role = getSessionUser()?.role;
   const seesAgenda = canUseAgenda(role);
-  const { practice } = usePractice();
-  const zone = practice?.timezone || DEFAULT_ZONE;
+  const { practice, status } = usePractice();
+  const zone = status?.timezone || DEFAULT_ZONE;
 
   return (
     <>

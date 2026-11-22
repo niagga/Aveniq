@@ -135,3 +135,25 @@ test("the expired practice's billing screen reads the history and offers no issu
     await context.close();
   }
 });
+
+test("the expired practice's accountant is told too, and cannot issue", async ({ browser }) => {
+  // L59: the accountant holds no tenant:read, so it used to find out only from a 403 after
+  // typing. The status route is open to every role, and the shell and the forms read it.
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await signInAs(page, EXPIRED.accountant, EXPIRED.tenant);
+
+    // Positive control: the accountant lands on billing, which loaded for it.
+    await expect(page).toHaveURL(/\/facturacion$/);
+    await expect(page.getByRole("heading", { name: "Emitir un comprobante" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await expect(page.getByText(bannerTitle)).toBeVisible();
+    await expect(page.getByLabel("Concepto")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Emitir comprobante" })).toBeDisabled();
+  } finally {
+    await context.close();
+  }
+});

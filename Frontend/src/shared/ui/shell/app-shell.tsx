@@ -104,16 +104,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const user = getSessionUser();
   const visible = SECTIONS.filter((section) => section.allow(user?.role));
-  const { practice, expired } = usePractice();
+  const { status: trial, expired } = usePractice();
   const unbilled = unbilledLabel(useUnbilledCount(canCountUnbilled(user?.role)));
 
   // The trial belongs to the practice, so the shell states it once instead of every screen
   // guessing, and it no longer renders above the rail: it renders inside the content column.
   const trialDaysLeft =
-    practice !== null && practice.status === "trial" && !expired
+    trial !== null && trial.status === "trial" && !expired
       ? Math.max(
           0,
-          Math.ceil((new Date(practice.trialEndsAt).getTime() - Date.now()) / 86_400_000),
+          Math.ceil((new Date(trial.trialEndsAt).getTime() - Date.now()) / 86_400_000),
         )
       : null;
   const trialLabel =
@@ -211,9 +211,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="order-1 flex min-w-0 flex-1 flex-col md:order-2">
-        {expired && practice !== null ? (
+        {expired && trial !== null ? (
           <div className="px-6 pt-4 max-md:px-4">
-            <TrialExpiredBanner trialEndsAt={practice.trialEndsAt} />
+            <TrialExpiredBanner trialEndsAt={trial.trialEndsAt} />
           </div>
         ) : trialDaysLeft !== null && trialDaysLeft <= 7 ? (
           <div className="px-6 pt-4 max-md:px-4">

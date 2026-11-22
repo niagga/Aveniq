@@ -70,6 +70,7 @@ type Deps struct {
 	RateLimiter            port.RateLimiter
 	GetTenantByID          *tenantapp.GetByIDUseCase
 	TrialExpired           *tenantapp.TrialExpiredUseCase
+	PracticeStatus         *tenantapp.PracticeStatusUseCase
 	Login                  *authapp.LoginUseCase
 	Refresh                *authapp.RefreshUseCase
 	Logout                 *authapp.LogoutUseCase
@@ -180,6 +181,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerSettlementRoutes(api, deps)
 	registerReportRoutes(api, deps)
 	registerSavedReportRoutes(api, deps)
+	registerPracticeStatusRoutes(api, deps)
 
 	return router
 }

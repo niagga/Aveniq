@@ -108,6 +108,15 @@ WHERE t.slug = 'demo-vencido'
 ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
 SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 
+-- The accountant of the expired practice (L59): holds no tenant:read, so it only learns that the
+-- trial ended from the practice status route, and the E2E checks that its screens say so.
+INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
+SELECT gen_random_uuid(), t.id, 'contador-vencido@aveniq.local', '$PasswordHash', 'Demo Contador Vencido', 'accountant', true, now(), now()
+FROM tenants t
+WHERE t.slug = 'demo-vencido'
+ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
+SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
+
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner', true, now(), now()
 FROM tenants t
@@ -162,7 +171,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Ok "practice '$Slug' and owner '$Email' are in place"
-Write-Ok "practice 'demo-vencido' (trial ended, read-only) and owner 'vencido@aveniq.local' are in place"
+Write-Ok "practice 'demo-vencido' (trial ended, read-only) and owner 'vencido@aveniq.local' and accountant 'contador-vencido@aveniq.local' are in place"
 Write-Host "`nSign in with:" -ForegroundColor Green
 Write-Host "  consultorio  $Slug"
 Write-Host "  email        $Email"
