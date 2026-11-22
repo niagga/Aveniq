@@ -161,7 +161,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T61 | S2, S5 | E7 | E2E de E7 y cierre de E7 | inline | 796e6c2 |
 | T62 | S25 | E8 | Base de UI: `Modal` y `FormModal` (`<dialog>` nativo con blur, Esc, foco, aviso de cambios sin guardar, hoja a pantalla completa en celular), `FilterBar`, control segmentado y cabecera con acción primaria. `ConfirmDialog` pasa a usar el `Modal` | inline | 292269e |
 | T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | 07bcc2d |
-| T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | — |
+| T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | 8b8813d |
 | T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | — |
 | T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | — |
 | T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | — |
@@ -2609,4 +2609,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
   8. Los límites se cuentan en caracteres, no en bytes (`ñ` cuenta uno). Se validan en el dominio y se repiten como `CHECK` en la base.
 - **Verificación.** `go build ./...`, `go vet ./...` y `gofmt` sin observaciones. `go test ./...` con las bases de test en verde (el paquete de Postgres tarda unos 90 s). Los nuevos cubren: el dominio (límites, email, teléfono, host, subdominio), el round-trip y el upsert contra la base real, RLS entre consultorios, el mapa de hosts, los `CHECK` y el `UNIQUE` por host, y las rutas (solo campos publicados, host ambiguo igual a inexistente, rate limit y fail closed, permisos, auditoría, trial vencido, aislamiento). `tsc --noEmit` en el frontend sin errores.
 - **Base de desarrollo.** Migración `0025` aplicada con goose (versión 25). La API de 8080 la reinició el usuario con este build.
-- **Commit.** Ver la fila T64 y el commit de registro.
+- **Commit.** `8b8813d` (`feat: add the public landing backend with tenant profiles and domains (E8 T64)`). El registro del hash va en un commit aparte.
