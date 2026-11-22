@@ -162,7 +162,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T62 | S25 | E8 | Base de UI: `Modal` y `FormModal` (`<dialog>` nativo con blur, Esc, foco, aviso de cambios sin guardar, hoja a pantalla completa en celular), `FilterBar`, control segmentado y cabecera con acción primaria. `ConfirmDialog` pasa a usar el `Modal` | inline | 292269e |
 | T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | 07bcc2d |
 | T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | 8b8813d |
-| T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | — |
+| T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | 814f380 |
 | T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | — |
 | T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | — |
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | — |
@@ -2610,3 +2610,12 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `go build ./...`, `go vet ./...` y `gofmt` sin observaciones. `go test ./...` con las bases de test en verde (el paquete de Postgres tarda unos 90 s). Los nuevos cubren: el dominio (límites, email, teléfono, host, subdominio), el round-trip y el upsert contra la base real, RLS entre consultorios, el mapa de hosts, los `CHECK` y el `UNIQUE` por host, y las rutas (solo campos publicados, host ambiguo igual a inexistente, rate limit y fail closed, permisos, auditoría, trial vencido, aislamiento). `tsc --noEmit` en el frontend sin errores.
 - **Base de desarrollo.** Migración `0025` aplicada con goose (versión 25). La API de 8080 la reinició el usuario con este build.
 - **Commit.** `8b8813d` (`feat: add the public landing backend with tenant profiles and domains (E8 T64)`). El registro del hash va en un commit aparte.
+
+**L80 — T65: landing SSR y login resuelto por el host (`demo.localhost`)**
+
+- **Qué cambia.** `/` deja de ser siempre la portada genérica de Aveniq (T63): en el servidor lee el host (`x-forwarded-host` o `Host`), llama a `GET /api/v1/public/landing?host=` y, si responde 200, muestra la landing del consultorio; si no, la pantalla de plataforma con alta. `/login` usa el mismo fetch: cuando el host resuelve, el slug viene de la landing, el campo Consultorio queda oculto y el encabezado muestra el nombre del consultorio; en un host genérico sigue el campo y `?consultorio=` como respaldo para invitaciones y registro. En desarrollo, `demo.localhost:3000` apunta al consultorio demo del seed (misma regla que el backend con `BASE_DOMAIN=localhost`).
+- **Piezas.** `shared/request-host.ts`, `entities/landing/` (modelo y `fetch-public`), `features/landing/components/` (`PracticeLanding`, `PlatformHome` extraído de la portada vieja), `LoginForm` con `hideTenantField`, E2E en `e8-shell` (localhost vs `demo.localhost`) y `signInAs` que solo rellena Consultorio si el campo está visible.
+- **Decisiones que siguen.** (L68.3) Host sin consultorio o suspendido → API 404 → pantalla Aveniq. La ruta no mira la sesión: quien ya inició sesión y abre `/` ve la landing o la plataforma, no el panel (igual que T63). `API_ORIGIN` en el servidor para el cliente `serverApi`.
+- **Verificación.** `tsc --noEmit` sin errores en `src/` y `e2e/`. `e8-shell`: 7 de 7 en verde (incluye landing en `demo.localhost` y Consultorio oculto en login). README: nota en la tabla de puertos.
+- **Commit.** `814f380` (`feat: add host-resolved practice landing and sign-in (E8 T65)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T66 (pantalla "Mi consultorio" para editar la landing).
