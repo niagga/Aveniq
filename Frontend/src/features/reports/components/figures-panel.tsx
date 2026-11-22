@@ -81,6 +81,9 @@ export function FiguresPanel({ zone, role }: { zone: string; role: string | unde
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/informes" className="text-xs font-medium text-brand hover:underline">
+            Informes y exportación
+          </Link>
           {currencies.length > 1 ? (
             <Segmented
               label="Moneda"

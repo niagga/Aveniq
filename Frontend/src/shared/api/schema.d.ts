@@ -811,6 +811,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the saved reports of the practice
+         * @description The definitions the practice shares, by name. They hold no figures: opening one asks the billing report with the caller's own role.
+         */
+        get: operations["list-saved-reports"];
+        put?: never;
+        /**
+         * Save a report for the whole practice
+         * @description Stores a period, a cut and the filters under a name that is unique in the practice. Everyone who reads reports sees it.
+         */
+        post: operations["create-saved-report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/saved/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a saved report
+         * @description Replaces what the report asks. Only its author, the owner and the admin may change it.
+         */
+        put: operations["update-saved-report"];
+        post?: never;
+        /**
+         * Remove a saved report
+         * @description Only its author, the owner and the admin may remove it. Nothing else is affected: a saved report holds no figures.
+         */
+        delete: operations["delete-saved-report"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/signup": {
         parameters: {
             query?: never;
@@ -1815,6 +1863,86 @@ export interface components {
             pending: components["schemas"]["ReportMoneyBody"][] | null;
             /** Format: int64 */
             unvaluedSessions: number;
+        };
+        SavedReportBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SavedReportBody.json
+             */
+            readonly $schema?: string;
+            /** @description Whether the caller may change or remove it: its author, the owner and the admin. */
+            canManage: boolean;
+            /** @enum {string} */
+            coverage?: "private" | "insurer";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy: string;
+            /** @description Empty right after a write: the list names the author. */
+            createdByName?: string;
+            /** @description First day of a custom period, YYYY-MM-DD. */
+            from?: string;
+            /** @enum {string} */
+            groupBy: "none" | "professional" | "coverage" | "insurer" | "modality" | "week" | "month" | "year";
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            insurerId?: string;
+            insurerName?: string;
+            /** @enum {string} */
+            modality?: "online" | "presencial";
+            name: string;
+            /**
+             * @description A relative period keeps meaning what it says when the report is opened later.
+             * @enum {string}
+             */
+            period: "this-month" | "last-month" | "last-3-months" | "this-year" | "custom";
+            /** Format: uuid */
+            professionalId?: string;
+            professionalName?: string;
+            /** @description Last day of a custom period, YYYY-MM-DD, included. */
+            to?: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SavedReportListOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SavedReportListOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SavedReportBody"][] | null;
+        };
+        SavedReportWriteBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SavedReportWriteBody.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            coverage?: "private" | "insurer";
+            /** @description Only for a custom period. */
+            from?: string;
+            /**
+             * @description Default none.
+             * @enum {string}
+             */
+            groupBy?: "none" | "professional" | "coverage" | "insurer" | "modality" | "week" | "month" | "year";
+            /** Format: uuid */
+            insurerId?: string;
+            /** @enum {string} */
+            modality?: "online" | "presencial";
+            /** @description Unique inside the practice, ignoring case and outer spaces. */
+            name: string;
+            /** @enum {string} */
+            period: "this-month" | "last-month" | "last-3-months" | "this-year" | "custom";
+            /** Format: uuid */
+            professionalId?: string;
+            /** @description Only for a custom period. */
+            to?: string;
         };
         SeriesBody: {
             /**
@@ -4014,6 +4142,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BillingReportBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-saved-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReportListOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-saved-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedReportWriteBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReportBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-saved-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Saved report identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedReportWriteBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReportBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-saved-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Saved report identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

@@ -177,6 +177,23 @@ type RolePermission struct {
 	PermissionCode string
 }
 
+type SavedReport struct {
+	ID                 pgtype.UUID
+	TenantID           pgtype.UUID
+	Name               string
+	Period             string
+	FromDay            pgtype.Date
+	ToDay              pgtype.Date
+	GroupBy            string
+	ProfessionalUserID pgtype.UUID
+	Coverage           *string
+	InsurerID          pgtype.UUID
+	Modality           *string
+	CreatedBy          pgtype.UUID
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type Session struct {
 	ID       pgtype.UUID
 	TenantID pgtype.UUID

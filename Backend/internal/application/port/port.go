@@ -382,6 +382,30 @@ type SettlementFilter struct {
 	Offset    int32
 }
 
+// SavedReportItem is a saved report with the names its list shows: who saved it, and the
+// professional and the mutual it filters by.
+type SavedReportItem struct {
+	Report           report.SavedReport
+	CreatedByName    string
+	ProfessionalName string
+	InsurerName      string
+}
+
+// SavedReportRepository persists the saved reports of a practice. They are shared: every reader
+// of the practice's reports lists the same ones.
+type SavedReportRepository interface {
+	// Create stores a saved report. A name the practice already uses is report.ErrSavedNameTaken.
+	Create(ctx context.Context, saved report.SavedReport) error
+	// ByID reads one saved report of the practice, or report.ErrSavedNotFound.
+	ByID(ctx context.Context, id report.SavedID) (report.SavedReport, error)
+	// List returns every saved report of the practice, by name, with the names the list shows.
+	List(ctx context.Context) ([]SavedReportItem, error)
+	// Update rewrites what a saved report asks. Its author and creation time are not touched.
+	Update(ctx context.Context, saved report.SavedReport) error
+	// Delete removes a saved report, or answers report.ErrSavedNotFound when the practice has none.
+	Delete(ctx context.Context, id report.SavedID) error
+}
+
 // ReportRepository reads the lines the billing report adds up. It only reads: the figures are
 // computed by the report package and the application.
 type ReportRepository interface {

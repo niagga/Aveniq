@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import type { BillingReport, DayRange, ReportDimension } from "@/entities/report/model";
+import {
+  NO_FILTERS,
+  type BillingReport,
+  type DayRange,
+  type ReportDimension,
+  type ReportFilters,
+} from "@/entities/report/model";
 import { browserApi } from "@/shared/api/client";
 
 /**
@@ -16,15 +22,20 @@ export type ReportState =
   | { status: "ready"; report: BillingReport };
 
 /**
- * Reads the report of a range, cut by one dimension. The request is re-made when the range or
- * the cut changes, and an answer that arrives after that is dropped.
+ * Reads the report of a range, cut by one dimension and narrowed by the filters. The request is
+ * re-made when any of them changes, and an answer that arrives after that is dropped.
  *
- * Nothing here filters by professional: the API decides the scope from the role, so a
- * professional's request already comes back narrowed to their own figures.
+ * Nothing here scopes by role: the API decides it, so a professional's request already comes
+ * back narrowed to their own figures whatever filter the screen sends.
  */
-export function useBillingReport(range: DayRange, groupBy: ReportDimension): ReportState {
+export function useBillingReport(
+  range: DayRange,
+  groupBy: ReportDimension,
+  filters: ReportFilters = NO_FILTERS,
+): ReportState {
   const [state, setState] = useState<ReportState>({ status: "loading" });
   const { from, to } = range;
+  const { professionalId, coverage, insurerId, modality } = filters;
 
   useEffect(() => {
     let active = true;
@@ -33,7 +44,18 @@ export function useBillingReport(range: DayRange, groupBy: ReportDimension): Rep
     void (async () => {
       try {
         const { data, response } = await browserApi.GET("/api/v1/reports/billing", {
-          params: { query: { from, to, groupBy } },
+          params: {
+            query: {
+              from,
+              to,
+              groupBy,
+              // An empty filter is left out: the API reads absence as "no filter".
+              ...(professionalId !== "" ? { professionalId } : {}),
+              ...(coverage !== "" ? { coverage } : {}),
+              ...(insurerId !== "" ? { insurerId } : {}),
+              ...(modality !== "" ? { modality } : {}),
+            },
+          },
         });
         if (!active) return;
         if (!response.ok || data === undefined) {
@@ -49,7 +71,7 @@ export function useBillingReport(range: DayRange, groupBy: ReportDimension): Rep
     return () => {
       active = false;
     };
-  }, [from, to, groupBy]);
+  }, [from, to, groupBy, professionalId, coverage, insurerId, modality]);
 
   return state;
 }

@@ -24,6 +24,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
+	reportapp "github.com/niagga/aveniq/backend/internal/application/reports"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
@@ -127,6 +128,10 @@ type Deps struct {
 	IssueSettlement        *billingapp.IssueSettlementUseCase
 	VoidSettlement         *billingapp.VoidSettlementUseCase
 	BillingReport          *billingapp.ReportUseCase
+	ListSavedReports       *reportapp.ListUseCase
+	CreateSavedReport      *reportapp.CreateUseCase
+	UpdateSavedReport      *reportapp.UpdateUseCase
+	DeleteSavedReport      *reportapp.DeleteUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -174,6 +179,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerBillingRoutes(api, deps)
 	registerSettlementRoutes(api, deps)
 	registerReportRoutes(api, deps)
+	registerSavedReportRoutes(api, deps)
 
 	return router
 }

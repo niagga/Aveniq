@@ -22,6 +22,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
+	reportapp "github.com/niagga/aveniq/backend/internal/application/reports"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
 	userapp "github.com/niagga/aveniq/backend/internal/application/user"
@@ -323,6 +324,7 @@ func newHarness(t *testing.T) *harness {
 	limiter := &fakeRateLimiter{hits: map[string]int64{}}
 	vouchers := newFakeBillingRepository(repo)
 	settlements := newFakeSettlementRepository(insurers, repo, vouchers)
+	saved := newFakeSavedReportRepository()
 
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -379,6 +381,10 @@ func newHarness(t *testing.T) *harness {
 		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlements, tariffs, tenants, scope, audit, clock, uuidIDs{}),
 		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlements, scope, audit, clock),
 		BillingReport:          billingapp.NewReportUseCase(newFakeReportRepository(repo, vouchers, insurers), tariffs, tenants, scope),
+		ListSavedReports:       reportapp.NewListUseCase(saved, scope),
+		CreateSavedReport:      reportapp.NewCreateUseCase(saved, scope, clock, uuidIDs{}),
+		UpdateSavedReport:      reportapp.NewUpdateUseCase(saved, scope, clock),
+		DeleteSavedReport:      reportapp.NewDeleteUseCase(saved, scope),
 	})
 
 	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements}

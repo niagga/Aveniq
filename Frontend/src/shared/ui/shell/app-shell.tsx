@@ -13,6 +13,7 @@ import {
   roleLabel,
 } from "@/entities/iam/model";
 import { canManageInsurers } from "@/entities/insurer/model";
+import { canReadReports } from "@/entities/report/model";
 import { canReadTariffs } from "@/entities/tariff/model";
 import { getSessionUser } from "@/shared/auth/session";
 import { usePractice } from "@/shared/auth/practice";
@@ -69,6 +70,12 @@ const SECTIONS: readonly Section[] = [
     label: "Liquidaciones",
     icon: <SettlementsIcon />,
     allow: canReadBilling,
+  },
+  {
+    href: "/informes",
+    label: "Informes",
+    icon: <ReportsIcon />,
+    allow: canReadReports,
   },
   {
     href: "/tarifario",
@@ -286,6 +293,15 @@ function SettlementsIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M3 2.5h10v11l-2.5-1.6L8 13.5l-2.5-1.6L3 13.5v-11Z" />
       <path d="M5.5 6h5M5.5 8.5h5" />
+    </svg>
+  );
+}
+
+function ReportsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M2.5 13.5h11" />
+      <path d="M4.5 11V7.5M8 11V3.5M11.5 11V6" />
     </svg>
   );
 }

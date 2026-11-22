@@ -24,6 +24,7 @@ import (
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
+	reportapp "github.com/niagga/aveniq/backend/internal/application/reports"
 	scheduleapp "github.com/niagga/aveniq/backend/internal/application/schedule"
 	signupapp "github.com/niagga/aveniq/backend/internal/application/signup"
 	tenantapp "github.com/niagga/aveniq/backend/internal/application/tenant"
@@ -105,6 +106,7 @@ func run() error {
 	billingRepository := postgres.NewBillingRepository(pool)
 	settlementRepository := postgres.NewSettlementRepository(pool)
 	reportRepository := postgres.NewReportRepository(pool)
+	savedReportRepository := postgres.NewSavedReportRepository(pool)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -191,6 +193,10 @@ func run() error {
 		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlementRepository, tariffRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlementRepository, transactor, auditLog, clock.New()),
 		BillingReport:          billingapp.NewReportUseCase(reportRepository, tariffRepository, tenantRepository, transactor),
+		ListSavedReports:       reportapp.NewListUseCase(savedReportRepository, transactor),
+		CreateSavedReport:      reportapp.NewCreateUseCase(savedReportRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
+		UpdateSavedReport:      reportapp.NewUpdateUseCase(savedReportRepository, transactor, clock.New()),
+		DeleteSavedReport:      reportapp.NewDeleteUseCase(savedReportRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),
