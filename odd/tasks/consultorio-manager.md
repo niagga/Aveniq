@@ -176,7 +176,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T76 | S25 | E8 | Facturación: "Emitir comprobante" y detalle en popup, barra de filtros fija arriba y tarjeta "Sin facturar" | inline | — |
 | T77 | S25, S5 | E8 | Reescribir los E2E por fatia, suite completa y cierre de E8 | inline | — |
 | T78 | S5 | E5 | E5.1 (L59): el estado del trial llega a todo usuario autenticado (`GET /api/v1/practice/status`), de modo que el contador y los demás roles sin `tenant:read` ven el banner y los formularios deshabilitados | inline | `fafceab` |
-| T79 | S5 | E5 | E5.1 (L58): aceptar o previsualizar una invitación de un consultorio con trial vencido se rechaza con 403 `trial_expired`, con mensaje claro en `/invitacion` | inline | — |
+| T79 | S5 | E5 | E5.1 (L58): aceptar o previsualizar una invitación de un consultorio con trial vencido se rechaza con 403 `trial_expired`, con mensaje claro en `/invitacion` | inline | `e99e824` |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2571,4 +2571,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Seed.** Un consultorio vencido no puede emitir invitaciones (sus escrituras están rechazadas), así que el seed deja una invitación permanente en `demo-vencido` (`invitada@aveniq.local`, rol recepción, sin vencimiento práctico). Su secreto se deriva de la contraseña de desarrollo (SHA-256 de un prefijo fijo más la contraseña, en base64url) en vez de escribirse en el repositorio, y el E2E deriva el mismo valor de `E2E_PASSWORD`. No se imprime.
 - **Tests.** HTTP `TestAnExpiredTrialTakesNoAccountFromAnInvitationLink`: la vista previa y la aceptación de un enlace vigente de un consultorio vencido dan 403 `trial_expired`; un enlace que no abre nada sigue dando 410 en ambas; y, al volver a estar vigente el consultorio, el mismo enlace crea la cuenta (no se gastó). E2E (`e5-trial`): contra el consultorio vencido la API responde 403 `trial_expired` en vista previa y aceptación y la página muestra el aviso sin el botón "Crear cuenta"; con un enlace del consultorio demo, la misma página muestra el formulario (control positivo). No hay tests de caso de uso aparte: el paquete `invitation` no tenía y las pruebas HTTP ejercen los casos de uso reales con repositorios falsos.
 - **Verificación.** `gofmt` y `go vet ./...` limpios; `go test ./...` completo en verde con las bases de test. API reiniciada con el cambio, `schema.d.ts` regenerado, `tsc --noEmit` sin errores en `src/` ni `e2e/`. `pnpm e2e`: 49 en verde, 3 caídos y 9 sin correr, otra vez `e2`, `e10-settlement` y `e8-emission` por la agenda del profesional demo (domingo, sin horas libres), igual que en L74; los 8 tests de `e5-trial` pasan.
-- **Commit.** Pendiente.
+- **Commit.** `e99e824` (`feat: refuse invitations into a practice with an expired trial (E5.1 T79)`). El registro del hash va en un commit aparte.
