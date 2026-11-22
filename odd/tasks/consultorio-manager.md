@@ -167,7 +167,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | cbcade6 |
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | 708bfba |
 | T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | 56f135d |
-| T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | — |
+| T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | e2aa818 |
 | T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | — |
 | T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | — |
 | T73 | S26, S2 | E8 | Comprobantes y "sin facturar" por cliente: el comprador es el cliente y los comprobantes viejos conservan su snapshot | inline | — |
@@ -2651,3 +2651,11 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `tsc --noEmit` en verde. `e8-insurers` y `e7-tariff` (7) en verde.
 - **Commit.** `56f135d` (`feat: open insurer create and edit in popup modals (E8 T69)`). El registro del hash va en un commit aparte.
 - **Siguiente.** T70 (usuarios: búsqueda, invitaciones y popups).
+
+**L85 — T70: usuarios con búsqueda, filtros e invitación en popup**
+
+- **Qué cambia.** `/usuarios` usa `PageHeader` y `FilterBar` (buscar, rol, estado + "Invitar"). El formulario inline de invitación pasa a `InviteFormModal`; tras generar el enlace, el mismo flujo abre un segundo popup con copiar. El rol se edita con `UserEditModal`; dar de baja sigue en la tabla con `ConfirmDialog`.
+- **Piezas.** `users-screen.tsx`, `invite-form.tsx` (`InviteFormModal`), `user-edit-modal.tsx`, `user-table.tsx`, `e8-users`.
+- **Verificación.** `tsc --noEmit` en verde. `e8-users` (2) y `e8-base-ui` (2) en verde.
+- **Commit.** `e2aa818` (`feat: add user search, filters and invite or edit popups (E8 T70)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T71 (cliente pagador — backend).
