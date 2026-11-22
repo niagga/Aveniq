@@ -455,6 +455,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List billing clients
+         * @description Returns who pays for the patients of the practice. Order by display name.
+         */
+        get: operations["list-clients"];
+        put?: never;
+        /** Register a billing client */
+        post: operations["create-client"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a billing client */
+        get: operations["get-client"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit a billing client */
+        patch: operations["update-client"];
+        trace?: never;
+    };
+    "/api/v1/clients/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate a billing client */
+        post: operations["activate-client"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clients/{id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deactivate a billing client */
+        post: operations["deactivate-client"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/insurers": {
         parameters: {
             query?: never;
@@ -632,7 +705,7 @@ export interface paths {
         put?: never;
         /**
          * Register a patient
-         * @description Creates a patient. The document and fiscal data are validated against the rules of the patient's country; the country defaults to the practice's.
+         * @description Creates a patient and their billing client when clientId is absent. Fiscal data and billing currency belong on the client object, not on the patient.
          */
         post: operations["create-patient"];
         delete?: never;
@@ -657,7 +730,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a patient
-         * @description Replaces the editable fields of a patient. Identity, creation time and the active flag are not editable here.
+         * @description Replaces the editable fields of a patient. Identity, creation time and the active flag are not editable here. Edit fiscal data on the billing client.
          */
         patch: operations["update-patient"];
         trace?: never;
@@ -1274,6 +1347,47 @@ export interface components {
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
         };
+        ClientBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ClientBody.json
+             */
+            readonly $schema?: string;
+            billingCurrency: string;
+            country: string;
+            /** Format: date-time */
+            createdAt: string;
+            displayName: string;
+            fiscalAddress?: string;
+            fiscalCondition?: string;
+            /** Format: uuid */
+            id: string;
+            isActive: boolean;
+            legalName?: string;
+            taxIdKind?: string;
+            taxIdNumber?: string;
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ClientProfileBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ClientProfileBody.json
+             */
+            readonly $schema?: string;
+            billingCurrency: string;
+            country?: string;
+            displayName: string;
+            fiscalAddress?: string;
+            fiscalCondition?: string;
+            legalName?: string;
+            taxIdKind?: string;
+            taxIdNumber?: string;
+        };
         ClinicalNoteBody: {
             /**
              * Format: uri
@@ -1330,6 +1444,36 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "professional" | "assistant" | "accountant";
+        };
+        CreatePatientBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreatePatientBody.json
+             */
+            readonly $schema?: string;
+            administrativeNotes?: string;
+            /** Format: date */
+            birthDate?: string;
+            /** @description Billing client created with the patient when clientId is absent. */
+            client?: components["schemas"]["PatientClientOnCreateBody"];
+            /**
+             * Format: uuid
+             * @description Optional. An existing billing client; otherwise client is required.
+             */
+            clientId?: string;
+            country?: string;
+            /** @enum {string} */
+            coverageKind: "private" | "insurer";
+            documentKind?: string;
+            documentNumber?: string;
+            email?: string;
+            emergencyContactName?: string;
+            emergencyContactPhone?: string;
+            fullName: string;
+            insurerId?: string;
+            memberNumber?: string;
+            phone?: string;
         };
         CurrencyTotalBody: {
             /** Format: int64 */
@@ -1604,6 +1748,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["AppointmentBody"][] | null;
         };
+        ListClientsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListClientsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ClientBody"][] | null;
+        };
         ListClinicalNotesOutputBody: {
             /**
              * Format: uri
@@ -1749,13 +1902,15 @@ export interface components {
              */
             readonly $schema?: string;
             administrativeNotes?: string;
-            /**
-             * @description Currency the patient's sessions are billed in. Chosen, never derived from the country.
-             * @enum {string}
-             */
-            billingCurrency: "ARS" | "EUR" | "USD";
             /** @description Date of birth, YYYY-MM-DD. */
             birthDate?: string;
+            /** @description Display name of the billing client (who pays). */
+            clientDisplayName: string;
+            /**
+             * Format: uuid
+             * @description Who pays for this patient.
+             */
+            clientId: string;
             /** @description Country whose rules validate the document and fiscal data. */
             country: string;
             /**
@@ -1769,8 +1924,6 @@ export interface components {
             email?: string;
             emergencyContactName?: string;
             emergencyContactPhone?: string;
-            fiscalAddress?: string;
-            fiscalCondition?: string;
             /** @description Name as the practice registered it. */
             fullName: string;
             /**
@@ -1785,7 +1938,6 @@ export interface components {
             /** @description Affiliate number at the mutual. Empty for a private patient. */
             memberNumber?: string;
             phone?: string;
-            taxId?: components["schemas"]["PatientTaxIDBody"];
             /**
              * Format: uuid
              * @description Practice the patient belongs to.
@@ -1795,6 +1947,22 @@ export interface components {
             treatingProfessionalId?: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        PatientClientOnCreateBody: {
+            /**
+             * @description Required when creating a new billing client.
+             * @enum {string}
+             */
+            billingCurrency: "ARS" | "EUR" | "USD";
+            /** @description Optional ISO country. Defaults to the patient's. */
+            country?: string;
+            /** @description Optional; defaults to the patient's full name. */
+            displayName?: string;
+            fiscalAddress?: string;
+            fiscalCondition?: string;
+            legalName?: string;
+            taxIdKind?: string;
+            taxIdNumber?: string;
         };
         PatientDocumentBody: {
             /** @description ISO 3166-1 alpha-2 country the document belongs to. */
@@ -1812,11 +1980,6 @@ export interface components {
              */
             readonly $schema?: string;
             administrativeNotes?: string;
-            /**
-             * @description Required. The currency the patient's sessions are billed in; it is chosen, not derived from the country.
-             * @enum {string}
-             */
-            billingCurrency: "ARS" | "EUR" | "USD";
             /**
              * Format: date
              * @description Optional date of birth, YYYY-MM-DD.
@@ -1836,8 +1999,6 @@ export interface components {
             email?: string;
             emergencyContactName?: string;
             emergencyContactPhone?: string;
-            fiscalAddress?: string;
-            fiscalCondition?: string;
             /** @description Name of the patient. */
             fullName: string;
             /** @description Required with coverageKind insurer: the mutual of the practice's catalog. Must be empty for private. */
@@ -1845,8 +2006,6 @@ export interface components {
             /** @description Required with coverageKind insurer: the affiliate number. Must be empty for private. */
             memberNumber?: string;
             phone?: string;
-            taxIdKind?: string;
-            taxIdNumber?: string;
         };
         PatientSessionBody: {
             /**
@@ -1868,12 +2027,6 @@ export interface components {
             startsAt: string;
             /** @enum {string} */
             status: "scheduled" | "attended" | "cancelled";
-        };
-        PatientTaxIDBody: {
-            /** @description Tax id kind code for the country, for example cuit or nif. */
-            kind: string;
-            /** @description Tax id number as typed. */
-            number: string;
         };
         PhotoBody: {
             /**
@@ -3503,6 +3656,198 @@ export interface operations {
             };
         };
     };
+    "list-clients": {
+        parameters: {
+            query?: {
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListClientsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientProfileBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientProfileBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "activate-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "deactivate-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-insurers": {
         parameters: {
             query?: {
@@ -3877,7 +4222,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PatientProfileBody"];
+                "application/json": components["schemas"]["CreatePatientBody"];
             };
         };
         responses: {
