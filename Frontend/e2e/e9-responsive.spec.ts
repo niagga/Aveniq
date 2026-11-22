@@ -18,6 +18,7 @@ const PRIVATE_PATHS = [
   "/patients",
   "/agenda",
   "/facturacion",
+  "/informes",
   "/tarifario",
   "/mutuales",
   "/usuarios",
