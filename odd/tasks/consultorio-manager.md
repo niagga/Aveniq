@@ -154,7 +154,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | `3ae6518` |
 | T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | `391f69d` |
 | T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | `6f08cb5` |
-| T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | — |
+| T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | `d4b0e15` |
 | T58 | S2 | E7 | API de reportes: facturado (emitido, no anulado) y atendido sin facturar (valuado con el tarifario vigente a la fecha del turno; sin valor se cuenta aparte). Totales por moneda, sin conversión. Rango en zona horaria del consultorio. Cortes por profesional, cobertura, mutual, modalidad y período. Alcance "solo lo mío" para el profesional, sin lista de comprobantes | inline | — |
 | T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | — |
 | T60 | S2 | E7 | Informes guardados compartidos dentro del consultorio, con filtros, y exportación CSV | inline | — |
@@ -2494,4 +2494,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Reglas que inventé (a revisar).** (1) `reports:read:own` es un permiso más angosto, no una copia chica de `reports:read`: el administrador y el contador no lo tienen, porque su alcance ya lo contiene. (2) Un endpoint de informes acepta cualquiera de los dos y el handler reduce la respuesta al profesional que pregunta (T58). (3) El profesional no recibe `reports:read`: nunca ve el consultorio entero ni la lista de comprobantes.
 - **Preguntas abiertas.** Ninguna.
 - **Verificación.** `gofmt` y `go vet ./...` limpios. `go test ./...` completo en verde con las bases de test. En esta shell las variables `TEST_DATABASE_URL` y `TEST_APP_DATABASE_URL` no estaban definidas y los tests de drift se saltaban; se corrieron con las conexiones que documenta el README (Postgres portable en el puerto 5433). Ningún handler usa todavía el permiso nuevo, así que la API no necesita reiniciarse para T57.
-- **Commit.** Pendiente. La fila de T57 queda en `—` hasta que se haga el commit.
+- **Commit.** `d4b0e15` (`feat: add reports:read:own permission for the professional (E7 T57)`). El registro del hash va en un commit aparte.
