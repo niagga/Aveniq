@@ -20,6 +20,7 @@ import (
 func applyTransition(
 	ctx context.Context,
 	repo port.PatientRepository,
+	clients port.ClientRepository,
 	scope port.TenantScope,
 	clock port.Clock,
 	access *careapp.Access,
@@ -45,8 +46,8 @@ func applyTransition(
 		if err := repo.Update(ctx, subject); err != nil {
 			return err
 		}
-		view = toView(subject)
-		return nil
+		view, err = viewWithClient(ctx, clients, subject)
+		return err
 	})
 	if err != nil {
 		return PatientView{}, err

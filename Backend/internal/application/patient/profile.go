@@ -7,15 +7,13 @@ import (
 	"time"
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
-// ProfileInput is the personal and fiscal data a caller chooses for a patient.
-// It is shared by create and update on purpose: an edit cannot offer fields the
-// registration does not, or the other way around. Every optional field is a
-// plain string where empty means absent — the aggregate turns blank optional
-// text into a real "absent".
+// ProfileInput is the clinical and administrative data a caller chooses for a patient.
+// Fiscal data and billing currency belong on the billing client (T72), not here.
 type ProfileInput struct {
 	FullName string
 	// Country is optional: when empty, the patient inherits the practice's.
@@ -34,12 +32,6 @@ type ProfileInput struct {
 	EmergencyContactName  string
 	EmergencyContactPhone string
 
-	// TaxIDKind and TaxIDNumber are an optional pair, like the document.
-	TaxIDKind   string
-	TaxIDNumber string
-
-	FiscalCondition     string
-	FiscalAddress       string
 	AdministrativeNotes string
 
 	// CoverageKind is required: "private" or "insurer". InsurerID and MemberNumber are
@@ -47,29 +39,11 @@ type ProfileInput struct {
 	CoverageKind string
 	InsurerID    string
 	MemberNumber string
-
-	// BillingCurrency is required: ARS, EUR or USD. It is chosen by hand, not derived
-	// from the country.
-	BillingCurrency string
 }
 
 // normalizeProfile resolves the country (the request's, or the practice's via the
-// catalog), turns the typed document and tax id into canonical form under the
-// rules of that country, and confirms the fiscal condition exists for it.
-//
-// The order is deliberate and matters:
-//
-//   - the country is resolved first, because every later lookup is keyed by it;
-//   - documents and tax ids are normalized through the catalog, which is global
-//     reference data with no row-level security, so this must run BEFORE the
-//     tenant transaction opens;
-//   - the aggregate must already be valid when the write begins: a request the
-//     domain would refuse never reaches the database.
-//
-// Catalog errors pass through untouched: the adapter reports an unknown kind or
-// condition as patient.ErrDocumentInvalid, which is exactly what the caller did
-// wrong, and a domain *patient.ValidationError arrives unswallowed so the HTTP
-// layer can answer 422 with a field.
+// catalog), turns the typed document into canonical form under the rules of that
+// country, and prepares a patient draft without fiscal data.
 func normalizeProfile(ctx context.Context, catalog port.DocumentCatalog, tenantID string, in ProfileInput) (patient.Draft, error) {
 	country := in.Country
 	if country == "" {
@@ -85,17 +59,6 @@ func normalizeProfile(ctx context.Context, catalog port.DocumentCatalog, tenantI
 		return patient.Draft{}, err
 	}
 
-	taxID, err := normalizeTaxID(ctx, catalog, country, in)
-	if err != nil {
-		return patient.Draft{}, err
-	}
-
-	if in.FiscalCondition != "" {
-		if _, err := catalog.FiscalCondition(ctx, country, in.FiscalCondition); err != nil {
-			return patient.Draft{}, err
-		}
-	}
-
 	return patient.Draft{
 		FullName:              in.FullName,
 		Country:               country,
@@ -105,15 +68,20 @@ func normalizeProfile(ctx context.Context, catalog port.DocumentCatalog, tenantI
 		Email:                 &in.Email,
 		EmergencyContactName:  &in.EmergencyContactName,
 		EmergencyContactPhone: &in.EmergencyContactPhone,
-		TaxID:                 taxID,
-		FiscalCondition:       &in.FiscalCondition,
-		FiscalAddress:         &in.FiscalAddress,
 		AdministrativeNotes:   &in.AdministrativeNotes,
 		CoverageKind:          patient.Coverage(in.CoverageKind),
 		InsurerID:             &in.InsurerID,
 		MemberNumber:          &in.MemberNumber,
-		BillingCurrency:       patient.Currency(in.BillingCurrency),
 	}, nil
+}
+
+// applyBillingFromClient copies fiscal and currency from the payer onto the patient
+// draft. The patients row still mirrors them until billing reads the client directly (T73).
+func applyBillingFromClient(draft *patient.Draft, payer client.Client) {
+	draft.BillingCurrency = payer.BillingCurrency
+	draft.TaxID = payer.TaxID
+	draft.FiscalCondition = payer.FiscalCondition
+	draft.FiscalAddress = payer.FiscalAddress
 }
 
 // requireActiveInsurer confirms a mutual can be chosen for a patient's coverage: it is in
@@ -157,27 +125,4 @@ func normalizeDocument(ctx context.Context, catalog port.DocumentCatalog, countr
 		return nil, err
 	}
 	return &document, nil
-}
-
-// normalizeTaxID is the same pipeline for the fiscal identifier.
-func normalizeTaxID(ctx context.Context, catalog port.DocumentCatalog, country string, in ProfileInput) (*patient.TaxID, error) {
-	if in.TaxIDKind == "" && in.TaxIDNumber == "" {
-		return nil, nil
-	}
-	if in.TaxIDKind == "" {
-		return nil, &patient.ValidationError{Field: "tax_id_kind", Message: "is required when a tax id number is given"}
-	}
-	if strings.TrimSpace(in.TaxIDNumber) == "" {
-		return nil, &patient.ValidationError{Field: "tax_id_number", Message: "must not be blank"}
-	}
-
-	kind, err := catalog.TaxIDKind(ctx, country, in.TaxIDKind)
-	if err != nil {
-		return nil, err
-	}
-	taxID, err := patient.NormalizeTaxID(kind, in.TaxIDNumber)
-	if err != nil {
-		return nil, err
-	}
-	return &taxID, nil
 }

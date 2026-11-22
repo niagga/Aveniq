@@ -21,8 +21,8 @@ type Patient struct {
 	ID       ID
 	TenantID tenant.ID
 
-	// ClientID is who pays for this patient (S26). Until T72 moves fiscal data off the
-	// patient, new patients still carry a copy on the row, but billing will read the client.
+	// ClientID is who pays for this patient (S26). The HTTP contract exposes fiscal data on
+	// the client; this row still mirrors billing currency for tariffs until billing reads the client (T73).
 	ClientID string
 
 	// Country is the one the document and the fiscal data are validated against.
@@ -309,6 +309,7 @@ func (p Patient) ChangeProfile(draft Draft, now time.Time) (Patient, error) {
 		return Patient{}, fmt.Errorf("%w: an inactive patient must be reactivated before editing", ErrInvalidTransition)
 	}
 
+	draft.BillingCurrency = p.BillingCurrency
 	updated, err := fromDraft(p.ID, p.TenantID, draft, now)
 	if err != nil {
 		return Patient{}, err
@@ -317,6 +318,12 @@ func (p Patient) ChangeProfile(draft Draft, now time.Time) (Patient, error) {
 	updated.IsActive = p.IsActive
 	updated.CreatedAt = p.CreatedAt
 	updated.UpdatedAt = stored(now)
+	updated.ClientID = p.ClientID
+	updated.TreatingProfessionalID = p.TreatingProfessionalID
+	updated.TaxID = p.TaxID
+	updated.FiscalCondition = p.FiscalCondition
+	updated.FiscalAddress = p.FiscalAddress
+	updated.BillingCurrency = p.BillingCurrency
 	return updated, nil
 }
 

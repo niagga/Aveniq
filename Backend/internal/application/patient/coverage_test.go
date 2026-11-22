@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
@@ -32,12 +34,12 @@ func insuredInput(insurerID string) patientapp.CreateInput {
 	return patientapp.CreateInput{
 		TenantID: "tenant-1",
 		ProfileInput: patientapp.ProfileInput{
-			FullName:        "Ana García",
-			CoverageKind:    "insurer",
-			InsurerID:       insurerID,
-			MemberNumber:    "12345-01",
-			BillingCurrency: "USD",
+			FullName:     "Ana García",
+			CoverageKind: "insurer",
+			InsurerID:    insurerID,
+			MemberNumber: "12345-01",
 		},
+		ClientProfile: clientapp.ProfileInput{BillingCurrency: "USD"},
 	}
 }
 
@@ -60,8 +62,16 @@ func TestCreateInsuredPatientWithActiveMutual(t *testing.T) {
 	if view.CoverageKind != "insurer" || view.InsurerID != "mutual-osde" || view.MemberNumber != "12345-01" {
 		t.Fatalf("coverage = (%q, %q, %q), want the mutual and its member number", view.CoverageKind, view.InsurerID, view.MemberNumber)
 	}
-	if view.BillingCurrency != "USD" {
-		t.Fatalf("billing currency = %q, want the chosen USD", view.BillingCurrency)
+	clientID := view.ClientID
+	if clientID == "" {
+		t.Fatalf("clientId must be set on create")
+	}
+	payer, err := w.clients.ByID(context.Background(), client.ID(clientID))
+	if err != nil {
+		t.Fatalf("load client: %v", err)
+	}
+	if payer.BillingCurrency != patient.CurrencyUSD {
+		t.Fatalf("billing currency = %q, want USD on the client", payer.BillingCurrency)
 	}
 }
 
@@ -113,7 +123,6 @@ func TestUpdateKeepsDeactivatedMutualUntilChanged(t *testing.T) {
 			CoverageKind:    "insurer",
 			InsurerID:       "mutual-vieja",
 			MemberNumber:    "12345-01",
-			BillingCurrency: "USD",
 		},
 	}); err != nil {
 		t.Fatalf("editing the phone of a patient with a deactivated mutual: %v", err)
@@ -128,7 +137,6 @@ func TestUpdateKeepsDeactivatedMutualUntilChanged(t *testing.T) {
 			CoverageKind:    "insurer",
 			InsurerID:       "mutual-nueva",
 			MemberNumber:    "12345-01",
-			BillingCurrency: "USD",
 		},
 	})
 	expectInsurerField(t, err)
@@ -147,8 +155,7 @@ func TestUpdateToPrivateDropsTheMutual(t *testing.T) {
 		ID:       view.ID,
 		ProfileInput: patientapp.ProfileInput{
 			FullName:        "Ana García",
-			CoverageKind:    "private",
-			BillingCurrency: "ARS",
+			CoverageKind: "private",
 		},
 	})
 	if err != nil {

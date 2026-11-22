@@ -374,14 +374,17 @@ func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 	owner := h.token(t, tenantA, iam.RoleOwner)
 	accountant := h.token(t, tenantA, iam.RoleAccountant)
 
-	status, created := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-		"fullName": "Ana Pérez", "coverageKind": "private", "billingCurrency": "ARS",
-		"documentKind":    "dni",
-		"documentNumber":  "30111222",
-		"taxIdKind":       "cuit",
-		"taxIdNumber":     "20-12345678-6",
-		"fiscalCondition": "monotributo",
-	})
+	status, created := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+		"fullName":       "Ana Pérez",
+		"documentKind":   "dni",
+		"documentNumber": "30111222",
+		"client": map[string]any{
+			"billingCurrency": "ARS",
+			"taxIdKind":       "cuit",
+			"taxIdNumber":     "20-12345678-6",
+			"fiscalCondition": "monotributo",
+		},
+	}))
 	if status != http.StatusCreated {
 		t.Fatalf("create patient = %d, want 201: %v", status, created)
 	}

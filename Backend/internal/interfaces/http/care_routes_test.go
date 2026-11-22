@@ -42,11 +42,11 @@ func (r *fakeClinicalRepository) NotesByPatient(context.Context, string, int32, 
 func createPatient(t *testing.T, h *harness, token, fullName, document string) string {
 	t.Helper()
 
-	status, body := h.do(t, http.MethodPost, "/api/v1/patients", token, map[string]any{
-		"fullName": fullName, "coverageKind": "private", "billingCurrency": "ARS",
+	status, body := h.do(t, http.MethodPost, "/api/v1/patients", token, newPatientCreateBody(map[string]any{
+		"fullName":       fullName,
 		"documentKind":   "dni",
 		"documentNumber": document,
-	})
+	}))
 	if status != http.StatusCreated {
 		t.Fatalf("create %q = %d, want 201: %v", fullName, status, body)
 	}
@@ -74,11 +74,11 @@ func TestAProfessionalRegisteringAPatientTreatsIt(t *testing.T) {
 	stranger, _ := h.member(t, tenantA, iam.RoleProfessional)
 	assistant, _ := h.member(t, tenantA, iam.RoleAssistant)
 
-	status, body := h.do(t, http.MethodPost, "/api/v1/patients", treating, map[string]any{
-		"fullName": "Paciente del tratante", "coverageKind": "private", "billingCurrency": "ARS",
+	status, body := h.do(t, http.MethodPost, "/api/v1/patients", treating, newPatientCreateBody(map[string]any{
+		"fullName":       "Paciente del tratante",
 		"documentKind":   "dni",
 		"documentNumber": "36111222",
-	})
+	}))
 	if status != http.StatusCreated {
 		t.Fatalf("create = %d, want 201: %v", status, body)
 	}

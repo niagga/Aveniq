@@ -5,8 +5,12 @@
 package patientapp
 
 import (
+	"context"
+	"errors"
 	"time"
 
+	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -21,19 +25,17 @@ type DocumentView struct {
 	Country string
 }
 
-// TaxIDView is the read model of a fiscal identifier, in the same spirit.
-type TaxIDView struct {
-	Kind   string
-	Number string
-}
-
 // PatientView is the read model the application layer exposes to delivery. It is
 // intentionally a flat, string-based shape: transports should not have to know
 // domain types, and the domain should not have to know JSON. Optional data is nil
 // or the empty string; "absent" and "empty" are one state in the aggregate.
+//
+// Fiscal data and billing currency live on the billing client (T72), not here.
 type PatientView struct {
 	ID                     string
 	TenantID               string
+	ClientID               string
+	ClientDisplayName      string
 	Country                string
 	FullName               string
 	BirthDate              string // RFC 3339, empty when absent
@@ -42,24 +44,21 @@ type PatientView struct {
 	Email                  string
 	EmergencyContactName   string
 	EmergencyContactPhone  string
-	TaxID                  *TaxIDView
-	FiscalCondition        string
-	FiscalAddress          string
 	AdministrativeNotes    string
 	TreatingProfessionalID string // empty until an owner or admin assigns one
 	CoverageKind           string // "private" or "insurer"
 	InsurerID              string // empty for a private patient
 	MemberNumber           string // empty for a private patient
-	BillingCurrency        string // ARS, EUR or USD
 	IsActive               bool
 	CreatedAt              string // RFC 3339, always UTC
 	UpdatedAt              string // RFC 3339, always UTC
 }
 
-func toView(subject patient.Patient) PatientView {
-	return PatientView{
+func toView(subject patient.Patient, payer *client.Client) PatientView {
+	view := PatientView{
 		ID:                     string(subject.ID),
 		TenantID:               string(subject.TenantID),
+		ClientID:               subject.ClientID,
 		Country:                subject.Country,
 		FullName:               subject.FullName,
 		BirthDate:              formatTime(subject.BirthDate),
@@ -68,19 +67,19 @@ func toView(subject patient.Patient) PatientView {
 		Email:                  deref(subject.Email),
 		EmergencyContactName:   deref(subject.EmergencyContactName),
 		EmergencyContactPhone:  deref(subject.EmergencyContactPhone),
-		TaxID:                  toTaxIDView(subject.TaxID),
-		FiscalCondition:        deref(subject.FiscalCondition),
-		FiscalAddress:          deref(subject.FiscalAddress),
 		AdministrativeNotes:    deref(subject.AdministrativeNotes),
 		TreatingProfessionalID: deref(subject.TreatingProfessionalID),
 		CoverageKind:           string(subject.CoverageKind),
 		InsurerID:              deref(subject.InsurerID),
 		MemberNumber:           deref(subject.MemberNumber),
-		BillingCurrency:        string(subject.BillingCurrency),
 		IsActive:               subject.IsActive,
 		CreatedAt:              subject.CreatedAt.UTC().Format(timeLayout),
 		UpdatedAt:              subject.UpdatedAt.UTC().Format(timeLayout),
 	}
+	if payer != nil {
+		view.ClientDisplayName = payer.DisplayName
+	}
+	return view
 }
 
 func toDocumentView(document *patient.Document) *DocumentView {
@@ -92,13 +91,6 @@ func toDocumentView(document *patient.Document) *DocumentView {
 		Number:  document.Number,
 		Country: document.Country,
 	}
-}
-
-func toTaxIDView(taxID *patient.TaxID) *TaxIDView {
-	if taxID == nil {
-		return nil
-	}
-	return &TaxIDView{Kind: taxID.Kind, Number: taxID.Number}
 }
 
 func formatTime(value *time.Time) string {
@@ -113,4 +105,18 @@ func deref(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func viewWithClient(ctx context.Context, clients port.ClientRepository, subject patient.Patient) (PatientView, error) {
+	if subject.ClientID == "" {
+		return toView(subject, nil), nil
+	}
+	payer, err := clients.ByID(ctx, client.ID(subject.ClientID))
+	if err != nil && !errors.Is(err, client.ErrNotFound) {
+		return PatientView{}, err
+	}
+	if errors.Is(err, client.ErrNotFound) {
+		return toView(subject, nil), nil
+	}
+	return toView(subject, &payer), nil
 }

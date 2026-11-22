@@ -41,7 +41,7 @@ func TestChangingToPrivateClearsTheMutual(t *testing.T) {
 	insured := newPatient(t, draft)
 
 	edited := validDraft()
-	edited.BillingCurrency = patient.CurrencyEUR
+	edited.CoverageKind = patient.CoveragePrivate
 
 	updated, err := insured.ChangeProfile(edited, now)
 	if err != nil {
@@ -50,8 +50,9 @@ func TestChangingToPrivateClearsTheMutual(t *testing.T) {
 	if updated.CoverageKind != patient.CoveragePrivate || updated.InsurerID != nil || updated.MemberNumber != nil {
 		t.Errorf("coverage = (%q, %v, %v), want private with no mutual", updated.CoverageKind, updated.InsurerID, updated.MemberNumber)
 	}
-	if updated.BillingCurrency != patient.CurrencyEUR {
-		t.Errorf("BillingCurrency = %q, want EUR", updated.BillingCurrency)
+	// Billing currency lives on the client (T72): editing the patient profile does not move it.
+	if updated.BillingCurrency != insured.BillingCurrency {
+		t.Errorf("BillingCurrency = %q, want unchanged %q", updated.BillingCurrency, insured.BillingCurrency)
 	}
 }
 

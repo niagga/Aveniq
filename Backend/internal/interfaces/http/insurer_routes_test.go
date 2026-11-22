@@ -165,13 +165,12 @@ func TestDeactivatedMutualCannotCoverANewPatient(t *testing.T) {
 		t.Fatalf("deactivate = %d, want 200", status)
 	}
 
-	status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-		"fullName":        "Paciente de Medifé",
-		"coverageKind":    "insurer",
-		"insurerId":       id,
-		"memberNumber":    "99887",
-		"billingCurrency": "ARS",
-	})
+	status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+		"fullName":     "Paciente de Medifé",
+		"coverageKind": "insurer",
+		"insurerId":    id,
+		"memberNumber": "99887",
+	}))
 	if status != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422: %v", status, body)
 	}
@@ -185,18 +184,26 @@ func TestInsuredPatientRoundTripsItsCoverageAndCurrency(t *testing.T) {
 	owner := h.token(t, h.tenantID(t, "practica-a"), iam.RoleOwner)
 	id := createMutual(t, h, owner, "OSDE")
 
-	status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-		"fullName":        "Ana con OSDE",
-		"coverageKind":    "insurer",
-		"insurerId":       id,
-		"memberNumber":    "12345-01",
-		"billingCurrency": "USD",
-	})
+	status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+		"fullName":     "Ana con OSDE",
+		"coverageKind": "insurer",
+		"insurerId":    id,
+		"memberNumber": "12345-01",
+		"client":       map[string]any{"billingCurrency": "USD"},
+	}))
 	if status != http.StatusCreated {
 		t.Fatalf("create = %d: %v", status, body)
 	}
-	if body["coverageKind"] != "insurer" || body["insurerId"] != id || body["memberNumber"] != "12345-01" || body["billingCurrency"] != "USD" {
-		t.Fatalf("body = %v, want the mutual, the member number and USD", body)
+	if body["coverageKind"] != "insurer" || body["insurerId"] != id || body["memberNumber"] != "12345-01" {
+		t.Fatalf("body = %v, want the mutual and the member number", body)
+	}
+	clientID, _ := body["clientId"].(string)
+	if clientID == "" {
+		t.Fatalf("body = %v, want clientId", body)
+	}
+	clientStatus, clientBody := h.do(t, http.MethodGet, "/api/v1/clients/"+clientID, owner, nil)
+	if clientStatus != http.StatusOK || clientBody["billingCurrency"] != "USD" {
+		t.Fatalf("client = %d %v, want billing currency USD", clientStatus, clientBody)
 	}
 }
 
@@ -205,12 +212,12 @@ func TestPatientCoverageAndCurrencyAreRequired(t *testing.T) {
 	owner := h.token(t, h.tenantID(t, "practica-a"), iam.RoleOwner)
 
 	for name, payload := range map[string]map[string]any{
-		"no currency":          {"fullName": "Sin moneda", "coverageKind": "private"},
-		"no coverage":          {"fullName": "Sin cobertura", "billingCurrency": "ARS"},
-		"currency outside MVP": {"fullName": "Real", "coverageKind": "private", "billingCurrency": "BRL"},
-		"unknown coverage":     {"fullName": "Prepaga", "coverageKind": "prepaga", "billingCurrency": "ARS"},
-		"mutual without id":    {"fullName": "Sin mutual", "coverageKind": "insurer", "memberNumber": "1", "billingCurrency": "ARS"},
-		"private naming one":   {"fullName": "Particular con mutual", "coverageKind": "private", "insurerId": uuid.NewString(), "billingCurrency": "ARS"},
+		"no client":            {"fullName": "Sin cliente", "coverageKind": "private"},
+		"no coverage":          {"fullName": "Sin cobertura", "client": map[string]any{"billingCurrency": "ARS"}},
+		"currency outside MVP": {"fullName": "Real", "coverageKind": "private", "client": map[string]any{"billingCurrency": "BRL"}},
+		"unknown coverage":     {"fullName": "Prepaga", "coverageKind": "prepaga", "client": map[string]any{"billingCurrency": "ARS"}},
+		"mutual without id":    {"fullName": "Sin mutual", "coverageKind": "insurer", "memberNumber": "1", "client": map[string]any{"billingCurrency": "ARS"}},
+		"private naming one":   {"fullName": "Particular con mutual", "coverageKind": "private", "insurerId": uuid.NewString(), "client": map[string]any{"billingCurrency": "ARS"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, payload)

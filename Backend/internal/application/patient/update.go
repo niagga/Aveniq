@@ -32,6 +32,7 @@ type UpdateInput struct {
 // UpdateUseCase edits the profile of an existing patient.
 type UpdateUseCase struct {
 	repo     port.PatientRepository
+	clients  port.ClientRepository
 	insurers port.InsurerRepository
 	catalog  port.DocumentCatalog
 	scope    port.TenantScope
@@ -40,8 +41,8 @@ type UpdateUseCase struct {
 }
 
 // NewUpdateUseCase wires the use case.
-func NewUpdateUseCase(repo port.PatientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, access *careapp.Access) *UpdateUseCase {
-	return &UpdateUseCase{repo: repo, insurers: insurers, catalog: catalog, scope: scope, clock: clock, access: access}
+func NewUpdateUseCase(repo port.PatientRepository, clients port.ClientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, access *careapp.Access) *UpdateUseCase {
+	return &UpdateUseCase{repo: repo, clients: clients, insurers: insurers, catalog: catalog, scope: scope, clock: clock, access: access}
 }
 
 // Execute loads the patient inside the tenant scope, applies the same
@@ -78,8 +79,8 @@ func (uc *UpdateUseCase) Execute(ctx context.Context, in UpdateInput) (PatientVi
 		if err := uc.repo.Update(ctx, subject); err != nil {
 			return err
 		}
-		view = toView(subject)
-		return nil
+		view, err = viewWithClient(ctx, uc.clients, subject)
+		return err
 	})
 	if err != nil {
 		return PatientView{}, err

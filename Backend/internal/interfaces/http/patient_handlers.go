@@ -8,6 +8,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 )
@@ -24,15 +25,11 @@ type patientDocumentBody struct {
 	Number  string `json:"number" doc:"Document number as it appears on the card; separators are accepted."`
 }
 
-// patientTaxIDBody is the fiscal identifier, optional like the document.
-type patientTaxIDBody struct {
-	Kind   string `json:"kind" doc:"Tax id kind code for the country, for example cuit or nif."`
-	Number string `json:"number" doc:"Tax id number as typed."`
-}
-
 type patientBody struct {
 	ID                     string               `json:"id" format:"uuid" doc:"Patient identifier."`
 	TenantID               string               `json:"tenantId" format:"uuid" doc:"Practice the patient belongs to."`
+	ClientID               string               `json:"clientId" format:"uuid" doc:"Who pays for this patient."`
+	ClientDisplayName      string               `json:"clientDisplayName" doc:"Display name of the billing client (who pays)."`
 	Country                string               `json:"country" doc:"Country whose rules validate the document and fiscal data."`
 	FullName               string               `json:"fullName" doc:"Name as the practice registered it."`
 	BirthDate              string               `json:"birthDate,omitempty" doc:"Date of birth, YYYY-MM-DD."`
@@ -41,15 +38,11 @@ type patientBody struct {
 	Email                  string               `json:"email,omitempty"`
 	EmergencyContactName   string               `json:"emergencyContactName,omitempty"`
 	EmergencyContactPhone  string               `json:"emergencyContactPhone,omitempty"`
-	TaxID                  *patientTaxIDBody    `json:"taxId,omitempty"`
-	FiscalCondition        string               `json:"fiscalCondition,omitempty"`
-	FiscalAddress          string               `json:"fiscalAddress,omitempty"`
 	AdministrativeNotes    string               `json:"administrativeNotes,omitempty"`
 	TreatingProfessionalID string               `json:"treatingProfessionalId,omitempty" doc:"The professional who treats the patient. Empty until one is assigned."`
 	CoverageKind           string               `json:"coverageKind" enum:"private,insurer" doc:"Who pays: a particular patient (private) or a mutual's (insurer)."`
 	InsurerID              string               `json:"insurerId,omitempty" doc:"The mutual that covers the patient. Empty for a private patient."`
 	MemberNumber           string               `json:"memberNumber,omitempty" doc:"Affiliate number at the mutual. Empty for a private patient."`
-	BillingCurrency        string               `json:"billingCurrency" enum:"ARS,EUR,USD" doc:"Currency the patient's sessions are billed in. Chosen, never derived from the country."`
 	IsActive               bool                 `json:"isActive" doc:"False after a deactivation. Patients are never deleted."`
 	CreatedAt              string               `json:"createdAt" format:"date-time"`
 	UpdatedAt              string               `json:"updatedAt" format:"date-time"`
@@ -59,6 +52,8 @@ func toPatientBody(view patientapp.PatientView) patientBody {
 	body := patientBody{
 		ID:                     view.ID,
 		TenantID:               view.TenantID,
+		ClientID:               view.ClientID,
+		ClientDisplayName:      view.ClientDisplayName,
 		Country:                view.Country,
 		FullName:               view.FullName,
 		BirthDate:              view.BirthDate,
@@ -66,14 +61,11 @@ func toPatientBody(view patientapp.PatientView) patientBody {
 		Email:                  view.Email,
 		EmergencyContactName:   view.EmergencyContactName,
 		EmergencyContactPhone:  view.EmergencyContactPhone,
-		FiscalCondition:        view.FiscalCondition,
-		FiscalAddress:          view.FiscalAddress,
 		AdministrativeNotes:    view.AdministrativeNotes,
 		TreatingProfessionalID: view.TreatingProfessionalID,
 		CoverageKind:           view.CoverageKind,
 		InsurerID:              view.InsurerID,
 		MemberNumber:           view.MemberNumber,
-		BillingCurrency:        view.BillingCurrency,
 		IsActive:               view.IsActive,
 		CreatedAt:              view.CreatedAt,
 		UpdatedAt:              view.UpdatedAt,
@@ -86,17 +78,14 @@ func toPatientBody(view patientapp.PatientView) patientBody {
 			Number:  view.Document.Number,
 		}
 	}
-	if view.TaxID != nil {
-		body.TaxID = &patientTaxIDBody{Kind: view.TaxID.Kind, Number: view.TaxID.Number}
-	}
 	return body
 }
 
-// patientProfileBody is what a client may send to create or edit a patient.
+// patientProfileBody is what a client may send to edit a patient.
 //
 // Empty strings mean absent, which is how the application layer reads them: a JSON
 // null and an omitted field would be two ways of saying the same thing, and the
-// form has one.
+// form has one. Fiscal data and billing currency belong on the billing client.
 type patientProfileBody struct {
 	FullName              string `json:"fullName" minLength:"1" maxLength:"200" doc:"Name of the patient."`
 	Country               string `json:"country,omitempty" pattern:"^[A-Z]{2}$" doc:"Optional ISO country. Defaults to the practice's."`
@@ -107,15 +96,10 @@ type patientProfileBody struct {
 	Email                 string `json:"email,omitempty"`
 	EmergencyContactName  string `json:"emergencyContactName,omitempty"`
 	EmergencyContactPhone string `json:"emergencyContactPhone,omitempty"`
-	TaxIDKind             string `json:"taxIdKind,omitempty"`
-	TaxIDNumber           string `json:"taxIdNumber,omitempty"`
-	FiscalCondition       string `json:"fiscalCondition,omitempty"`
-	FiscalAddress         string `json:"fiscalAddress,omitempty"`
 	AdministrativeNotes   string `json:"administrativeNotes,omitempty"`
 	CoverageKind          string `json:"coverageKind" enum:"private,insurer" doc:"Required. private for a particular patient, insurer for one covered by a mutual."`
 	InsurerID             string `json:"insurerId,omitempty" doc:"Required with coverageKind insurer: the mutual of the practice's catalog. Must be empty for private."`
 	MemberNumber          string `json:"memberNumber,omitempty" maxLength:"30" doc:"Required with coverageKind insurer: the affiliate number. Must be empty for private."`
-	BillingCurrency       string `json:"billingCurrency" enum:"ARS,EUR,USD" doc:"Required. The currency the patient's sessions are billed in; it is chosen, not derived from the country."`
 }
 
 // profile converts the wire body into the application input, parsing the date.
@@ -129,15 +113,10 @@ func (b patientProfileBody) profile() (patientapp.ProfileInput, error) {
 		Email:                 b.Email,
 		EmergencyContactName:  b.EmergencyContactName,
 		EmergencyContactPhone: b.EmergencyContactPhone,
-		TaxIDKind:             b.TaxIDKind,
-		TaxIDNumber:           b.TaxIDNumber,
-		FiscalCondition:       b.FiscalCondition,
-		FiscalAddress:         b.FiscalAddress,
 		AdministrativeNotes:   b.AdministrativeNotes,
 		CoverageKind:          b.CoverageKind,
 		InsurerID:             b.InsurerID,
 		MemberNumber:          b.MemberNumber,
-		BillingCurrency:       b.BillingCurrency,
 	}
 
 	if b.BirthDate != "" {
@@ -148,6 +127,32 @@ func (b patientProfileBody) profile() (patientapp.ProfileInput, error) {
 		profile.BirthDate = &parsed
 	}
 	return profile, nil
+}
+
+// patientClientOnCreateBody is the billing client created with a new patient when no
+// clientId is sent. By default the patient is their own payer.
+type patientClientOnCreateBody struct {
+	DisplayName     string `json:"displayName,omitempty" maxLength:"160" doc:"Optional; defaults to the patient's full name."`
+	LegalName       string `json:"legalName,omitempty" maxLength:"160"`
+	Country         string `json:"country,omitempty" pattern:"^[A-Z]{2}$" doc:"Optional ISO country. Defaults to the patient's."`
+	TaxIDKind       string `json:"taxIdKind,omitempty"`
+	TaxIDNumber     string `json:"taxIdNumber,omitempty"`
+	FiscalCondition string `json:"fiscalCondition,omitempty"`
+	FiscalAddress   string `json:"fiscalAddress,omitempty" maxLength:"240"`
+	BillingCurrency string `json:"billingCurrency" enum:"ARS,EUR,USD" doc:"Required when creating a new billing client."`
+}
+
+func (b patientClientOnCreateBody) profile() clientapp.ProfileInput {
+	return clientapp.ProfileInput{
+		DisplayName:     b.DisplayName,
+		LegalName:       b.LegalName,
+		Country:         b.Country,
+		TaxIDKind:       b.TaxIDKind,
+		TaxIDNumber:     b.TaxIDNumber,
+		FiscalCondition: b.FiscalCondition,
+		FiscalAddress:   b.FiscalAddress,
+		BillingCurrency: b.BillingCurrency,
+	}
 }
 
 // ─── handlers ────────────────────────────────────────────────────────────────
@@ -191,7 +196,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Method:        http.MethodPost,
 		Path:          APIPrefix + "/patients",
 		Summary:       "Register a patient",
-		Description:   "Creates a patient. The document and fiscal data are validated against the rules of the patient's country; the country defaults to the practice's.",
+		Description:   "Creates a patient and their billing client when clientId is absent. Fiscal data and billing currency belong on the client object, not on the patient.",
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
@@ -226,7 +231,7 @@ func registerPatientRoutes(api huma.API, deps Deps) {
 		Method:        http.MethodPatch,
 		Path:          APIPrefix + "/patients/{id}",
 		Summary:       "Edit a patient",
-		Description:   "Replaces the editable fields of a patient. Identity, creation time and the active flag are not editable here.",
+		Description:   "Replaces the editable fields of a patient. Identity, creation time and the active flag are not editable here. Edit fiscal data on the billing client.",
 		Tags:          []string{"patients"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
@@ -264,11 +269,21 @@ func (h *patientHandlers) createPatient(ctx context.Context, in *createPatientIn
 		return nil, err
 	}
 
+	var clientProfile clientapp.ProfileInput
+	if in.Body.ClientID == "" {
+		if in.Body.Client == nil {
+			return nil, huma.Error422UnprocessableEntity("client is required when clientId is absent")
+		}
+		clientProfile = in.Body.Client.profile()
+	}
+
 	view, err := h.create.Execute(ctx, patientapp.CreateInput{
-		ProfileInput: profile,
-		TenantID:     who.TenantID,
-		ActorID:      who.UserID,
-		Role:         who.Role,
+		ProfileInput:  profile,
+		ClientID:      in.Body.ClientID,
+		ClientProfile: clientProfile,
+		TenantID:      who.TenantID,
+		ActorID:       who.UserID,
+		Role:          who.Role,
 	})
 	if err != nil {
 		return nil, problem(ctx, h.logger, err)
@@ -348,8 +363,44 @@ func (h *patientHandlers) activatePatient(ctx context.Context, in *patientIDInpu
 
 // ─── inputs and outputs ──────────────────────────────────────────────────────
 
+type createPatientBody struct {
+	FullName              string `json:"fullName" minLength:"1" maxLength:"200"`
+	Country               string `json:"country,omitempty" pattern:"^[A-Z]{2}$"`
+	BirthDate             string `json:"birthDate,omitempty" format:"date"`
+	DocumentKind          string `json:"documentKind,omitempty"`
+	DocumentNumber        string `json:"documentNumber,omitempty"`
+	Phone                 string `json:"phone,omitempty"`
+	Email                 string `json:"email,omitempty"`
+	EmergencyContactName  string `json:"emergencyContactName,omitempty"`
+	EmergencyContactPhone string `json:"emergencyContactPhone,omitempty"`
+	AdministrativeNotes   string `json:"administrativeNotes,omitempty"`
+	CoverageKind          string `json:"coverageKind" enum:"private,insurer"`
+	InsurerID             string `json:"insurerId,omitempty"`
+	MemberNumber          string `json:"memberNumber,omitempty" maxLength:"30"`
+	ClientID              string                     `json:"clientId,omitempty" format:"uuid" doc:"Optional. An existing billing client; otherwise client is required."`
+	Client                *patientClientOnCreateBody `json:"client,omitempty" doc:"Billing client created with the patient when clientId is absent."`
+}
+
+func (b createPatientBody) profile() (patientapp.ProfileInput, error) {
+	return patientProfileBody{
+		FullName:              b.FullName,
+		Country:               b.Country,
+		BirthDate:             b.BirthDate,
+		DocumentKind:          b.DocumentKind,
+		DocumentNumber:        b.DocumentNumber,
+		Phone:                 b.Phone,
+		Email:                 b.Email,
+		EmergencyContactName:  b.EmergencyContactName,
+		EmergencyContactPhone: b.EmergencyContactPhone,
+		AdministrativeNotes:   b.AdministrativeNotes,
+		CoverageKind:          b.CoverageKind,
+		InsurerID:             b.InsurerID,
+		MemberNumber:          b.MemberNumber,
+	}.profile()
+}
+
 type createPatientInput struct {
-	Body patientProfileBody
+	Body createPatientBody
 }
 
 type updatePatientInput struct {

@@ -6,6 +6,7 @@ import (
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
@@ -34,13 +35,14 @@ type ListInput struct {
 
 // ListUseCase lists patients visible to the caller.
 type ListUseCase struct {
-	repo  port.PatientRepository
-	scope port.TenantScope
+	repo    port.PatientRepository
+	clients port.ClientRepository
+	scope   port.TenantScope
 }
 
 // NewListUseCase wires the use case.
-func NewListUseCase(repo port.PatientRepository, scope port.TenantScope) *ListUseCase {
-	return &ListUseCase{repo: repo, scope: scope}
+func NewListUseCase(repo port.PatientRepository, clients port.ClientRepository, scope port.TenantScope) *ListUseCase {
+	return &ListUseCase{repo: repo, clients: clients, scope: scope}
 }
 
 // Execute returns one page of patients. Pagination is validated here, so the
@@ -71,9 +73,21 @@ func (uc *ListUseCase) Execute(ctx context.Context, in ListInput) ([]PatientView
 		if err != nil {
 			return err
 		}
+
+		payers, err := uc.clientByID(ctx)
+		if err != nil {
+			return err
+		}
+
 		views = make([]PatientView, 0, len(rows))
 		for _, row := range rows {
-			views = append(views, toView(row))
+			var payer *client.Client
+			if row.ClientID != "" {
+				if found, ok := payers[client.ID(row.ClientID)]; ok {
+					payer = &found
+				}
+			}
+			views = append(views, toView(row, payer))
 		}
 		return nil
 	})
@@ -81,4 +95,16 @@ func (uc *ListUseCase) Execute(ctx context.Context, in ListInput) ([]PatientView
 		return nil, err
 	}
 	return views, nil
+}
+
+func (uc *ListUseCase) clientByID(ctx context.Context) (map[client.ID]client.Client, error) {
+	rows, err := uc.clients.List(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[client.ID]client.Client, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row
+	}
+	return out, nil
 }

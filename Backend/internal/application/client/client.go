@@ -80,6 +80,11 @@ func derefString(value *string) string {
 	return *value
 }
 
+// DraftFromProfile normalizes fiscal client input against the country catalog.
+func DraftFromProfile(ctx context.Context, catalog port.DocumentCatalog, tenantID string, in ProfileInput) (client.Draft, error) {
+	return draftFrom(ctx, catalog, tenantID, in)
+}
+
 func draftFrom(ctx context.Context, catalog port.DocumentCatalog, tenantID string, in ProfileInput) (client.Draft, error) {
 	country := strings.TrimSpace(in.Country)
 	if country == "" {

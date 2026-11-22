@@ -348,7 +348,7 @@ func newHarness(t *testing.T) *harness {
 		UpdateClient:           clientapp.NewUpdateUseCase(clients, catalog, scope, clock),
 		DeactivateClient:       clientapp.NewDeactivateUseCase(clients, scope, clock),
 		ActivateClient:         clientapp.NewActivateUseCase(clients, scope, clock),
-		UpdatePatient:          patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
+		UpdatePatient:          patientapp.NewUpdateUseCase(repo, clients, insurers, catalog, scope, clock, access),
 		ListInsurers:           insurerapp.NewListUseCase(insurers, scope),
 		CreateInsurer:          insurerapp.NewCreateUseCase(insurers, scope, clock, uuidIDs{}),
 		UpdateInsurer:          insurerapp.NewUpdateUseCase(insurers, scope, clock),
@@ -358,16 +358,16 @@ func newHarness(t *testing.T) *harness {
 		CreateTariff:           pricingapp.NewCreateUseCase(tariffs, insurers, scope, clock, uuidIDs{}),
 		UpdateTariff:           pricingapp.NewUpdateUseCase(tariffs, scope, clock),
 		DeleteTariff:           pricingapp.NewDeleteUseCase(tariffs, scope),
-		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, scope, clock, access),
-		ActivatePatient:        patientapp.NewActivateUseCase(repo, scope, clock, access),
-		GetPatient:             patientapp.NewGetUseCase(scope, access),
+		DeactivatePatient:      patientapp.NewDeactivateUseCase(repo, clients, scope, clock, access),
+		ActivatePatient:        patientapp.NewActivateUseCase(repo, clients, scope, clock, access),
+		GetPatient:             patientapp.NewGetUseCase(clients, scope, access),
 		AssignTreating:         careapp.NewAssignTreatingUseCase(repo, users, scope, audit, clock, access),
 		GrantClinical:          careapp.NewGrantClinicalUseCase(grants, users, scope, audit, clock, uuidIDs{}, access),
 		ListGrants:             careapp.NewListGrantsUseCase(grants, scope, access),
 		RevokeGrant:            careapp.NewRevokeGrantUseCase(grants, scope, audit, clock, access),
 		GetClinicalRecord:      clinicalapp.NewGetRecordUseCase(clinicalRecords, scope, audit, access),
 		SaveClinicalRecord:     clinicalapp.NewSaveRecordUseCase(clinicalRecords, scope, audit, clock, uuidIDs{}, access),
-		ListPatients:           patientapp.NewListUseCase(repo, scope),
+		ListPatients:           patientapp.NewListUseCase(repo, clients, scope),
 		AccessTokens:           tokens,
 		RefreshCookie:          httpiface.DefaultRefreshCookieConfig(30*24*time.Hour, false),
 		ListUsers:              userapp.NewListUseCase(users, scope),
@@ -549,11 +549,11 @@ func TestTenantComesFromTheToken(t *testing.T) {
 	ownerA := h.token(t, tenantA, iam.RoleOwner)
 	ownerB := h.token(t, tenantB, iam.RoleOwner)
 
-	status, created := h.do(t, http.MethodPost, "/api/v1/patients", ownerA, map[string]any{
-		"fullName": "Ana de la práctica A", "coverageKind": "private", "billingCurrency": "ARS",
+	status, created := h.do(t, http.MethodPost, "/api/v1/patients", ownerA, newPatientCreateBody(map[string]any{
+		"fullName":       "Ana de la práctica A",
 		"documentKind":   "dni",
 		"documentNumber": "30111222",
-	})
+	}))
 	if status != http.StatusCreated {
 		t.Fatalf("create = %d, want 201: %v", status, created)
 	}
@@ -597,11 +597,11 @@ func TestPatientRouteErrors(t *testing.T) {
 	owner := h.token(t, tenantA, iam.RoleOwner)
 
 	t.Run("a document the country does not have is 422 with the field", func(t *testing.T) {
-		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName": "Con NIE argentino", "coverageKind": "private", "billingCurrency": "ARS",
+		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+			"fullName":       "Con NIE argentino",
 			"documentKind":   "nie",
 			"documentNumber": "X1234567L",
-		})
+		}))
 		if status != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want 422", status)
 		}
@@ -613,11 +613,11 @@ func TestPatientRouteErrors(t *testing.T) {
 
 	created := func(t *testing.T, fullName, document string) string {
 		t.Helper()
-		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName": fullName, "coverageKind": "private", "billingCurrency": "ARS",
+		status, body := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+			"fullName":       fullName,
 			"documentKind":   "dni",
 			"documentNumber": document,
-		})
+		}))
 		if status != http.StatusCreated {
 			t.Fatalf("create = %d: %v", status, body)
 		}
@@ -627,11 +627,11 @@ func TestPatientRouteErrors(t *testing.T) {
 
 	t.Run("the same document twice is 409", func(t *testing.T) {
 		created(t, "Duplicada", "27111222")
-		status, _ := h.do(t, http.MethodPost, "/api/v1/patients", owner, map[string]any{
-			"fullName": "Duplicada otra vez", "coverageKind": "private", "billingCurrency": "ARS",
+		status, _ := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+			"fullName":       "Duplicada otra vez",
 			"documentKind":   "dni",
 			"documentNumber": "27.111.222",
-		})
+		}))
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want 409: the normalized document is what collides", status)
 		}
@@ -663,7 +663,8 @@ func TestPatientRouteErrors(t *testing.T) {
 		}
 
 		status, _ := h.do(t, http.MethodPatch, "/api/v1/patients/"+id, owner, map[string]any{
-			"fullName": "Nombre nuevo", "coverageKind": "private", "billingCurrency": "ARS",
+			"fullName":       "Nombre nuevo",
+			"coverageKind":   "private",
 			"documentKind":   "dni",
 			"documentNumber": "29111222",
 		})

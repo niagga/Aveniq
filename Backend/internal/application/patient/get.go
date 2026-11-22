@@ -2,9 +2,11 @@ package patientapp
 
 import (
 	"context"
+	"errors"
 
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	"github.com/niagga/aveniq/backend/internal/application/port"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 )
 
 // GetInput names the patient to resolve.
@@ -22,13 +24,14 @@ type GetInput struct {
 // method refuses to run outside WithTenant (L10), so a missing scope must be loud
 // and never disguised as an empty result.
 type GetUseCase struct {
-	scope  port.TenantScope
-	access *careapp.Access
+	clients port.ClientRepository
+	scope   port.TenantScope
+	access  *careapp.Access
 }
 
 // NewGetUseCase wires the use case.
-func NewGetUseCase(scope port.TenantScope, access *careapp.Access) *GetUseCase {
-	return &GetUseCase{scope: scope, access: access}
+func NewGetUseCase(clients port.ClientRepository, scope port.TenantScope, access *careapp.Access) *GetUseCase {
+	return &GetUseCase{clients: clients, scope: scope, access: access}
 }
 
 // Execute returns the patient the caller may see, or patient.ErrNotFound.
@@ -39,7 +42,17 @@ func (uc *GetUseCase) Execute(ctx context.Context, in GetInput) (PatientView, er
 		if err != nil {
 			return err
 		}
-		view = toView(resolved.Patient)
+		var payer *client.Client
+		if resolved.Patient.ClientID != "" {
+			found, err := uc.clients.ByID(ctx, client.ID(resolved.Patient.ClientID))
+			if err != nil && !errors.Is(err, client.ErrNotFound) {
+				return err
+			}
+			if err == nil {
+				payer = &found
+			}
+		}
+		view = toView(resolved.Patient, payer)
 		return nil
 	})
 	if err != nil {
