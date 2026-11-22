@@ -168,7 +168,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | 708bfba |
 | T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | 56f135d |
 | T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | e2aa818 |
-| T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | — |
+| T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | 55669e8 |
 | T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | — |
 | T73 | S26, S2 | E8 | Comprobantes y "sin facturar" por cliente: el comprador es el cliente y los comprobantes viejos conservan su snapshot | inline | — |
 | T74 | S26 | E8 | Pantalla "Clientes" y selector de cliente al crear el paciente (por defecto, el propio paciente) | inline | — |
@@ -2659,3 +2659,11 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `tsc --noEmit` en verde. `e8-users` (2) y `e8-base-ui` (2) en verde.
 - **Commit.** `e2aa818` (`feat: add user search, filters and invite or edit popups (E8 T70)`). El registro del hash va en un commit aparte.
 - **Siguiente.** T71 (cliente pagador — backend).
+
+**L86 — T71: backend del cliente pagador (`clients`)**
+
+- **Qué cambia.** Migración `0026_billing_clients.sql`: tabla `clients` (fiscal + moneda), `patients.client_id` obligatorio con backfill uno-a-uno, permisos `client:read` / `client:write`. Dominio `client`, repositorio, rutas `GET/POST/PATCH /api/v1/clients` y activate/deactivate. Alta de paciente crea el cliente propio en la misma transacción de tenant. El contrato HTTP del paciente sigue igual hasta T72.
+- **Piezas.** `domain/client`, `application/client`, `client_repository`, `client_handlers`, drift en `permission.go` + test de matriz.
+- **Verificación.** `go build ./...`, `go test ./...` en verde (incluye `TestClientRoutesRespectTheMatrix` y drift de permisos con bases de test). Aplicar goose `0026` en la base de desarrollo antes de reiniciar la API.
+- **Commit.** `55669e8` (`feat: add billing clients with patient client_id backfill (E8 T71)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T72 (contrato del paciente: fiscal y moneda solo en el cliente).
