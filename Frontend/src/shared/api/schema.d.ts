@@ -113,6 +113,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/{id}/reschedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reschedule an appointment
+         * @description Moves a scheduled appointment to a new interval. Attended and cancelled slots cannot move. Overlap is refused.
+         */
+        post: operations["reschedule-appointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1996,6 +2016,21 @@ export interface components {
             /** Format: int64 */
             unvaluedSessions: number;
         };
+        RescheduleAppointmentBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RescheduleAppointmentBody.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** @enum {string} */
+            modality?: "online" | "presencial";
+            notes?: string;
+            /** Format: date-time */
+            startsAt: string;
+        };
         SavedReportBody: {
             /**
              * Format: uri
@@ -2800,6 +2835,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reschedule-appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RescheduleAppointmentBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
