@@ -163,7 +163,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | 07bcc2d |
 | T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | 8b8813d |
 | T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | 814f380 |
-| T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | — |
+| T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | 349fe4f |
 | T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | — |
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | — |
 | T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | — |
@@ -2619,3 +2619,11 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `tsc --noEmit` sin errores en `src/` y `e2e/`. `e8-shell`: 7 de 7 en verde (incluye landing en `demo.localhost` y Consultorio oculto en login). README: nota en la tabla de puertos.
 - **Commit.** `814f380` (`feat: add host-resolved practice landing and sign-in (E8 T65)`). El registro del hash va en un commit aparte.
 - **Siguiente.** T66 (pantalla "Mi consultorio" para editar la landing).
+
+**L81 — T66: pantalla "Mi consultorio" (edición de la landing)**
+
+- **Qué cambia.** Ruta nueva `/mi-consultorio` en el menú (owner y admin, `tenant:settings`): lee `GET /api/v1/practice/landing`, formulario con los siete campos de S24 y `PUT` de reemplazo completo. Límites alineados al dominio Go. Con trial vencido el botón queda deshabilitado (`useWritesLocked`). En la cabecera, enlace a `demo.localhost:3000` y vista previa en `/` en otra pestaña.
+- **Piezas.** `entities/landing/model.ts` (`canManageLanding`, límites), `use-practice-landing`, `landing-editor-form`, `practice-settings-screen`, ícono y entrada en el shell, `e8-landing-editor` (guardar y ver en `demo.localhost`), `e8-shell` suma "Mi consultorio" en "Más", `e9-responsive` incluye la ruta.
+- **Verificación.** `next typegen` + `tsc --noEmit` en verde. `e8-landing-editor` y `e8-shell` (8 tests de shell) en verde.
+- **Commit.** `349fe4f` (`feat: add practice landing editor screen (E8 T66)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T67 (reprogramar turno en el backend).
