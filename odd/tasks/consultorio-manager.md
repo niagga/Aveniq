@@ -153,7 +153,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T53 | S2, S7 | E6 | Tarifario: valor por profesional × cobertura (particular o mutual concreta) × modalidad × moneda, con vigencia. Mutual con dos partes (lo que paga la mutual y el copago). Sin valor cargado no se propone nada. Dominio `pricing`, migración, HTTP y pantalla (owner y admin editan; accountant lee) | inline | `02bf98a` |
 | T54 | S2, S7, S22 | E6 | Emisión desde el turno con valor propuesto por el tarifario, editable al emitir. Comprobante con foto de cobertura, modalidad y profesional. Comprobante suelto con profesional opcional | inline | `3ae6518` |
 | T55 | S2, S7 | E6 | Liquidación mensual a la mutual: elegir mutual y período, agrupar sesiones atendidas, una sesión no se liquida dos veces, anular libera las sesiones | inline | `391f69d` |
-| T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | — |
+| T56 | S2, S5 | E6 | E2E de E6: alta de mutual y paciente, tarifario por profesional, emisión con valor propuesto, liquidación a la mutual; cierre de E6 | inline | `6f08cb5` |
 | T57 | S3, S2 | E7 | Permiso `reports:read:own` para el profesional (catálogo, matriz y test de drift) | inline | — |
 | T58 | S2 | E7 | API de reportes: facturado (emitido, no anulado) y atendido sin facturar (valuado con el tarifario vigente a la fecha del turno; sin valor se cuenta aparte). Totales por moneda, sin conversión. Rango en zona horaria del consultorio. Cortes por profesional, cobertura, mutual, modalidad y período. Alcance "solo lo mío" para el profesional, sin lista de comprobantes | inline | — |
 | T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | — |
@@ -2484,4 +2484,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Detalle de la prueba.** El mes de la liquidación se calcula en la zona horaria del consultorio a partir del turno reservado, porque "mañana" puede caer en el mes siguiente. Los nombres de mutual y paciente llevan una marca de tiempo, así que se puede correr más de una vez sin pisar datos.
 - **Entorno.** `pnpm exec playwright test` falló al principio porque la caché de navegadores de este entorno no tenía el Chromium que pide la versión de Playwright del repo. Se instaló con `playwright install chromium`; no hubo cambios en el repositorio por eso.
 - **Verificación.** `pnpm e2e`: 46 de 46 en verde (37 anteriores y 9 nuevos), con la API de 8080 y `pnpm dev` corriendo. No hubo cambios de código de producto: T56 solo agrega el spec. Con esto E6 queda cerrado.
-- **Commit.** Pendiente. La fila de T56 queda en `—` hasta que se haga el commit.
+- **Commit.** `6f08cb5` (`test: add E6 closing e2e for mutual billing and settlement (E6 T56)`), junto con el registro del plan de E8 (L68). El registro del hash va en un commit aparte.
