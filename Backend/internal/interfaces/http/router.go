@@ -21,6 +21,7 @@ import (
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
+	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
@@ -34,6 +35,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
+	"github.com/niagga/aveniq/backend/internal/domain/landing"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/pricing"
 	"github.com/niagga/aveniq/backend/internal/domain/report"
@@ -133,6 +135,9 @@ type Deps struct {
 	CreateSavedReport      *reportapp.CreateUseCase
 	UpdateSavedReport      *reportapp.UpdateUseCase
 	DeleteSavedReport      *reportapp.DeleteUseCase
+	PublicLanding          *landingapp.PublicUseCase
+	GetLanding             *landingapp.GetUseCase
+	UpdateLanding          *landingapp.UpdateUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -182,6 +187,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerReportRoutes(api, deps)
 	registerSavedReportRoutes(api, deps)
 	registerPracticeStatusRoutes(api, deps)
+	registerLandingRoutes(api, deps)
 
 	return router
 }
@@ -314,6 +320,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var insurerValidationErr *insurer.ValidationError
 	var reportValidationErr *report.ValidationError
 	var pricingValidationErr *pricing.ValidationError
+	var landingValidationErr *landing.ValidationError
 	var clientErr huma.StatusError
 
 	switch {
@@ -426,6 +433,12 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("That slug is already taken by another tenant")
 	case errors.Is(err, tenant.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
+	case errors.As(err, &landingValidationErr):
+		return huma.Error422UnprocessableEntity(landingValidationErr.Error())
+	case errors.Is(err, landing.ErrNotPublished):
+		// Unknown, foreign and suspended answer alike: the public must not learn which
+		// practices exist.
+		return huma.Error404NotFound("No practice is published at this address")
 	case errors.As(err, &validationErr):
 		return huma.Error422UnprocessableEntity(validationErr.Error())
 	case errors.Is(err, authapp.ErrInvalidCredentials):

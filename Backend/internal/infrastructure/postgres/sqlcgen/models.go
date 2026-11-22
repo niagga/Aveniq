@@ -283,6 +283,26 @@ type Tenant struct {
 	TrialEndsAt time.Time
 }
 
+// Host to practice map for custom domains. Not tenant-scoped on purpose: the host identifies the practice.
+type TenantDomain struct {
+	Host      string
+	TenantID  pgtype.UUID
+	CreatedAt time.Time
+}
+
+// Public landing text of a practice. Tenant-scoped through row-level security.
+type TenantProfile struct {
+	TenantID    pgtype.UUID
+	DisplayName string
+	Tagline     string
+	About       string
+	Address     string
+	Phone       string
+	Email       string
+	Schedule    string
+	UpdatedAt   time.Time
+}
+
 type User struct {
 	ID       pgtype.UUID
 	TenantID pgtype.UUID

@@ -19,6 +19,7 @@ import (
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
+	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
@@ -287,6 +288,8 @@ type harness struct {
 	vouchers    *fakeBillingRepository
 	tariffs     *fakeTariffRepository
 	settlements *fakeSettlementRepository
+	landings    *fakeLandingRepository
+	domains     *fakeTenantDomains
 }
 
 func newHarness(t *testing.T) *harness {
@@ -325,6 +328,8 @@ func newHarness(t *testing.T) *harness {
 	vouchers := newFakeBillingRepository(repo)
 	settlements := newFakeSettlementRepository(insurers, repo, vouchers)
 	saved := newFakeSavedReportRepository()
+	landings := newFakeLandingRepository()
+	domains := &fakeTenantDomains{hosts: map[string]tenant.ID{}}
 
 	router := httpiface.NewRouter(httpiface.Deps{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -386,9 +391,12 @@ func newHarness(t *testing.T) *harness {
 		CreateSavedReport:      reportapp.NewCreateUseCase(saved, scope, clock, uuidIDs{}),
 		UpdateSavedReport:      reportapp.NewUpdateUseCase(saved, scope, clock),
 		DeleteSavedReport:      reportapp.NewDeleteUseCase(saved, scope),
+		PublicLanding:          landingapp.NewPublicUseCase(tenants, domains, landings, scope, testBaseDomain),
+		GetLanding:             landingapp.NewGetUseCase(tenants, landings, scope),
+		UpdateLanding:          landingapp.NewUpdateUseCase(tenants, landings, scope, audit, clock),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements}
+	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements, landings: landings, domains: domains}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the

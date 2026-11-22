@@ -22,6 +22,7 @@ import (
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
+	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	pricingapp "github.com/niagga/aveniq/backend/internal/application/pricing"
 	reportapp "github.com/niagga/aveniq/backend/internal/application/reports"
@@ -107,6 +108,8 @@ func run() error {
 	settlementRepository := postgres.NewSettlementRepository(pool)
 	reportRepository := postgres.NewReportRepository(pool)
 	savedReportRepository := postgres.NewSavedReportRepository(pool)
+	landingRepository := postgres.NewLandingRepository(pool)
+	tenantDomainRepository := postgres.NewTenantDomainRepository(pool)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -197,6 +200,9 @@ func run() error {
 		ListSavedReports:       reportapp.NewListUseCase(savedReportRepository, transactor),
 		CreateSavedReport:      reportapp.NewCreateUseCase(savedReportRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		UpdateSavedReport:      reportapp.NewUpdateUseCase(savedReportRepository, transactor, clock.New()),
+		PublicLanding:          landingapp.NewPublicUseCase(tenantRepository, tenantDomainRepository, landingRepository, transactor, cfg.BaseDomain),
+		GetLanding:             landingapp.NewGetUseCase(tenantRepository, landingRepository, transactor),
+		UpdateLanding:          landingapp.NewUpdateUseCase(tenantRepository, landingRepository, transactor, auditLog, clock.New()),
 		DeleteSavedReport:      reportapp.NewDeleteUseCase(savedReportRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),

@@ -28,6 +28,10 @@ var (
 	// invitationLinkPolicy covers preview and accept. Thirty attempts in ten minutes
 	// is generous for someone opening a link, and too slow for guessing secrets.
 	invitationLinkPolicy = ratePolicy{name: "invitation-link", limit: 30, window: 10 * time.Minute}
+
+	// landingReadPolicy covers the public landing. A visitor reads a page; sixty reads a minute
+	// per client is far above a person browsing, and well below a sweep of the host map.
+	landingReadPolicy = ratePolicy{name: "landing-read", limit: 60, window: time.Minute}
 )
 
 // rateLimited is a huma middleware that counts the attempt before the handler runs.

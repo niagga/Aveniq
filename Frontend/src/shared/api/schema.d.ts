@@ -791,6 +791,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/practice/landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the landing of the practice for editing
+         * @description Returns the landing of the caller's practice, or the default one (its name only) before the first save.
+         */
+        get: operations["get-practice-landing"];
+        /**
+         * Save the landing of the practice
+         * @description Replaces the landing text of the caller's practice. The save is recorded in the audit trail. Refused with 403 trial_expired once the trial has ended.
+         */
+        put: operations["update-practice-landing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/practice/status": {
         parameters: {
             query?: never;
@@ -803,6 +827,26 @@ export interface paths {
          * @description Status, time zone and trial of the practice the session belongs to, for every role. It names no one and holds nothing the roles without tenant:read should not see.
          */
         get: operations["get-practice-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the public landing of the practice at a host
+         * @description Answers the landing of the practice that owns the host: its slug subdomain under the base domain, or a custom domain. Only the published text is returned. A practice that is unknown, belongs to another domain, or is suspended answers the same 404. Rate limited per client.
+         */
+        get: operations["get-public-landing"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1484,6 +1528,52 @@ export interface components {
             invitation: components["schemas"]["InvitationBody"];
             /** @description Link secret. Shown once; the server keeps only its hash. */
             token: string;
+        };
+        LandingBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LandingBody.json
+             */
+            readonly $schema?: string;
+            /** @description What the practice does, in the owner's words. */
+            about: string;
+            /** @description Where the practice receives patients. */
+            address: string;
+            /** @description Name the landing shows as the practice's name. */
+            displayName: string;
+            /** @description Bare email address to write to. */
+            email: string;
+            /** @description Phone number, digits and punctuation only. */
+            phone: string;
+            /** @description Hours the practice receives patients, as the owner writes them. */
+            schedule: string;
+            /** @description Subdomain label of the practice: its landing lives at <slug>.<base domain>. */
+            slug: string;
+            /** @description One line under the name. */
+            tagline: string;
+        };
+        LandingDraftBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LandingDraftBody.json
+             */
+            readonly $schema?: string;
+            /** @description What the practice does. */
+            about?: string;
+            /** @description Where the practice receives patients. */
+            address?: string;
+            /** @description Name the landing shows. Required. */
+            displayName: string;
+            /** @description Bare email address to write to. */
+            email?: string;
+            /** @description Phone number, digits and punctuation only. */
+            phone?: string;
+            /** @description Hours the practice receives patients. */
+            schedule?: string;
+            /** @description One line under the name. */
+            tagline?: string;
         };
         ListAppointmentsOutputBody: {
             /**
@@ -4152,6 +4242,68 @@ export interface operations {
             };
         };
     };
+    "get-practice-landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandingBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-practice-landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LandingDraftBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandingBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-practice-status": {
         parameters: {
             query?: never;
@@ -4168,6 +4320,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PracticeStatusBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-public-landing": {
+        parameters: {
+            query: {
+                /** @description The host the landing is requested for, as the browser sent it. A port is ignored. */
+                host: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandingBody"];
                 };
             };
             /** @description Error */

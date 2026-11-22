@@ -16,6 +16,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
+	"github.com/niagga/aveniq/backend/internal/domain/landing"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/pricing"
 	"github.com/niagga/aveniq/backend/internal/domain/report"
@@ -417,4 +418,22 @@ type ReportRepository interface {
 	// voucher bills, narrowed by the filter. The coverage, mutual and currency are the patient's
 	// current ones: they are what a voucher issued today would carry.
 	PendingSessions(ctx context.Context, window report.Window, filter report.Filter) ([]report.Line, error)
+}
+
+// LandingRepository persists the public landing of a practice. It runs inside a tenant scope
+// like the other tenant tables: the scope names the practice, so Get and Save take no tenant
+// argument of their own. It maps a practice that has not written its landing yet onto
+// landing.ErrNotFound.
+type LandingRepository interface {
+	Get(ctx context.Context) (landing.Profile, error)
+	// Save writes the landing of the practice, creating it on first save.
+	Save(ctx context.Context, subject landing.Profile) error
+}
+
+// TenantDomainRepository resolves the hosts a practice answers on that are not its slug
+// subdomain. It is not tenant-scoped: the host is what identifies the practice, and the
+// public landing reads it before any tenant context exists. It answers tenant.ErrNotFound
+// for a host it does not know.
+type TenantDomainRepository interface {
+	TenantIDByHost(ctx context.Context, host string) (tenant.ID, error)
 }
