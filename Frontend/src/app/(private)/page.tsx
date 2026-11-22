@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
+import { FiguresPanel } from "@/features/reports/components/figures-panel";
 import { canUseAgenda } from "@/entities/iam/model";
+import { canReadReports } from "@/entities/report/model";
 import { formatSlotTime, type Appointment } from "@/entities/schedule/model";
 import { TENANT_STATUS_LABEL, formatCreatedAt } from "@/entities/tenant/model";
 import { browserApi } from "@/shared/api/client";
@@ -65,6 +67,8 @@ function Dashboard() {
       )}
 
       {seesAgenda ? <NextSessions zone={zone} /> : <BillingShortcut />}
+
+      {canReadReports(role) ? <FiguresPanel zone={zone} role={role} /> : null}
     </>
   );
 }
