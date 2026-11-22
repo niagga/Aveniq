@@ -54,6 +54,11 @@ func TestAllowsReplacesTheCoarseRoleGuard(t *testing.T) {
 		{iam.RoleAccountant, iam.PermPatientsRead, false},
 		{iam.RoleAccountant, iam.PermScheduleRead, false},
 		{iam.RoleAccountant, iam.PermTenantRead, false},
+		{iam.RoleProfessional, iam.PermReportsReadOwn, true},
+		{iam.RoleProfessional, iam.PermReportsRead, false},
+		{iam.RoleAssistant, iam.PermReportsReadOwn, false},
+		{iam.RoleAssistant, iam.PermReportsRead, false},
+		{iam.RoleOwner, iam.PermReportsReadOwn, true},
 		{"ceo", iam.PermPatientsRead, false},
 		{iam.RoleOwner, "patients:delete", false},
 	}
@@ -102,5 +107,42 @@ func TestGrantsDoNotListTheOwner(t *testing.T) {
 			}
 			seen[perm] = true
 		}
+	}
+}
+
+// TestReportScopes: the report API tells the whole practice from "only mine" by the matrix alone.
+// The professional reads their own figures and never the practice's; the roles that read the
+// practice's figures do not also need the narrower permission, because the wider scope contains it.
+func TestReportScopes(t *testing.T) {
+	t.Parallel()
+
+	whole := []iam.RoleCode{iam.RoleOwner, iam.RoleAdmin, iam.RoleAccountant}
+	for _, role := range whole {
+		if !iam.Allows(role, iam.PermReportsRead) {
+			t.Errorf("%q must read the figures of the whole practice", role)
+		}
+	}
+
+	if iam.Allows(iam.RoleProfessional, iam.PermReportsRead) {
+		t.Error("a professional must not read the figures of the whole practice")
+	}
+	if !iam.Allows(iam.RoleProfessional, iam.PermReportsReadOwn) {
+		t.Error("a professional must read the figures of their own sessions")
+	}
+
+	// Nobody else is granted the narrow scope by the matrix: the owner holds it by definition and
+	// the other roles are either wider (reports:read) or have no reports at all.
+	for _, role := range []iam.RoleCode{iam.RoleAdmin, iam.RoleAssistant, iam.RoleAccountant} {
+		if iam.Allows(role, iam.PermReportsReadOwn) {
+			t.Errorf("%q must not be granted reports:read:own: its scope is either wider or none", role)
+		}
+	}
+
+	// The guard of a report accepts either scope and the handler narrows the answer.
+	if !iam.AllowsAny(iam.RoleProfessional, iam.PermReportsRead, iam.PermReportsReadOwn) {
+		t.Error("a report guard that accepts both scopes must let the professional in")
+	}
+	if iam.AllowsAny(iam.RoleAssistant, iam.PermReportsRead, iam.PermReportsReadOwn) {
+		t.Error("the assistant has no reports at all")
 	}
 }

@@ -5,7 +5,7 @@ package iam
 // OpenAPI security. A code that is not here is not a permission.
 type PermissionCode string
 
-// Catalog seeded by migrations 0002 and 0010. The drift test proves these
+// Catalog seeded by migrations 0002, 0010 and 0023. The drift test proves these
 // constants and the `permissions` table never disagree in either direction.
 const (
 	PermUsersRead        PermissionCode = "users:read"
@@ -25,6 +25,7 @@ const (
 	PermBillingIssue     PermissionCode = "billing:issue"
 	PermBillingVoid      PermissionCode = "billing:void"
 	PermReportsRead      PermissionCode = "reports:read"
+	PermReportsReadOwn   PermissionCode = "reports:read:own"
 	PermTenantRead       PermissionCode = "tenant:read"
 	PermTenantSettings   PermissionCode = "tenant:settings"
 )
@@ -50,6 +51,7 @@ func Catalog() []PermissionCode {
 		PermBillingIssue,
 		PermBillingVoid,
 		PermReportsRead,
+		PermReportsReadOwn,
 		PermTenantRead,
 		PermTenantSettings,
 	}
@@ -83,6 +85,7 @@ var Grants = map[RoleCode][]PermissionCode{
 		PermPatientsRead, PermPatientsWrite,
 		PermClinicalReadOwn, PermClinicalWriteOwn, PermClinicalGrant,
 		PermScheduleRead, PermScheduleWrite,
+		PermReportsReadOwn,
 		PermTenantRead, PermUsersDirectory,
 	},
 	RoleAssistant: {
