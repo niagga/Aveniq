@@ -166,7 +166,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | 349fe4f |
 | T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | cbcade6 |
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | 708bfba |
-| T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | — |
+| T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | 56f135d |
 | T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | — |
 | T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | — |
 | T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | — |
@@ -2643,3 +2643,11 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `tsc --noEmit` en verde; `e8-agenda` (popup nuevo turno y celda vacía).
 - **Commit.** `708bfba` (`feat: rework agenda with filter bar, popups and reschedule (E8 T68)`). El registro del hash va en un commit aparte.
 - **Siguiente.** T69 (mutuales en popup).
+
+**L84 — T69: mutuales en popup (crear y editar)**
+
+- **Qué cambia.** `/mutuales` deja el formulario inline: `PageHeader` con "Nueva mutual", alta y edición en `InsurerFormModal` (`FormModal`). Dar de baja sigue con `ConfirmDialog`. Trial vencido deshabilita acciones como antes.
+- **Piezas.** `insurer-form.tsx` (`InsurerFormModal`), `insurers-screen.tsx`, `e8-insurers` (alta en popup).
+- **Verificación.** `tsc --noEmit` en verde. `e8-insurers` y `e7-tariff` (7) en verde.
+- **Commit.** `56f135d` (`feat: open insurer create and edit in popup modals (E8 T69)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T70 (usuarios: búsqueda, invitaciones y popups).
