@@ -9,6 +9,7 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
+	"github.com/niagga/aveniq/backend/internal/platform/authn"
 )
 
 // harnessNow is the clock every harness test runs on. Shared with newHarness so the
@@ -136,4 +137,76 @@ func TestEveryRoleCanReadTheStateOfItsPractice(t *testing.T) {
 	if status, _ := h.do(t, http.MethodGet, "/api/v1/practice/status", "", nil); status != http.StatusUnauthorized {
 		t.Errorf("without a token = %d, want 401", status)
 	}
+}
+
+// endTrial moves a practice's trial end to a day before the harness clock, and returns a
+// function that puts the original back. The invitation link is issued while the practice
+// is live and opened after it expired, which is the path the guard cannot see.
+func (h *harness) endTrial(t *testing.T, id string) (restore func()) {
+	t.Helper()
+
+	original, ok := h.tenants.byID[tenant.ID(id)]
+	if !ok {
+		t.Fatalf("unknown practice %s", id)
+	}
+	ended, err := tenant.Reconstitute(original.ID, original.Slug, original.Name, tenant.StatusTrial, "",
+		harnessNow.Add(-15*24*time.Hour), harnessNow.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("cannot end the trial: %v", err)
+	}
+	h.tenants.byID[original.ID] = ended
+	return func() { h.tenants.byID[original.ID] = original }
+}
+
+// TestAnExpiredTrialTakesNoAccountFromAnInvitationLink: L58. The accept and preview routes
+// are exempt from the guard because the invitee holds no session, so the use case answers
+// for the practice itself. Refusing must not burn the link, and a link that does not open
+// must keep answering 410 so the trial state is not an oracle for guessed tokens.
+func TestAnExpiredTrialTakesNoAccountFromAnInvitationLink(t *testing.T) {
+	h := newHarness(t)
+	practice := h.tenantID(t, "practica-a")
+	owner, _ := h.member(t, practice, iam.RoleOwner)
+	secret, _ := issueInvitation(t, h, owner, "nueva.persona@practica.test", string(iam.RoleAssistant))
+	accept := map[string]any{"token": secret, "fullName": testFullName, "password": testPassword}
+
+	live := h.endTrial(t, practice)
+
+	t.Run("the preview of a live link says the trial ended", func(t *testing.T) {
+		status, body := h.do(t, http.MethodGet, "/api/v1/invitations/preview?token="+secret, "", nil)
+		if status != http.StatusForbidden || body["code"] != "trial_expired" {
+			t.Fatalf("preview = %d %v, want 403 trial_expired", status, body)
+		}
+	})
+
+	t.Run("accepting is refused with trial_expired", func(t *testing.T) {
+		status, body := h.do(t, http.MethodPost, "/api/v1/invitations/accept", "", accept)
+		if status != http.StatusForbidden || body["code"] != "trial_expired" {
+			t.Fatalf("accept = %d %v, want 403 trial_expired", status, body)
+		}
+	})
+
+	t.Run("a link that opens nothing still answers 410, not the trial state", func(t *testing.T) {
+		stray, err := authn.NewInvitationToken(practice)
+		if err != nil {
+			t.Fatalf("cannot mint a token: %v", err)
+		}
+		status, body := h.do(t, http.MethodPost, "/api/v1/invitations/accept", "", map[string]any{
+			"token": stray.Raw, "fullName": testFullName, "password": testPassword,
+		})
+		if status != http.StatusGone {
+			t.Fatalf("stray accept = %d %v, want 410", status, body)
+		}
+		status, _ = h.do(t, http.MethodGet, "/api/v1/invitations/preview?token="+stray.Raw, "", nil)
+		if status != http.StatusGone {
+			t.Fatalf("stray preview = %d, want 410", status)
+		}
+	})
+
+	t.Run("the refused link was not used up", func(t *testing.T) {
+		live()
+		status, body := h.do(t, http.MethodPost, "/api/v1/invitations/accept", "", accept)
+		if status != http.StatusCreated {
+			t.Fatalf("accept after the practice is live again = %d %v, want 201", status, body)
+		}
+	})
 }

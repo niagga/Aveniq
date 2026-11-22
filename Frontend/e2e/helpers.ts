@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { expect, type Page } from "@playwright/test";
 
 // The development password is never written into the repository. It is the value the seed
@@ -34,6 +36,17 @@ export const ACCOUNTS = {
 } as const;
 
 export type Account = { email: string; password: string; name: string };
+
+/**
+ * The standing invitation the seed leaves in the expired practice (L58). The seed derives the
+ * secret from the development password; so does this, so no secret is committed.
+ */
+export function expiredInvitationToken(practiceId: string): string {
+  const secret = createHash("sha256")
+    .update(`aveniq-e2e-expired-invitation:${DEMO.password}`)
+    .digest("base64url");
+  return `inv1.${practiceId}.${secret}`;
+}
 
 /**
  * The practice whose trial has ended (T48). The seed sets its end in the past on every run.

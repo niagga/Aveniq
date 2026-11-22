@@ -58,6 +58,10 @@ var (
 	ErrSlugTaken = errors.New("tenant: slug already taken")
 	// ErrInvalidTransition reports a lifecycle change the aggregate does not allow.
 	ErrInvalidTransition = errors.New("tenant: invalid status transition")
+	// ErrTrialExpired reports a write refused because the practice's trial has ended (L58).
+	// The HTTP guard answers it for a signed-in caller; the invitation link has no session,
+	// so the use case that opens it answers it itself.
+	ErrTrialExpired = errors.New("tenant: trial expired")
 )
 
 // ValidationError reports a violated invariant and names the offending field so

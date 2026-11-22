@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ACCOUNTS, DEMO, EXPIRED, signInAs } from "./helpers";
+import { ACCOUNTS, DEMO, EXPIRED, expiredInvitationToken, signInAs } from "./helpers";
 
 /**
  * The trial of a practice (E5, T48). Inside the trial a practice writes. Once the trial has ended
@@ -153,6 +153,74 @@ test("the expired practice's accountant is told too, and cannot issue", async ({
     await expect(page.getByText(bannerTitle)).toBeVisible();
     await expect(page.getByLabel("Concepto")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Emitir comprobante" })).toBeDisabled();
+  } finally {
+    await context.close();
+  }
+});
+
+test("a link into the expired practice opens no account, on the screen or on the API", async ({
+  browser,
+  request,
+}) => {
+  // L58: the invitation routes are public, so the trial guard never sees them. The seed leaves
+  // a standing link in the expired practice; the API must refuse it with trial_expired and the
+  // page must say so instead of offering a form that cannot succeed.
+  const login = await request.post("/api/v1/auth/login", {
+    data: { tenantSlug: EXPIRED.tenant, email: EXPIRED.owner.email, password: EXPIRED.owner.password },
+  });
+  expect(login.ok()).toBeTruthy();
+  const { accessToken } = (await login.json()) as { accessToken: string };
+  const practices = await request.get("/api/v1/tenants", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const { items } = (await practices.json()) as { items: { id: string }[] };
+  const practiceId = items[0]?.id ?? "";
+  expect(practiceId).not.toBe("");
+  const token = expiredInvitationToken(practiceId);
+
+  const preview = await request.get(`/api/v1/invitations/preview?token=${encodeURIComponent(token)}`);
+  expect(preview.status()).toBe(403);
+  expect(((await preview.json()) as { code?: string }).code).toBe("trial_expired");
+
+  const accept = await request.post("/api/v1/invitations/accept", {
+    data: { token, fullName: `E5 Invitada ${stamp}`, password: DEMO.password },
+  });
+  expect(accept.status()).toBe(403);
+  expect(((await accept.json()) as { code?: string }).code).toBe("trial_expired");
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(`/invitacion?token=${encodeURIComponent(token)}&consultorio=${EXPIRED.tenant}`);
+    await expect(
+      page.getByText("El consultorio no puede sumar cuentas ahora"),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Crear cuenta" })).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("a link into a live practice still opens the form", async ({ browser, request }) => {
+  // Positive control for the test above: the same page, a practice inside its trial.
+  const login = await request.post("/api/v1/auth/login", {
+    data: { tenantSlug: DEMO.tenant, email: DEMO.email, password: DEMO.password },
+  });
+  expect(login.ok()).toBeTruthy();
+  const { accessToken } = (await login.json()) as { accessToken: string };
+  const issued = await request.post("/api/v1/invitations", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { email: `e5-invitada-${stamp}@aveniq.local`, role: "assistant" },
+  });
+  expect(issued.status()).toBe(201);
+  const { token } = (await issued.json()) as { token: string };
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(`/invitacion?token=${encodeURIComponent(token)}&consultorio=${DEMO.tenant}`);
+    await expect(page.getByRole("button", { name: "Crear cuenta" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("El consultorio no puede sumar cuentas ahora")).toHaveCount(0);
   } finally {
     await context.close();
   }

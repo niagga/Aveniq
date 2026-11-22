@@ -82,6 +82,13 @@ func toView(invitation iam.Invitation) InvitationView {
 	}
 }
 
+// TrialExpiry answers whether a practice's trial has ended. The link is public, so the
+// trial guard that covers signed-in callers cannot see it: accepting an invitation adds
+// an account to the practice, which is a write the expired practice must not receive (L58).
+type TrialExpiry interface {
+	Execute(ctx context.Context, tenantID string) (bool, error)
+}
+
 // deps is what the flows share. The grouping keeps a missing collaborator from
 // slipping in one constructor at a time.
 type deps struct {
@@ -281,14 +288,17 @@ func (uc *RevokeUseCase) Execute(ctx context.Context, who Caller, invitationID s
 // PreviewUseCase reads an invitation from its link, without authentication.
 type PreviewUseCase struct {
 	deps
+	trial TrialExpiry
 }
 
 // NewPreviewUseCase wires the use case.
-func NewPreviewUseCase(invitations port.InvitationRepository, scope port.TenantScope, clock port.Clock) *PreviewUseCase {
-	return &PreviewUseCase{deps{invitations: invitations, scope: scope, clock: clock}}
+func NewPreviewUseCase(invitations port.InvitationRepository, scope port.TenantScope, clock port.Clock, trial TrialExpiry) *PreviewUseCase {
+	return &PreviewUseCase{deps: deps{invitations: invitations, scope: scope, clock: clock}, trial: trial}
 }
 
-// Execute resolves the link. Every failure answers ErrLinkUnusable.
+// Execute resolves the link. Every failure answers ErrLinkUnusable, except a usable
+// link of a practice whose trial has ended: that answers tenant.ErrTrialExpired, so the
+// invitee learns it before typing a password. Only the holder of a real link gets there.
 func (uc *PreviewUseCase) Execute(ctx context.Context, rawToken string) (Preview, error) {
 	token, err := authn.ParseInvitationToken(rawToken)
 	if err != nil {
@@ -310,6 +320,9 @@ func (uc *PreviewUseCase) Execute(ctx context.Context, rawToken string) (Preview
 	if err != nil {
 		return Preview{}, err
 	}
+	if err := ensureTrialLive(ctx, uc.trial, token.TenantID); err != nil {
+		return Preview{}, err
+	}
 	return preview, nil
 }
 
@@ -324,6 +337,7 @@ type AcceptInput struct {
 type AcceptUseCase struct {
 	deps
 	hasher PasswordHasher
+	trial  TrialExpiry
 }
 
 // NewAcceptUseCase wires the use case.
@@ -335,10 +349,12 @@ func NewAcceptUseCase(
 	clock port.Clock,
 	ids port.IDGenerator,
 	hasher PasswordHasher,
+	trial TrialExpiry,
 ) *AcceptUseCase {
 	return &AcceptUseCase{
 		deps:   deps{invitations: invitations, users: users, scope: scope, audit: audit, clock: clock, ids: ids},
 		hasher: hasher,
+		trial:  trial,
 	}
 }
 
@@ -346,12 +362,19 @@ func NewAcceptUseCase(
 // transaction. Shape and password checks run first and cost nothing; the hash is
 // computed before the transaction opens so argon2 does not hold a connection. If
 // the invitation was used or expired in the meantime, the account insert rolls back.
+//
+// A practice whose trial has ended takes no new accounts: a usable link answers
+// tenant.ErrTrialExpired and creates nothing (L58). An unusable link still answers
+// ErrLinkUnusable first, so the trial state is not an oracle for guessed tokens.
 func (uc *AcceptUseCase) Execute(ctx context.Context, in AcceptInput) (Accepted, error) {
 	token, err := authn.ParseInvitationToken(in.Token)
 	if err != nil {
 		return Accepted{}, ErrLinkUnusable
 	}
 	if err := iam.ValidatePassword(in.Password); err != nil {
+		return Accepted{}, err
+	}
+	if err := uc.requireOpenLink(ctx, token); err != nil {
 		return Accepted{}, err
 	}
 	hash, err := uc.hasher.Hash(in.Password)
@@ -404,6 +427,36 @@ func (uc *AcceptUseCase) Execute(ctx context.Context, in AcceptInput) (Accepted,
 		return Accepted{}, err
 	}
 	return accepted, nil
+}
+
+// requireOpenLink checks, before any hashing, that the link opens an account and that its
+// practice may still take one. The link is read first so an unusable one answers 410 and
+// never reveals the practice's trial; the transaction that follows re-reads it under lock.
+func (uc *AcceptUseCase) requireOpenLink(ctx context.Context, token authn.InvitationToken) error {
+	err := uc.scope.WithTenant(ctx, token.TenantID, func(ctx context.Context) error {
+		invitation, err := lookupByHash(ctx, uc.invitations, token.Hash)
+		if err != nil {
+			return err
+		}
+		return invitation.Usable(uc.clock.Now())
+	})
+	if err != nil {
+		return err
+	}
+	return ensureTrialLive(ctx, uc.trial, token.TenantID)
+}
+
+// ensureTrialLive refuses a practice whose trial has ended. A practice the check cannot
+// read is refused too: it must not receive an account it cannot be placed for.
+func ensureTrialLive(ctx context.Context, trial TrialExpiry, tenantID string) error {
+	ended, err := trial.Execute(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("invitationapp: read trial: %w", err)
+	}
+	if ended {
+		return tenant.ErrTrialExpired
+	}
+	return nil
 }
 
 // lookupByHash resolves a link and folds "no such link" into ErrLinkUnusable.

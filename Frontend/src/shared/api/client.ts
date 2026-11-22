@@ -68,6 +68,15 @@ const PUBLIC_PATHS = ["/login", "/registro", "/invitacion"];
 export const CONNECTION_ERROR_MESSAGE =
   "No pudimos contactar al servidor. Revisá que la API esté corriendo.";
 
+/** The stable `code` an API problem carries (for example `trial_expired`), if it has one. */
+export function apiErrorCode(error: unknown): string | null {
+  if (error && typeof error === "object") {
+    const { code } = error as { code?: unknown };
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return null;
+}
+
 /**
  * Extracts a human-readable message from an API error.
  *

@@ -417,6 +417,9 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.NewError(http.StatusGone, "This invitation link is no longer valid")
 	case errors.Is(err, iam.ErrInvalidTransition):
 		return huma.Error409Conflict("That state transition is not allowed")
+	case errors.Is(err, tenant.ErrTrialExpired):
+		// Same body as the guard's: the client reads `code`, not the wording.
+		return trialExpiredError{}
 	case errors.Is(err, tenant.ErrNotFound):
 		return huma.Error404NotFound("The requested tenant does not exist")
 	case errors.Is(err, tenant.ErrSlugTaken):

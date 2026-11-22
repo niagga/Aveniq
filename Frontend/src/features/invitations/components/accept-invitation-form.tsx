@@ -8,13 +8,20 @@ import {
   PASSWORD_MIN_LENGTH,
   roleLabel,
 } from "@/entities/iam/model";
-import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
+import {
+  apiErrorCode,
+  apiErrorMessage,
+  browserApi,
+  CONNECTION_ERROR_MESSAGE,
+} from "@/shared/api/client";
 import { Field, inputClass } from "@/shared/ui/field";
 import { Notice } from "@/shared/ui/notice";
 
 type Preview = { email: string; role: string; expiresAt: string };
 type Accepted = { email: string };
 
+const TRIAL_ENDED_MESSAGE =
+  "El período de prueba de este consultorio terminó y no puede sumar cuentas nuevas. El enlace no se gastó: avisale al titular del consultorio, que sabe cómo seguir.";
 const UNUSABLE_MESSAGE =
   "Este enlace ya no es válido: ya se usó, venció o fue retirado. Pedile al titular del consultorio que genere uno nuevo.";
 
@@ -34,6 +41,7 @@ export function AcceptInvitationForm({
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [unusable, setUnusable] = useState(token === "");
+  const [trialEnded, setTrialEnded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<Accepted | null>(null);
 
@@ -58,6 +66,8 @@ export function AcceptInvitationForm({
 
         if (response.status === 410) {
           setUnusable(true);
+        } else if (apiErrorCode(apiError) === "trial_expired") {
+          setTrialEnded(true);
         } else if (!response.ok || !data) {
           setLoadError(apiErrorMessage(apiError));
         } else {
@@ -100,6 +110,10 @@ export function AcceptInvitationForm({
         setUnusable(true);
         return;
       }
+      if (apiErrorCode(apiError) === "trial_expired") {
+        setTrialEnded(true);
+        return;
+      }
       if (!response.ok || !data) {
         // A 422 names the rule that failed. The link survives it, so the invitee can retry.
         setError(apiErrorMessage(apiError));
@@ -134,6 +148,14 @@ export function AcceptInvitationForm({
         >
           Ir al inicio de sesión
         </Link>
+      </Notice>
+    );
+  }
+
+  if (trialEnded) {
+    return (
+      <Notice tone="danger" title="El consultorio no puede sumar cuentas ahora">
+        {TRIAL_ENDED_MESSAGE}
       </Notice>
     );
   }

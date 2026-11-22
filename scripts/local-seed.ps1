@@ -82,6 +82,12 @@ if ($LASTEXITCODE -ne 0 -or -not $PasswordHash.StartsWith('$argon2id$')) {
     throw 'Could not hash the seed password. Check that Go is installed and AVENIQ_SEED_PASSWORD is set.'
 }
 
+# The secret of the standing invitation below (L58) is derived from the development password,
+# like the password itself: it is not written into the repository, and the E2E derives the same
+# 32 bytes (base64url, 43 characters) from E2E_PASSWORD. Never printed.
+$InviteBytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes("aveniq-e2e-expired-invitation:$Password"))
+$InviteSecret = [Convert]::ToBase64String($InviteBytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+
 Write-Host "`nDevelopment data" -ForegroundColor Green
 
 $sql = @"
@@ -116,6 +122,18 @@ FROM tenants t
 WHERE t.slug = 'demo-vencido'
 ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
 SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
+
+-- A standing invitation to the expired practice (L58): the E2E opens it and checks that the link
+-- does not create an account there. An expired practice cannot issue one (its writes are refused),
+-- so the seed does. The token is inv1.<practice id>.<secret> and the table keeps its SHA-256 only.
+INSERT INTO invitations (id, tenant_id, email, role_code, token_hash, invited_by, expires_at, accepted_at, created_at)
+SELECT gen_random_uuid(), t.id, 'invitada@aveniq.local', 'assistant',
+       encode(sha256(convert_to('inv1.' || t.id::text || '.$InviteSecret', 'UTF8')), 'hex'),
+       NULL, now() + interval '10 years', NULL, now()
+FROM tenants t
+WHERE t.slug = 'demo-vencido'
+ON CONFLICT ON CONSTRAINT invitations_token_hash_unique DO UPDATE
+SET expires_at = EXCLUDED.expires_at, accepted_at = NULL;
 
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role_code, is_active, created_at, updated_at)
 SELECT gen_random_uuid(), t.id, '$Email', '$PasswordHash', 'Demo Owner', 'owner', true, now(), now()

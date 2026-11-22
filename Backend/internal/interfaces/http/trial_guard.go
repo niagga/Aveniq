@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -57,14 +58,39 @@ func trialGuard(tokens *authn.AccessTokens, expired *tenantapp.TrialExpiredUseCa
 				return
 			}
 			if ended {
-				writeProblemJSON(w, http.StatusForbidden, "trial_expired",
-					"The trial of this practice has ended. It can be read, not changed.")
+				writeProblemJSON(w, http.StatusForbidden, trialExpiredCode, trialExpiredDetail)
 				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// The wire form of the refusal. The guard writes it for a signed-in caller and the
+// invitation routes return it as an error, so both answer the same body.
+const (
+	trialExpiredCode   = "trial_expired"
+	trialExpiredDetail = "The trial of this practice has ended. It can be read, not changed."
+)
+
+// trialExpiredError is the 403 that carries the stable `code` the client acts on.
+// huma's own error model has no such field, so the refusal is a type of its own.
+type trialExpiredError struct{}
+
+func (trialExpiredError) Error() string  { return trialExpiredDetail }
+func (trialExpiredError) GetStatus() int { return http.StatusForbidden }
+
+// ContentType makes huma answer application/problem+json, like its own errors.
+func (trialExpiredError) ContentType(string) string { return "application/problem+json" }
+
+func (trialExpiredError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"title":  http.StatusText(http.StatusForbidden),
+		"status": http.StatusForbidden,
+		"detail": trialExpiredDetail,
+		"code":   trialExpiredCode,
+	})
 }
 
 func isWrite(method string) bool {

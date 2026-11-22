@@ -208,8 +208,8 @@ func run() error {
 		CreateInvitation:       invitationapp.NewCreateUseCase(invitationRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		ListPendingInvitations: invitationapp.NewListPendingUseCase(invitationRepository, transactor, clock.New()),
 		RevokeInvitation:       invitationapp.NewRevokeUseCase(invitationRepository, transactor, auditLog),
-		PreviewInvitation:      invitationapp.NewPreviewUseCase(invitationRepository, transactor, clock.New()),
-		AcceptInvitation:       invitationapp.NewAcceptUseCase(invitationRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, hasher),
+		PreviewInvitation:      invitationapp.NewPreviewUseCase(invitationRepository, transactor, clock.New(), tenantapp.NewTrialExpiredUseCase(tenantRepository, clock.New())),
+		AcceptInvitation:       invitationapp.NewAcceptUseCase(invitationRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, hasher, tenantapp.NewTrialExpiredUseCase(tenantRepository, clock.New())),
 		Refresh: authapp.NewRefreshUseCase(authapp.RefreshDeps{
 			Users:    userRepository,
 			Sessions: sessionRepository,

@@ -548,7 +548,7 @@ export interface paths {
         put?: never;
         /**
          * Accept an invitation and create the account
-         * @description Public. Creates the account with the email and role of the invitation and the password the invitee chooses, then marks the link used. Answers 410 for an unusable link and 422 for a password shorter than 12 characters.
+         * @description Public. Creates the account with the email and role of the invitation and the password the invitee chooses, then marks the link used. Answers 410 for an unusable link, 403 with code trial_expired when the practice's trial has ended (it takes no new accounts), and 422 for a password shorter than 12 characters.
          */
         post: operations["accept-invitation"];
         delete?: never;
@@ -566,7 +566,7 @@ export interface paths {
         };
         /**
          * Read an invitation from its link
-         * @description Public. Answers 410 for any link that does not open an account: malformed, unknown, accepted or expired. The same answer for all four, on purpose.
+         * @description Public. Answers 410 for any link that does not open an account: malformed, unknown, accepted or expired. The same answer for all four, on purpose. A usable link of a practice whose trial has ended answers 403 with code trial_expired.
          */
         get: operations["preview-invitation"];
         put?: never;
