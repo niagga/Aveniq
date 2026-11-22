@@ -1,49 +1,61 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { invitationPath, roleLabel, ROLES, type Role } from "@/entities/iam/model";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { Button } from "@/shared/ui/button";
 import { Field, inputClass } from "@/shared/ui/field";
+import { FormModal } from "@/shared/ui/form-modal";
+import { Modal } from "@/shared/ui/modal";
 
 type IssuedLink = { email: string; url: string };
 
 /**
- * Offers an account: the owner or admin enters the email and role, and the API answers
- * with the link. The token inside it is the only copy, so the link is shown here once
- * and the screen says so. Losing it means revoking the invitation and offering another.
+ * Invite someone in a popup (E8, T70). After the API answers, the one-time link stays in the
+ * same popup with a copy button — the token is not shown again.
  */
-export function InviteForm({
+export function InviteFormModal({
+  open,
   viewerRole,
   practiceSlug,
+  onClose,
   onIssued,
 }: {
+  open: boolean;
   viewerRole: string;
   practiceSlug: string | null;
+  onClose: () => void;
   onIssued: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("professional");
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedLink | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const writesLocked = useWritesLocked();
 
   const prefix = useId();
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (writesLocked) return;
+  useEffect(() => {
+    if (!open) return;
+    setEmail("");
+    setRole("professional");
     setError(null);
     setIssued(null);
+  }, [open]);
+
+  async function submit() {
+    if (writesLocked || issued !== null) return;
+    setError(null);
 
     if (email.trim() === "") {
       setError("Escribí el email de la persona que vas a invitar.");
       return;
     }
 
-    setIsSubmitting(true);
+    setBusy(true);
     try {
       const { data, error: apiError, response } = await browserApi.POST("/api/v1/invitations", {
         body: { email: email.trim(), role },
@@ -58,24 +70,44 @@ export function InviteForm({
         email: data.invitation.email,
         url: `${window.location.origin}${invitationPath(data.token, practiceSlug)}`,
       });
-      setEmail("");
       onIssued();
     } catch {
       setError(CONNECTION_ERROR_MESSAGE);
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
   }
 
-  return (
-    <section className="rounded-[var(--radius-panel)] border border-border bg-surface p-5">
-      <h2 className="text-sm font-semibold">Invitar a una persona</h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        Generá un enlace de un solo uso, válido por siete días. Aveniq no envía emails: copiá el
-        enlace y mandáselo por el medio que prefieras.
-      </p>
+  if (issued) {
+    return (
+      <Modal
+        open={open}
+        title="Enlace de invitación"
+        description={`Para ${issued.email}. Aveniq no envía emails: copiá el enlace y mandáselo por el medio que prefieras.`}
+        onClose={onClose}
+        footer={(requestClose) => (
+          <Button variant="primary" onClick={requestClose}>
+            Listo
+          </Button>
+        )}
+      >
+        <IssuedLinkPanel email={issued.email} url={issued.url} />
+      </Modal>
+    );
+  }
 
-      <form onSubmit={handleSubmit} noValidate className="mt-4 grid gap-4 sm:grid-cols-[2fr_1fr_auto] sm:items-end">
+  return (
+    <FormModal
+      open={open}
+      title="Invitar a una persona"
+      description="Generá un enlace de un solo uso, válido por siete días."
+      submitLabel="Generar enlace"
+      busy={busy}
+      error={error}
+      onClose={onClose}
+      onSubmit={submit}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Email" htmlFor={`${prefix}-email`}>
           <input
             id={`${prefix}-email`}
@@ -104,24 +136,8 @@ export function InviteForm({
             ))}
           </select>
         </Field>
-
-        <button
-          type="submit"
-          disabled={isSubmitting || writesLocked}
-          className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
-        >
-          {isSubmitting ? "Generando…" : "Generar enlace"}
-        </button>
-      </form>
-
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
-
-      {issued ? <IssuedLinkPanel key={issued.url} email={issued.email} url={issued.url} /> : null}
-    </section>
+      </div>
+    </FormModal>
   );
 }
 
@@ -133,19 +149,17 @@ function IssuedLinkPanel({ email, url }: { email: string; url: string }) {
       await navigator.clipboard.writeText(url);
       setCopied(true);
     } catch {
-      // Clipboard access can be refused on a plain-http origin. The field below is
-      // selected for manual copy, so the person is never left without the link.
       setCopied(false);
     }
   }
 
   return (
-    <div role="status" className="mt-5 rounded-md border border-brand/30 bg-brand/5 p-4">
-      <p className="text-sm font-medium">Enlace para {email}</p>
-      <p className="mt-1 text-xs text-ink-muted">
+    <div role="status" className="grid gap-3">
+      <p className="text-xs text-ink-muted">
         Se muestra una sola vez. Si lo perdés, retirá la invitación y generá otra.
       </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <h3 className="sr-only">Enlace para {email}</h3>
+      <div className="flex flex-wrap items-center gap-2">
         <input
           readOnly
           aria-label="Enlace de invitación"
@@ -153,13 +167,9 @@ function IssuedLinkPanel({ email, url }: { email: string; url: string }) {
           onFocus={(event) => event.currentTarget.select()}
           className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs"
         />
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-ink"
-        >
+        <Button type="button" size="sm" onClick={() => void copy()}>
           {copied ? "Copiado" : "Copiar enlace"}
-        </button>
+        </Button>
       </div>
     </div>
   );
