@@ -2666,4 +2666,5 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Piezas.** `domain/client`, `application/client`, `client_repository`, `client_handlers`, drift en `permission.go` + test de matriz.
 - **Verificación.** `go build ./...`, `go test ./...` en verde (incluye `TestClientRoutesRespectTheMatrix` y drift de permisos con bases de test). Aplicar goose `0026` en la base de desarrollo antes de reiniciar la API.
 - **Commit.** `55669e8` (`feat: add billing clients with patient client_id backfill (E8 T71)`). El registro del hash va en un commit aparte.
+- **CI (tests postgres).** Tras `client_id` obligatorio, los tests de repositorio crean cliente con `persistPatient` (misma forma que la app). Commits `2a3b2b8` (seeds/schema), `a498706` (sqlc v1.31.1), `071f1d2` (repos).
 - **Siguiente.** T72 (contrato del paciente: fiscal y moneda solo en el cliente).
