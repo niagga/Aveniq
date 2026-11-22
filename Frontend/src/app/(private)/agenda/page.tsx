@@ -6,6 +6,7 @@ import { WeekCalendar } from "@/features/agenda/components/week-calendar";
 import { canUseAgenda } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { RoleGate } from "@/shared/auth/role-gate";
+import { PageHeader } from "@/shared/ui/page-header";
 import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 export default function AgendaPage() {
@@ -31,12 +32,10 @@ function AgendaScreen() {
 
   return (
     <>
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Agenda</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Semana del profesional, en la zona horaria del consultorio ({timeZone}).
-        </p>
-      </header>
+      <PageHeader
+        title="Agenda"
+        description={`Turnos de la semana en la zona horaria del consultorio (${timeZone}).`}
+      />
       <WeekCalendar timeZone={timeZone} />
     </>
   );

@@ -71,6 +71,28 @@ export function toISODate(date: Date, timeZone: string): string {
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 }
 
+/** A default booking start on a civil day in the practice zone (for empty-day clicks). */
+export function morningDateTimeLocal(day: Date, timeZone: string, hour = 9, minute = 0): string {
+  const parts = civilDate(day, timeZone);
+  const instant = zonedDate(parts.year, parts.month, parts.day, hour, minute, timeZone);
+  return toDateTimeLocalValue(instant);
+}
+
+/** Whether the viewer may attend, cancel or reschedule this slot (mirrors API schedule:write + own scope). */
+export function canManageAppointment(
+  role: string | undefined,
+  viewerId: string,
+  professionalUserId: string | undefined,
+): boolean {
+  const mayUse =
+    role === "owner" || role === "admin" || role === "professional" || role === "assistant";
+  if (!mayUse) return false;
+  if (role === "professional") {
+    return viewerId !== "" && professionalUserId === viewerId;
+  }
+  return true;
+}
+
 function civilDate(date: Date, timeZone: string): { year: number; month: number; day: number } {
   const formatted = new Intl.DateTimeFormat("en-US", {
     timeZone,

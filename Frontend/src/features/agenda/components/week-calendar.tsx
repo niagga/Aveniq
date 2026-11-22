@@ -6,40 +6,33 @@ import { canBookWith } from "@/entities/care/model";
 import type { Patient } from "@/entities/patient/model";
 import {
   addDays,
-  dateTimeLocalToRFC3339,
   formatDayHeading,
   formatSlotTime,
-  MODALITY_OPTIONS,
   modalityLabel,
+  morningDateTimeLocal,
   startOfWeek,
   toDateTimeLocalValue,
-  toISODate,
-  weekdayLabel,
   type Appointment,
-  type Modality,
 } from "@/entities/schedule/model";
-import { apiErrorMessage, browserApi } from "@/shared/api/client";
-import { useWritesLocked } from "@/shared/auth/practice";
-import { getSessionUser } from "@/shared/auth/session";
+import { AppointmentBookingModal } from "@/features/agenda/components/appointment-booking-modal";
+import { AppointmentDetailModal } from "@/features/agenda/components/appointment-detail-modal";
 import { loadStaff, type StaffMember } from "@/features/patients/staff";
+import { apiErrorMessage, browserApi } from "@/shared/api/client";
+import { getSessionUser } from "@/shared/auth/session";
+import { Button } from "@/shared/ui/button";
+import { FilterBar } from "@/shared/ui/filter-bar";
 import { LoadingState } from "@/shared/ui/states";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 const DEFAULT_ZONE = "America/Argentina/Buenos_Aires";
 
 /**
- * Weekly agenda of one professional, or of every professional at once.
- *
- * The window is Monday–Sunday in the practice timezone. Appointments are stored
- * as UTC instants; this screen is where they become civil times again.
+ * Weekly agenda (T68): filter bar always visible, board of the week, booking and detail in popups.
  */
 export function WeekCalendar({ timeZone }: { timeZone: string }) {
   const zone = timeZone || DEFAULT_ZONE;
   const viewer = getSessionUser();
   const viewerId = viewer?.id ?? "";
   const role = viewer?.role;
-  // A professional opens their own week. The roles that run the practice open every
-  // professional's, because an empty calendar of a person with no agenda is not their day.
   const seesEveryone = role !== "professional";
 
   const [anchor, setAnchor] = useState(() => new Date());
@@ -51,13 +44,14 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingStartsAt, setBookingStartsAt] = useState(() => toDateTimeLocalValue(new Date()));
 
   const professionals = useMemo(
     () => staff.filter((member) => member.role === "professional"),
     [staff],
   );
 
-  // Booking always needs one concrete professional; the filter above may be "todos".
   const bookingProfessional =
     professionalFilter !== "" ? professionalFilter : professionals[0]?.id ?? viewerId;
 
@@ -67,21 +61,18 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
 
   const load = useCallback(async () => {
     setError(null);
-    // Back to loading instead of leaving the previous week on screen: a stale grid under a
-    // new date range claims the user is looking at this week when they are not.
     setAppointments(null);
-    const { data, error, response } = await browserApi.GET("/api/v1/appointments", {
+    const { data, error: apiError, response } = await browserApi.GET("/api/v1/appointments", {
       params: {
         query: {
           from: weekStart.toISOString(),
           to: weekEnd.toISOString(),
-          // Omitted means every professional, which is what the practice-wide view shows.
           professionalId: professionalFilter || undefined,
         },
       },
     });
     if (!response.ok) {
-      setError(apiErrorMessage(error));
+      setError(apiErrorMessage(apiError));
       return;
     }
     setAppointments(data?.items ?? []);
@@ -133,8 +124,6 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
     return staff.find((member) => member.id === id)?.fullName ?? "";
   }
 
-  // A professional books only with the patients it treats (T38). The roster it reads can
-  // also carry granted patients, which it may read but not book, so they are left out here.
   const bookable = useMemo(
     () => patients.filter((patient) => canBookWith(role, patient, bookingProfessional)),
     [patients, role, bookingProfessional],
@@ -144,35 +133,36 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
       ? "No tenés pacientes a tu cargo para agendar. Un paciente queda a tu cargo cuando lo registrás vos o el titular te lo asigna."
       : null;
 
+  function openBooking(day?: Date) {
+    setBookingStartsAt(day ? morningDateTimeLocal(day, zone) : toDateTimeLocalValue(new Date()));
+    setBookingOpen(true);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAnchor(addDays(weekStart, -7))}
-            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
-          >
+      <FilterBar
+        label="Filtros de la agenda"
+        sticky
+        actions={
+          <Button size="sm" onClick={() => openBooking()}>
+            Nuevo turno
+          </Button>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setAnchor(addDays(weekStart, -7))}>
             Semana anterior
-          </button>
-          <button
-            type="button"
-            onClick={() => setAnchor(new Date())}
-            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setAnchor(new Date())}>
             Hoy
-          </button>
-          <button
-            type="button"
-            onClick={() => setAnchor(addDays(weekStart, 7))}
-            className="rounded-control border border-border-strong px-3 py-1.5 text-xs font-medium"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setAnchor(addDays(weekStart, 7))}>
             Semana siguiente
-          </button>
+          </Button>
         </div>
 
         {seesEveryone ? (
-          <label className="flex items-center gap-2 text-xs text-ink-muted">
+          <label className="flex flex-col gap-0.5 text-xs font-medium text-ink-muted">
             Profesional
             <select
               value={professionalFilter}
@@ -191,10 +181,11 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
             </select>
           </label>
         ) : null}
-        <p className="text-sm text-ink-muted">
+
+        <p className="text-sm text-ink-muted self-center">
           {formatDayHeading(weekStart, zone)} — {formatDayHeading(addDays(weekStart, 6), zone)}
         </p>
-      </div>
+      </FilterBar>
 
       {error ? (
         <p role="alert" className="text-sm text-danger">
@@ -202,419 +193,85 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
         </p>
       ) : null}
 
-      <BookingForms
-        professionalId={bookingProfessional}
-        patients={bookable}
-        notice={bookingNotice}
-        zone={zone}
-        onCreated={() => void load()}
-        onError={setError}
-      />
-
       {error !== null ? null : appointments === null ? (
         <LoadingState label="Cargando la semana…" rows={7} />
       ) : (
         <div className="grid gap-3 md:grid-cols-7">
-        {days.map((day, index) => (
-          <section key={day.toISOString()} className="min-h-48 rounded-[var(--radius-panel)] border border-border bg-surface p-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              {formatDayHeading(day, zone)}
-            </h2>
-            <ul className="mt-2 space-y-2">
-              {(byDay[index] ?? []).length === 0 ? (
-                <li className="text-xs text-ink-muted">Sin turnos</li>
-              ) : (
-                (byDay[index] ?? []).map((slot) => (
-                  <li key={slot.id}>
+          {days.map((day, index) => (
+            <section
+              key={day.toISOString()}
+              className="flex min-h-48 flex-col rounded-[var(--radius-panel)] border border-border bg-surface p-3"
+            >
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                {formatDayHeading(day, zone)}
+              </h2>
+              <ul className="mt-2 flex flex-1 flex-col gap-2">
+                {(byDay[index] ?? []).length === 0 ? (
+                  <li>
                     <button
                       type="button"
-                      onClick={() => setSelected(slot)}
-                      className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                        slot.status === "cancelled"
-                          ? "border-border bg-surface-muted text-ink-muted line-through"
-                          : slot.status === "attended"
-                            ? "border-success/30 bg-success/5"
-                            : "border-brand/30 bg-brand/5"
-                      }`}
+                      onClick={() => openBooking(day)}
+                      className="w-full rounded-md border border-dashed border-border px-2 py-6 text-xs text-ink-muted hover:border-brand hover:bg-brand/5 hover:text-ink"
                     >
-                      <span className="block font-medium">
-                        {formatSlotTime(slot.startsAt, zone)}–{formatSlotTime(slot.endsAt, zone)}
-                      </span>
-                      <span className="block">{patientName(slot.patientId)}</span>
-                      {professionalFilter === "" ? (
-                        <span className="block text-ink-muted">
-                          {staffName(slot.professionalUserId)}
-                        </span>
-                      ) : null}
-                      <span className="block text-ink-muted">{modalityLabel(slot.modality)}</span>
+                      Sin turnos — agendar
                     </button>
                   </li>
-                ))
-              )}
-            </ul>
-          </section>
-        ))}
+                ) : (
+                  (byDay[index] ?? []).map((slot) => (
+                    <li key={slot.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(slot)}
+                        className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
+                          slot.status === "cancelled"
+                            ? "border-border bg-surface-muted text-ink-muted line-through"
+                            : slot.status === "attended"
+                              ? "border-success/30 bg-success/5"
+                              : "border-brand/30 bg-brand/5"
+                        }`}
+                      >
+                        <span className="block font-medium">
+                          {formatSlotTime(slot.startsAt, zone)}–{formatSlotTime(slot.endsAt, zone)}
+                        </span>
+                        <span className="block">{patientName(slot.patientId)}</span>
+                        {professionalFilter === "" ? (
+                          <span className="block text-ink-muted">
+                            {staffName(slot.professionalUserId)}
+                          </span>
+                        ) : null}
+                        <span className="block text-ink-muted">{modalityLabel(slot.modality)}</span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
 
-      {selected ? (
-        <AppointmentActions
-          appointment={selected}
-          patientName={patientName(selected.patientId)}
-          zone={zone}
-          onClose={() => setSelected(null)}
-          onChanged={() => {
-            setSelected(null);
-            void load();
-          }}
-          onError={setError}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function BookingForms({
-  professionalId,
-  patients,
-  notice,
-  zone,
-  onCreated,
-  onError,
-}: {
-  professionalId: string;
-  patients: Patient[];
-  notice: string | null;
-  zone: string;
-  onCreated: () => void;
-  onError: (message: string | null) => void;
-}) {
-  const [patientId, setPatientId] = useState("");
-  const [startsAt, setStartsAt] = useState(() => toDateTimeLocalValue(new Date()));
-  const [duration, setDuration] = useState(45);
-  // No default: the professional decides each time whether the session is online or presencial.
-  const [modality, setModality] = useState<Modality | "">("");
-  const [seriesUntil, setSeriesUntil] = useState("");
-  const [busy, setBusy] = useState(false);
-  const writesLocked = useWritesLocked();
-
-  async function bookOne(event: React.FormEvent) {
-    event.preventDefault();
-    if (writesLocked) return;
-    onError(null);
-    const start = dateTimeLocalToRFC3339(startsAt);
-    if (!start || patientId === "") {
-      onError("Elegí un paciente y una hora de inicio.");
-      return;
-    }
-    if (modality === "") {
-      onError("Elegí si el turno es online o presencial.");
-      return;
-    }
-    const ends = new Date(new Date(start).getTime() + duration * 60_000).toISOString();
-    setBusy(true);
-    try {
-      const result = await browserApi.POST("/api/v1/appointments", {
-        body: {
-          patientId,
-          professionalUserId: professionalId,
-          startsAt: start,
-          endsAt: ends,
-          modality,
-        },
-      });
-      if (result.error || !result.data) {
-        onError(apiErrorMessage(result.error));
-        return;
-      }
-      onCreated();
-    } catch {
-      onError("No pudimos contactar al servidor.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function bookSeries(event: React.FormEvent) {
-    event.preventDefault();
-    if (writesLocked) return;
-    onError(null);
-    const start = dateTimeLocalToRFC3339(startsAt);
-    if (!start || patientId === "" || seriesUntil === "") {
-      onError("La serie necesita paciente, hora de inicio y fecha de fin.");
-      return;
-    }
-    if (modality === "") {
-      onError("Elegí si la serie es online o presencial.");
-      return;
-    }
-    const startDate = new Date(start);
-    const localMinutes = startDate.getHours() * 60 + startDate.getMinutes();
-    setBusy(true);
-    try {
-      const result = await browserApi.POST("/api/v1/appointment-series", {
-        body: {
-          patientId,
-          professionalUserId: professionalId,
-          weekday: startDate.getDay(),
-          localStartMinute: localMinutes,
-          durationMinutes: duration,
-          modality,
-          startsOn: toISODate(startDate, zone),
-          untilOn: seriesUntil,
-        },
-      });
-      if (result.error || !result.data) {
-        onError(apiErrorMessage(result.error));
-        return;
-      }
-      onCreated();
-    } catch {
-      onError("No pudimos contactar al servidor.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-4 rounded-[var(--radius-panel)] border border-border bg-surface p-4 lg:grid-cols-2">
-      <form onSubmit={(event) => void bookOne(event)} className="space-y-3">
-        <h2 className="text-sm font-semibold">Nuevo turno</h2>
-        {notice ? <p className="text-xs text-ink-muted">{notice}</p> : null}
-        <PatientSelect
-          patients={patients}
-          value={patientId}
-          onChange={setPatientId}
-          disabled={writesLocked}
-        />
-        <label className="block text-xs font-medium text-ink-muted">
-          Inicio
-          <input
-            type="datetime-local"
-            value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
-            disabled={writesLocked}
-            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
-          />
-        </label>
-        <DurationField value={duration} onChange={setDuration} disabled={writesLocked} />
-        <ModalityField value={modality} onChange={setModality} disabled={writesLocked} />
-        <button
-          type="submit"
-          disabled={busy || writesLocked}
-          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
-        >
-          {busy ? "Guardando…" : "Reservar"}
-        </button>
-      </form>
-
-      <form onSubmit={(event) => void bookSeries(event)} className="space-y-3">
-        <h2 className="text-sm font-semibold">Serie semanal</h2>
-        <p className="text-xs text-ink-muted">
-          Se emiten turnos concretos cada {weekdayLabel(new Date(startsAt).getDay())} a la misma hora
-          local, hasta la fecha de fin. Un turno ya atendido no se reescribe.
-        </p>
-        <label className="block text-xs font-medium text-ink-muted">
-          Hasta
-          <input
-            type="date"
-            value={seriesUntil}
-            onChange={(event) => setSeriesUntil(event.target.value)}
-            disabled={writesLocked}
-            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={busy || writesLocked}
-          className="rounded-md border border-border px-4 py-2 text-sm font-medium disabled:opacity-60"
-        >
-          {busy ? "Guardando…" : "Crear serie"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function AppointmentActions({
-  appointment,
-  patientName,
-  zone,
-  onClose,
-  onChanged,
-  onError,
-}: {
-  appointment: Appointment;
-  patientName: string;
-  zone: string;
-  onClose: () => void;
-  onChanged: () => void;
-  onError: (message: string | null) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const scheduled = appointment.status === "scheduled";
-  const writesLocked = useWritesLocked();
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
-
-  async function transition(path: "attend" | "cancel") {
-    onError(null);
-    setBusy(true);
-    try {
-      const result =
-        path === "attend"
-          ? await browserApi.POST("/api/v1/appointments/{id}/attend", {
-              params: { path: { id: appointment.id ?? "" } },
-            })
-          : await browserApi.POST("/api/v1/appointments/{id}/cancel", {
-              params: { path: { id: appointment.id ?? "" } },
-            });
-      if (result.error || !result.data) {
-        onError(apiErrorMessage(result.error));
-        return;
-      }
-      onChanged();
-    } catch {
-      onError("No pudimos contactar al servidor.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <aside className="rounded-[var(--radius-panel)] border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">{patientName}</h2>
-          <p className="text-xs text-ink-muted">
-            {formatSlotTime(appointment.startsAt, zone)}–{formatSlotTime(appointment.endsAt, zone)} ·{" "}
-            {modalityLabel(appointment.modality)} · {appointment.status}
-          </p>
-        </div>
-        <button type="button" onClick={onClose} className="text-xs text-ink-muted" aria-label="Cerrar">
-          ✕
-        </button>
-      </div>
-      {scheduled ? (
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            disabled={busy || writesLocked}
-            onClick={() => void transition("attend")}
-            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-brand-ink disabled:opacity-60"
-          >
-            Marcar atendido
-          </button>
-          <button
-            type="button"
-            disabled={busy || writesLocked}
-            onClick={() => setConfirmingCancel(true)}
-            className="rounded-control border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-          >
-            Cancelar turno
-          </button>
-          <ConfirmDialog
-            open={confirmingCancel}
-            title={`¿Cancelar el turno de ${patientName}?`}
-            description="El horario queda libre y el turno pasa a cancelado. No se borra: sigue en la semana, tachado, para que el hueco tenga explicación."
-            confirmLabel="Cancelar turno"
-            cancelLabel="Volver"
-            tone="danger"
-            busy={busy}
-            onCancel={() => setConfirmingCancel(false)}
-            onConfirm={() => {
-              setConfirmingCancel(false);
-              void transition("cancel");
-            }}
-          />
-        </div>
-      ) : null}
-    </aside>
-  );
-}
-
-function PatientSelect({
-  patients,
-  value,
-  onChange,
-  disabled = false,
-}: {
-  patients: Patient[];
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block text-xs font-medium text-ink-muted">
-      Paciente
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
-        required
-      >
-        <option value="">Elegí un paciente</option>
-        {patients.map((patient) => (
-          <option key={patient.id} value={patient.id}>
-            {patient.fullName}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function ModalityField({
-  value,
-  onChange,
-  disabled = false,
-}: {
-  value: Modality | "";
-  onChange: (value: Modality | "") => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block text-xs font-medium text-ink-muted">
-      Modalidad
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as Modality | "")}
-        disabled={disabled}
-        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
-        required
-      >
-        <option value="">Elegí online o presencial</option>
-        {MODALITY_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function DurationField({
-  value,
-  onChange,
-  disabled = false,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block text-xs font-medium text-ink-muted">
-      Duración (minutos)
-      <input
-        type="number"
-        min={5}
-        max={480}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        disabled={disabled}
-        className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60"
+      <AppointmentBookingModal
+        open={bookingOpen}
+        professionalId={bookingProfessional}
+        patients={bookable}
+        notice={bookingNotice}
+        zone={zone}
+        initialStartsAt={bookingStartsAt}
+        onClose={() => setBookingOpen(false)}
+        onCreated={() => void load()}
       />
-    </label>
+
+      <AppointmentDetailModal
+        appointment={selected}
+        patientName={selected ? patientName(selected.patientId) : ""}
+        zone={zone}
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        onChanged={() => {
+          setSelected(null);
+          void load();
+        }}
+      />
+    </div>
   );
 }
