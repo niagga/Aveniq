@@ -35,6 +35,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/pricing"
+	"github.com/niagga/aveniq/backend/internal/domain/report"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/platform/authn"
@@ -125,6 +126,7 @@ type Deps struct {
 	GetSettlement          *billingapp.GetSettlementUseCase
 	IssueSettlement        *billingapp.IssueSettlementUseCase
 	VoidSettlement         *billingapp.VoidSettlementUseCase
+	BillingReport          *billingapp.ReportUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
 	ReadyChecks            []ReadyCheck
@@ -171,6 +173,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerCareRoutes(api, deps)
 	registerBillingRoutes(api, deps)
 	registerSettlementRoutes(api, deps)
+	registerReportRoutes(api, deps)
 
 	return router
 }
@@ -301,6 +304,7 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 	var iamValidationErr *iam.ValidationError
 	var billingValidationErr *billing.ValidationError
 	var insurerValidationErr *insurer.ValidationError
+	var reportValidationErr *report.ValidationError
 	var pricingValidationErr *pricing.ValidationError
 	var clientErr huma.StatusError
 
@@ -385,6 +389,10 @@ func problem(ctx context.Context, logger *slog.Logger, err error) error {
 		return huma.Error409Conflict("That voucher is already voided")
 	case errors.Is(err, billing.ErrImmutable):
 		return huma.Error409Conflict("That voucher cannot change in this state")
+	case errors.As(err, &reportValidationErr):
+		return huma.Error422UnprocessableEntity(reportValidationErr.Error())
+	case errors.Is(err, report.ErrForbidden):
+		return huma.Error403Forbidden("This action is not allowed for your role")
 	case errors.As(err, &iamValidationErr):
 		return huma.Error422UnprocessableEntity(iamValidationErr.Error())
 	case errors.Is(err, iam.ErrChangeNotAllowed):

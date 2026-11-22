@@ -791,6 +791,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Billed and attended-but-unbilled figures
+         * @description What the practice billed (issued vouchers, never voided ones) and what it attended without billing (valued at the tariff in force on the day of each session; sessions with no tariff are counted apart), by currency and without conversion. The range is read in the practice's time zone. A professional reads only their own figures and never the voucher list.
+         */
+        get: operations["report-billing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/signup": {
         parameters: {
             query?: never;
@@ -1084,6 +1104,30 @@ export interface components {
              * @description The professional who will treat the patient.
              */
             professionalId: string;
+        };
+        BillingReportBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/BillingReportBody.json
+             */
+            readonly $schema?: string;
+            /** @description First day, as asked. */
+            from: string;
+            /** @enum {string} */
+            groupBy: "none" | "professional" | "coverage" | "insurer" | "modality" | "week" | "month" | "year";
+            /** @description Empty when there is no cut. Their amounts add up to the totals. */
+            rows: components["schemas"]["ReportRowBody"][] | null;
+            /**
+             * @description own is a professional reading only their sessions and vouchers.
+             * @enum {string}
+             */
+            scope: "practice" | "own";
+            /** @description The practice's time zone: the range and the periods are read in it. */
+            timezone: string;
+            /** @description Last day, as asked. Included. */
+            to: string;
+            totals: components["schemas"]["ReportFiguresBody"];
         };
         ChangeRoleBody: {
             /**
@@ -1737,6 +1781,40 @@ export interface components {
              * @example consultorio-sur
              */
             slug: string;
+        };
+        ReportFiguresBody: {
+            /** @description What the issued vouchers billed, by currency. A voided voucher is not in it. */
+            billed: components["schemas"]["ReportMoneyBody"][] | null;
+            /** @description What the attended sessions without an issued voucher are worth at the tariff in force on their day, by currency. Only the valued sessions are in it. */
+            pending: components["schemas"]["ReportMoneyBody"][] | null;
+            /**
+             * Format: int64
+             * @description Attended sessions without an issued voucher that no tariff values. Counted apart, never as zero.
+             */
+            unvaluedSessions: number;
+        };
+        ReportMoneyBody: {
+            /**
+             * Format: int64
+             * @description In minor units (centavos).
+             */
+            amountMinor: number;
+            /**
+             * Format: int64
+             * @description How many vouchers or sessions make the amount.
+             */
+            count: number;
+            currency: string;
+        };
+        ReportRowBody: {
+            billed: components["schemas"]["ReportMoneyBody"][] | null;
+            /** @description Identifies the group: an id, a word, or the first day of the period. Empty for the lines that carry no value for the cut. */
+            key: string;
+            /** @description A name to show. Empty when the group has none; the client says so. */
+            label: string;
+            pending: components["schemas"]["ReportMoneyBody"][] | null;
+            /** Format: int64 */
+            unvaluedSessions: number;
         };
         SeriesBody: {
             /**
@@ -3891,6 +3969,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TreatingBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "report-billing": {
+        parameters: {
+            query: {
+                /** @description First day of the range, YYYY-MM-DD, in the practice's time zone. */
+                from: string;
+                /** @description Last day of the range, YYYY-MM-DD, included. */
+                to: string;
+                /** @description The cut. Default none: only the totals. */
+                groupBy?: "none" | "professional" | "coverage" | "insurer" | "modality" | "week" | "month" | "year";
+                /** @description Only this professional. A professional with the own scope always reads their own. */
+                professionalId?: string;
+                /** @description Only private patients or only patients covered by a mutual. */
+                coverage?: "private" | "insurer";
+                /** @description Only the patients covered by this mutual. */
+                insurerId?: string;
+                /** @description Only this modality. */
+                modality?: "online" | "presencial";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingReportBody"];
                 };
             };
             /** @description Error */

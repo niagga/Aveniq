@@ -18,6 +18,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/pricing"
+	"github.com/niagga/aveniq/backend/internal/domain/report"
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
@@ -379,4 +380,17 @@ type SettlementFilter struct {
 	InsurerID string
 	Limit     int32
 	Offset    int32
+}
+
+// ReportRepository reads the lines the billing report adds up. It only reads: the figures are
+// computed by the report package and the application.
+type ReportRepository interface {
+	// BilledLines returns the issued vouchers of the practice issued in the window, narrowed by
+	// the filter. A voided voucher bills nothing and is not in it. A voucher that carries no photo
+	// of the cut it is filtered by does not match that filter.
+	BilledLines(ctx context.Context, window report.Window, filter report.Filter) ([]report.BilledLine, error)
+	// PendingSessions returns the attended sessions that start in the window and that no issued
+	// voucher bills, narrowed by the filter. The coverage, mutual and currency are the patient's
+	// current ones: they are what a voucher issued today would carry.
+	PendingSessions(ctx context.Context, window report.Window, filter report.Filter) ([]report.Line, error)
 }

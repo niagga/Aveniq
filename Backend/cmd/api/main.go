@@ -104,6 +104,7 @@ func run() error {
 	careAccess := careapp.NewAccess(patientRepository, clinicalGrantRepository)
 	billingRepository := postgres.NewBillingRepository(pool)
 	settlementRepository := postgres.NewSettlementRepository(pool)
+	reportRepository := postgres.NewReportRepository(pool)
 
 	// ─── Authentication primitives ───
 	hasher, err := authn.NewPasswordHasher(authn.DefaultArgon2idParams())
@@ -189,6 +190,7 @@ func run() error {
 		GetSettlement:          billingapp.NewGetSettlementUseCase(settlementRepository, transactor),
 		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlementRepository, tariffRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlementRepository, transactor, auditLog, clock.New()),
+		BillingReport:          billingapp.NewReportUseCase(reportRepository, tariffRepository, tenantRepository, transactor),
 		UpdateSeries:           scheduleapp.NewUpdateSeriesUseCase(scheduleRepository, tenantRepository, transactor, clock.New(), idgen.UUIDGenerator{}),
 		CancelSeries:           scheduleapp.NewCancelSeriesUseCase(scheduleRepository, transactor, clock.New()),
 		ListUsers:              userapp.NewListUseCase(userRepository, transactor),

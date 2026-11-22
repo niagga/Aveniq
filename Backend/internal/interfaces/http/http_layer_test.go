@@ -378,6 +378,7 @@ func newHarness(t *testing.T) *harness {
 		GetSettlement:          billingapp.NewGetSettlementUseCase(settlements, scope),
 		IssueSettlement:        billingapp.NewIssueSettlementUseCase(settlements, tariffs, tenants, scope, audit, clock, uuidIDs{}),
 		VoidSettlement:         billingapp.NewVoidSettlementUseCase(settlements, scope, audit, clock),
+		BillingReport:          billingapp.NewReportUseCase(newFakeReportRepository(repo, vouchers, insurers), tariffs, tenants, scope),
 	})
 
 	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements}
