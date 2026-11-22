@@ -192,6 +192,16 @@ func TestBillingSchema(t *testing.T) {
 		// A second patient of practice A, so a mismatch is inside one practice.
 		otherPatient := uuid.NewString()
 		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			if schemaPatientsHaveClientID(ctx, app) {
+				clientID, err := insertClientApp(ctx, app, scratchTenantA, "Otra paciente", "AR")
+				if err != nil {
+					return err
+				}
+				_, err = app.Exec(ctx, `
+					INSERT INTO patients (id, tenant_id, client_id, country, full_name, billing_currency, created_at, updated_at)
+					VALUES ($1, $2, $3, 'AR', 'Otra paciente', 'ARS', now(), now())`, otherPatient, scratchTenantA, clientID)
+				return err
+			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (id, tenant_id, country, full_name, billing_currency, created_at, updated_at)
 				VALUES ($1, $2, 'AR', 'Otra paciente', 'ARS', now(), now())`, otherPatient, scratchTenantA)

@@ -35,6 +35,8 @@ func TestPatientsCountryModel(t *testing.T) {
 	}
 	defer func() { _ = app.Close(ctx) }()
 
+	hasClientID := schemaPatientsHaveClientID(ctx, app)
+
 	type patient struct {
 		country      *string
 		documentType *string
@@ -46,12 +48,31 @@ func TestPatientsCountryModel(t *testing.T) {
 
 	insert := func(ctx context.Context, tenantID string, row patient) error {
 		return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+			patientID := uuid.NewString()
+			if hasClientID {
+				country := "AR"
+				if row.country != nil {
+					country = *row.country
+				}
+				clientID, err := insertClientApp(ctx, app, tenantID, "Paciente de prueba", country)
+				if err != nil {
+					return err
+				}
+				_, err = app.Exec(ctx, `
+					INSERT INTO patients (
+						id, tenant_id, client_id, full_name, country, document_type, document_number,
+						document_normalized, tax_id_kind, fiscal_condition, billing_currency, created_at, updated_at
+					) VALUES ($1, $2, $3, 'Paciente de prueba', $4, $5, $6, $7, $8, $9, 'ARS', now(), now())`,
+					patientID, tenantID, clientID, row.country, row.documentType, row.document,
+					row.normalized, row.taxKind, row.fiscalCond)
+				return err
+			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (
 					id, tenant_id, full_name, country, document_type, document_number,
 					document_normalized, tax_id_kind, fiscal_condition, billing_currency, created_at, updated_at
 				) VALUES ($1, $2, 'Paciente de prueba', $3, $4, $5, $6, $7, $8, 'ARS', now(), now())`,
-				uuid.NewString(), tenantID, row.country, row.documentType, row.document,
+				patientID, tenantID, row.country, row.documentType, row.document,
 				row.normalized, row.taxKind, row.fiscalCond)
 			return err
 		})

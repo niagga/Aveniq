@@ -37,13 +37,27 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 	}
 	defer func() { _ = app.Close(ctx) }()
 
+	hasClientID := schemaPatientsHaveClientID(ctx, app)
+
 	// One transaction, because app.tenant_id is transactional by design (L6).
 	insert := func(ctx context.Context, tenantID, fullName string) error {
 		return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+			patientID := uuid.NewString()
+			if hasClientID {
+				clientID, err := insertClientApp(ctx, app, tenantID, fullName, "AR")
+				if err != nil {
+					return err
+				}
+				_, err = app.Exec(ctx, `
+					INSERT INTO patients (id, tenant_id, client_id, full_name, country, billing_currency, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, 'AR', 'ARS', now(), now())`,
+					patientID, tenantID, clientID, fullName)
+				return err
+			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (id, tenant_id, full_name, country, billing_currency, created_at, updated_at)
 				VALUES ($1, $2, $3, 'AR', 'ARS', now(), now())`,
-				uuid.NewString(), tenantID, fullName)
+				patientID, tenantID, fullName)
 			return err
 		})
 	}
@@ -112,10 +126,22 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 
 		insertWithDocument := func(ctx context.Context, tenantID, typed string) error {
 			return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+				patientID := uuid.NewString()
+				if hasClientID {
+					clientID, err := insertClientApp(ctx, app, tenantID, "Persona Compartida", "AR")
+					if err != nil {
+						return err
+					}
+					_, err = app.Exec(ctx, `
+						INSERT INTO patients (id, tenant_id, client_id, full_name, country, document_type, document_number, document_normalized, billing_currency, created_at, updated_at)
+						VALUES ($1, $2, $3, $4, 'AR', 'dni', $5, $6, 'ARS', now(), now())`,
+						patientID, tenantID, clientID, "Persona Compartida", typed, normalized)
+					return err
+				}
 				_, err := app.Exec(ctx, `
 					INSERT INTO patients (id, tenant_id, full_name, country, document_type, document_number, document_normalized, billing_currency, created_at, updated_at)
 					VALUES ($1, $2, $3, 'AR', 'dni', $4, $5, 'ARS', now(), now())`,
-					uuid.NewString(), tenantID, "Persona Compartida", typed, normalized)
+					patientID, tenantID, "Persona Compartida", typed, normalized)
 				return err
 			})
 		}

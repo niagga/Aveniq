@@ -173,18 +173,43 @@ func seedPatientAndUserPerTenant(t *testing.T, ctx context.Context, ownerDSN str
 	).Scan(&hasCurrency); err != nil {
 		t.Fatalf("cannot inspect the patients table: %v", err)
 	}
-	insertPatient := `
-			INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
-			VALUES ($1, $2, 'AR', 'Paciente de prueba', now(), now())`
-	if hasCurrency {
-		insertPatient = `
-			INSERT INTO patients (id, tenant_id, country, full_name, billing_currency, created_at, updated_at)
-			VALUES ($1, $2, 'AR', 'Paciente de prueba', 'ARS', now(), now())`
-	}
+	hasClientID := schemaPatientsHaveClientID(ctx, conn)
 
 	for _, tenantID := range []string{scratchTenantA, scratchTenantB} {
 		patientID := uuid.NewString()
-		if _, err := conn.Exec(ctx, insertPatient, patientID, tenantID); err != nil {
+		var clientID string
+		if hasClientID {
+			var err error
+			clientID, err = insertClientOwner(ctx, conn, tenantID, "Paciente de prueba", "AR")
+			if err != nil {
+				t.Fatalf("cannot insert the billing client for %s: %v", tenantID, err)
+			}
+		}
+
+		var err error
+		switch {
+		case hasClientID && hasCurrency:
+			_, err = conn.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, client_id, country, full_name, billing_currency, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', 'Paciente de prueba', 'ARS', now(), now())`,
+				patientID, tenantID, clientID)
+		case hasClientID:
+			_, err = conn.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, client_id, country, full_name, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', 'Paciente de prueba', now(), now())`,
+				patientID, tenantID, clientID)
+		case hasCurrency:
+			_, err = conn.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, country, full_name, billing_currency, created_at, updated_at)
+				VALUES ($1, $2, 'AR', 'Paciente de prueba', 'ARS', now(), now())`,
+				patientID, tenantID)
+		default:
+			_, err = conn.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
+				VALUES ($1, $2, 'AR', 'Paciente de prueba', now(), now())`,
+				patientID, tenantID)
+		}
+		if err != nil {
 			t.Fatalf("cannot insert the patient for %s: %v", tenantID, err)
 		}
 		patients[tenantID] = patientID

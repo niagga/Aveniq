@@ -77,13 +77,28 @@ func TestPatientCoverageMigrationRollsBack(t *testing.T) {
 			kind = "insurer"
 		}
 		return withTenantSetting(ctx, app, tenant, func(ctx context.Context) error {
+			patientID := uuid.NewString()
+			if schemaPatientsHaveClientID(ctx, owner) {
+				clientID, err := insertClientApp(ctx, app, tenant, "Paciente", "AR")
+				if err != nil {
+					return err
+				}
+				_, err = app.Exec(ctx, `
+					INSERT INTO patients (
+						id, tenant_id, client_id, country, full_name,
+						coverage_kind, insurer_id, member_number, billing_currency,
+						created_at, updated_at
+					) VALUES ($1, $2, $3, 'AR', 'Paciente', $4, $5, $6, $7, now(), now())`,
+					patientID, tenant, clientID, kind, insurer, member, currency)
+				return err
+			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (
 					id, tenant_id, country, full_name,
 					coverage_kind, insurer_id, member_number, billing_currency,
 					created_at, updated_at
 				) VALUES ($1, $2, 'AR', 'Paciente', $3, $4, $5, $6, now(), now())`,
-				uuid.NewString(), tenant, kind, insurer, member, currency)
+				patientID, tenant, kind, insurer, member, currency)
 			return err
 		})
 	}

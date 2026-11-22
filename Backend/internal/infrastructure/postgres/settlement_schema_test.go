@@ -53,7 +53,17 @@ func TestSettlementSchema(t *testing.T) {
 			VALUES ($1, $2, 'OSDE', '30711223334', now(), now())`, insurerA, scratchTenantA); err != nil {
 			return err
 		}
-		if _, err := app.Exec(ctx, `
+		if schemaPatientsHaveClientID(ctx, app) {
+			clientID, err := insertClientApp(ctx, app, scratchTenantA, "Ana Mutual", "AR")
+			if err != nil {
+				return err
+			}
+			if _, err := app.Exec(ctx, `
+				INSERT INTO patients (id, tenant_id, client_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', 'Ana Mutual', 'insurer', $4, 'AF-1', 'ARS', now(), now())`, coveredA, scratchTenantA, clientID, insurerA); err != nil {
+				return err
+			}
+		} else if _, err := app.Exec(ctx, `
 			INSERT INTO patients (id, tenant_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
 			VALUES ($1, $2, 'AR', 'Ana Mutual', 'insurer', $3, 'AF-1', 'ARS', now(), now())`, coveredA, scratchTenantA, insurerA); err != nil {
 			return err
