@@ -9,6 +9,8 @@ en cada transición de tarea.
 **S1 — Gestión de clientes: CRUD + historia clínica**
 > "Gestion de clientes: CRUD + Historia Clínica"
 
+Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es quien paga y el paciente es quien se atiende.
+
 **S2 — Gestión de contabilidad: CRUD facturación + histórico + integración de envío**
 > "Gestión de contabilidad: CRUD Facturación + Historico de facturación + Integración con plataforma de envio de facturación"
 
@@ -76,6 +78,21 @@ en cada transición de tarea.
 **S23 — Autorización de HC: la concede el profesional tratante, por defecto la ve el tratante, revocable sin plazo (E3)**
 > Decisiones en AskQuestion: "Lo concede el profesional tratante, para otros profesionales del consultorio"; "Sí, el tratante siempre ve la HC de sus pacientes (Recomendado)"; "Revocable a cualquier momento, sin validez fija (Recomendado)"
 
+**S24 — La primera pantalla es una landing del consultorio, resuelto por el dominio (E8)**
+> "A primeira pagina que eu quero ver, é uma landing page acerca de meu consultorio. Não quero que seja a primeira coisa a ver a janela de login, porque como cada tenant chega lá por seu propio dominio, então, não preciso selecionar o consultorio, e.g. o dominio consultorio123.com -> É o consultorio DEMO"
+> Decisiones en AskQuestion: "Campos de texto editables por el dueño: nombre, frase, sobre, dirección, teléfono, email y horario (Recomendado)"; "Subdominio por el slug automático + dominio propio cargado por nosotros, a mano (Recomendado)"
+
+**S25 — Crear, ver y editar abren en popup con blur; filtros siempre visibles (E8)**
+> Agenda: barra de filtros (Semana anterior, Hoy, Semana siguiente + profesional), tablero con todos los turnos, botón "Nuevo turno" en popup con modal y blur; cada reserva se abre en popup y, con permiso, se edita (cambiar fecha, cancelar). Pacientes, Mutuales y Usuarios: crear y editar en popup; Usuarios suma barra de búsqueda y botón "Nuevo" para invitaciones. Facturación: botón "Emitir comprobante" y cada ítem del historial en popup; el filtro de fechas visible arriba. Liquidaciones y Tarifario quedan como están.
+> Decisión en AskQuestion: "Página propia /patients/[id] con pestañas; solo crear y editar en popup (Recomendado)"
+
+**S26 — El cliente (quien paga) es distinto del paciente (quien se atiende) (E8)**
+> "O paciente e o cliente, não são a mesma pessoa o paciente é a pessoa que é atendida, o cliente é a pessoa que paga, um cliente pode ter varios pacientes asociados, um paciente, só tem um cliente. [...] quando damos a alta de un paciente com dados para a historia clínica, não leva dados de faturação, esa informação esta no cliente."
+> Decisiones en AskQuestion: "Mutual y n.º de afiliado en el paciente; moneda y datos fiscales en el cliente (Recomendado)"; "Por defecto 'el propio paciente es el cliente' (se crea solo), con opción de elegir otro (Recomendado)"; "Se mantiene un comprobante por sesión, pero el comprador es el cliente; la emisión en lote queda para después (Recomendado)"
+
+**S27 — E8 va después de T56 y de E7 (prioridad)**
+> Decisión en AskQuestion: "Terminar T56 y E7 antes y después hacer E8"
+
 ## Tasks
 
 | ID | Spec | Etapa | Descripción | Ruta | Commit |
@@ -142,6 +159,22 @@ en cada transición de tarea.
 | T59 | S2 | E7 | Pantalla de dashboard con gráficos en SVG o CSS (sin librería) y menú por rol | inline | — |
 | T60 | S2 | E7 | Informes guardados compartidos dentro del consultorio, con filtros, y exportación CSV | inline | — |
 | T61 | S2, S5 | E7 | E2E de E7 y cierre de E7 | inline | — |
+| T62 | S25 | E8 | Base de UI: `Modal` y `FormModal` (`<dialog>` nativo con blur, Esc, foco, aviso de cambios sin guardar, hoja a pantalla completa en celular), `FilterBar`, control segmentado y cabecera con acción primaria. `ConfirmDialog` pasa a usar el `Modal` | inline | — |
+| T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | — |
+| T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | — |
+| T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | — |
+| T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | — |
+| T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | — |
+| T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | — |
+| T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | — |
+| T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | — |
+| T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | — |
+| T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | — |
+| T73 | S26, S2 | E8 | Comprobantes y "sin facturar" por cliente: el comprador es el cliente y los comprobantes viejos conservan su snapshot | inline | — |
+| T74 | S26 | E8 | Pantalla "Clientes" y selector de cliente al crear el paciente (por defecto, el propio paciente) | inline | — |
+| T75 | S25 | E8 | Pacientes: crear y editar en popup y página de ficha `/patients/[id]` con pestañas | inline | — |
+| T76 | S25 | E8 | Facturación: "Emitir comprobante" y detalle en popup, barra de filtros fija arriba y tarjeta "Sin facturar" | inline | — |
+| T77 | S25, S5 | E8 | Reescribir los E2E por fatia, suite completa y cierre de E8 | inline | — |
 
 E0 (T1–T11) publicado en el commit `06f745a`.
 
@@ -2430,3 +2463,25 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Migración `0022_settlement_copago.sql`.** Agrega `settlement_items.copago_minor` (bigint, por defecto 0, CHECK no negativo). El copago de la sesión se congela al emitir, junto con el importe de la mutual. El guard de inmutabilidad lo incluye: no cambia salvo la liberación. Aplicada en la base de desarrollo (versión 22).
 - **Desarrollo.** Migración 0021 aplicada con `goose up` (versión 21). La API de 8080 corre este build y sirve los endpoints nuevos. La pantalla no se recorrió a mano contra datos reales: la cobertura es la E2E de T56.
 - **Commit.** `391f69d` (`feat: add monthly settlement to mutuals, one session settled once (E6 T55)`), con las migraciones 0021 y 0022 y el frontend de `/liquidaciones`.
+
+**L68 — E8: layout, UX y cliente pagador (plan aprobado)**
+
+- **Pedido.** Una landing del consultorio como primera pantalla, resuelta por el dominio; popups con blur para crear, ver y editar; filtros visibles; y separar al cliente (quien paga) del paciente (quien se atiende). Cita completa en S24, S25 y S26.
+- **Lo que mostró el código antes de planear.** El login pide el slug a mano y ningún host se resuelve, aunque `tenants.slug` ya se documenta como subdominio. `GET /tenants` exige sesión, así que no hay endpoint público, y el consultorio solo tiene nombre, slug, estado y zona horaria: no hay contenido para una landing. La agenda solo crea, atiende y cancela: **no se puede reprogramar** (T67). Ya existe `ConfirmDialog` sobre `<dialog>` nativo, base para el `Modal`. En Facturación el filtro de fechas vive en el panel lateral y, bajo `md`, en un `<details>` a mitad de página. En el shell, bajo `md` solo se ven 4 secciones y no hay "Más". El paciente carga datos fiscales, cobertura y moneda; el comprobante toma al comprador del paciente, y el tarifario y la liquidación usan la cobertura y la moneda del paciente. Hay 33 E2E en 9 specs atados al layout actual.
+- **Etapa E8, tareas T62 a T77.** Base de UI (T62) y shell (T63). Landing: backend (T64), landing y login por host (T65) y "Mi consultorio" (T66). Pantallas: reprogramar en el backend (T67), agenda (T68), mutuales (T69) y usuarios (T70). Cliente pagador: backend (T71), contrato del paciente (T72), comprobantes (T73) y pantalla de clientes (T74). Pacientes (T75), facturación (T76) y E2E de cierre (T77).
+- **Orden.** Primero T56 y E7 (T57 a T61), por decisión del dueño (S27). Dentro de E8: T62, T63, T64 a T66, T67 y T68, T69, T70, T71 a T74, T75, T76, T77. Facturación y la ficha del paciente van al final porque cambian con el cliente.
+- **Consecuencia de la prioridad.** Los E2E de T56 y de E7 se reescriben en T77. Para abaratarlo se escriben con localizadores por rol y etiqueta, sin depender de la posición. El dashboard de E7 nace con el shell actual y pasa al nuevo en T63.
+- **Modelo del cliente.** Agregado `Client`: nombre o razón social, documento, CUIT, condición fiscal, dirección fiscal, email, teléfono y moneda de facturación. `patients.client_id` obligatorio: un paciente tiene un solo cliente y un cliente puede tener varios pacientes. Al crear un paciente adulto, el cliente es el propio paciente y se crea en la misma operación; para un menor se elige o se crea el cliente. Los datos fiscales y la moneda salen del paciente. La mutual y el n.º de afiliado se quedan en el paciente, porque el afiliado es quien recibe la atención. Los comprobantes ya emitidos conservan su snapshot.
+- **Reglas que inventé (a revisar).** (1) El profesional ve solo el nombre del cliente de sus propios pacientes; owner, admin, assistant y accountant ven y editan el cliente. (2) En la agenda, editar una serie cambia solo esa ocurrencia. (3) Un host sin consultorio responde un 404 genérico y la landing muestra la página de Aveniq con el alta. (4) Un consultorio suspendido no publica su landing. (5) La interfaz dice "Cliente" para quien paga.
+- **Riesgos.** Resolver el consultorio por host: el host solo precarga el login, que sigue autenticando por credenciales; el endpoint público expone solo lo publicado y el caché del SSR varía por host. Los datos del cliente son personales (padres de menores). El contrato del paciente, de los comprobantes y de "sin facturar" cambia, como en T51; solo lo consume nuestro frontend.
+- **Commit.** Ninguno todavía: este registro es el plan.
+
+**L69 — T56: E2E de E6 y cierre de E6**
+
+- **Spec nuevo `e2e/e10-settlement.spec.ts`** (9 tests, en serie). Cuenta la historia completa de E6: (1) el dueño da de alta una mutual con CUIT y carga el valor de la profesional para esa mutual (la mutual paga 12.000,00 y el copago es 3.000,00; el tarifario lista los dos y el total de 15.000,00); (2) la profesional registra un paciente de esa mutual con su número de afiliado, reserva el turno y lo marca atendido; (3) el contador emite el comprobante con el importe propuesto, que es el total (15.000,00); (4) el contador liquida el mes a la mutual: la línea muestra afiliado, profesional, importe de la mutual y copago, y el total a liquidar es 12.000,00, nunca 15.000,00; (5) esa sesión no se puede liquidar dos veces (la vista previa dice que no hay sesiones y "Emitir liquidación" queda deshabilitado); (6) el administrador lee la liquidación y no puede emitir ni anular; (7) la asistente y la profesional no ven el enlace "Liquidaciones"; (8) el contador anula la liquidación con motivo, la sesión queda "Liberada" y vuelve a poder liquidarse, y la anulada sigue en el historial.
+- **Qué cubre de E6 y qué ya cubrían los otros specs.** `e6-coverage` (mutual y paciente con cobertura), `e7-tariff` (tarifario) y `e8-emission` (emisión de una sesión particular) siguen igual. El spec nuevo agrega el recorrido con mutual de punta a punta y la liquidación, que no tenía cobertura de navegador.
+- **Reglas que quedaron probadas en el navegador.** La propuesta de una sesión de mutual es el total del tarifario (L66, decisión d). El total de la liquidación es solo la parte de la mutual y el copago se muestra sin sumarse (L67, regla 3). Una sesión se liquida una sola vez y anular libera. Emitir una liquidación no depende de que la sesión tenga comprobante (L67, regla 7).
+- **Detalle de la prueba.** El mes de la liquidación se calcula en la zona horaria del consultorio a partir del turno reservado, porque "mañana" puede caer en el mes siguiente. Los nombres de mutual y paciente llevan una marca de tiempo, así que se puede correr más de una vez sin pisar datos.
+- **Entorno.** `pnpm exec playwright test` falló al principio porque la caché de navegadores de este entorno no tenía el Chromium que pide la versión de Playwright del repo. Se instaló con `playwright install chromium`; no hubo cambios en el repositorio por eso.
+- **Verificación.** `pnpm e2e`: 46 de 46 en verde (37 anteriores y 9 nuevos), con la API de 8080 y `pnpm dev` corriendo. No hubo cambios de código de producto: T56 solo agrega el spec. Con esto E6 queda cerrado.
+- **Commit.** Pendiente. La fila de T56 queda en `—` hasta que se haga el commit.
