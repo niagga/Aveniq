@@ -12,6 +12,7 @@ import {
   canUseAgenda,
   roleLabel,
 } from "@/entities/iam/model";
+import { canManageLanding } from "@/entities/landing/model";
 import { canManageInsurers } from "@/entities/insurer/model";
 import { canReadReports } from "@/entities/report/model";
 import { canReadTariffs } from "@/entities/tariff/model";
@@ -95,6 +96,12 @@ const SECTIONS: readonly Section[] = [
     label: "Usuarios",
     icon: <UsersIcon />,
     allow: canManageAccounts,
+  },
+  {
+    href: "/mi-consultorio",
+    label: "Mi consultorio",
+    icon: <PracticeIcon />,
+    allow: canManageLanding,
   },
 ];
 
@@ -392,6 +399,15 @@ function UsersIcon() {
       <circle cx="6" cy="5.5" r="2.2" />
       <path d="M1.8 13.5c.6-2.1 2.2-3.3 4.2-3.3s3.6 1.2 4.2 3.3" />
       <path d="M11 5.5h3M12.5 4v3" />
+    </svg>
+  );
+}
+
+function PracticeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M3 14V4.5l5-2.5 5 2.5V14H3Z" />
+      <path d="M6.5 14v-4h3v4M6.5 7.5h3" />
     </svg>
   );
 }

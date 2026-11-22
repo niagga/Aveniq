@@ -80,7 +80,14 @@ test("on a phone the sections past the fourth open from Más, and the popup clos
   await rail.getByRole("button", { name: "Más" }).click();
   const popup = page.getByRole("dialog", { name: "Más secciones" });
   await expect(popup).toBeVisible();
-  for (const label of ["Liquidaciones", "Informes", "Tarifario", "Mutuales", "Usuarios"]) {
+  for (const label of [
+    "Liquidaciones",
+    "Informes",
+    "Tarifario",
+    "Mutuales",
+    "Usuarios",
+    "Mi consultorio",
+  ]) {
     await expect(popup.getByRole("link", { name: label })).toBeVisible();
   }
 

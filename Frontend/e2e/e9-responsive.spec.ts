@@ -22,6 +22,7 @@ const PRIVATE_PATHS = [
   "/tarifario",
   "/mutuales",
   "/usuarios",
+  "/mi-consultorio",
 ] as const;
 
 /**
