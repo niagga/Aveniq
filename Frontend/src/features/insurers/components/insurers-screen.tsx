@@ -3,48 +3,36 @@
 import { useState } from "react";
 
 import type { Insurer } from "@/entities/insurer/model";
-import { InsurerForm } from "@/features/insurers/components/insurer-form";
+import { InsurerFormModal } from "@/features/insurers/components/insurer-form";
 import { useInsurers } from "@/features/insurers/use-insurers";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
+import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Notice } from "@/shared/ui/notice";
+import { PageHeader } from "@/shared/ui/page-header";
 
 /**
- * The practice's mutual catalog (T51). Owner and admin write it; the page is behind a
- * RoleGate, and the API refuses the writes of any other role again.
- *
- * A mutual is deactivated, never deleted: patients and, later, settlements refer to it.
- * A deactivated mutual stays in the list, marked, and keeps covering the patients it
- * already covers.
+ * The practice's mutual catalog (T51, T69). Owner and admin write it; create and edit open in a popup.
  */
 export function InsurersScreen() {
   const { insurers, failedStatus, reload } = useInsurers(true);
   const writesLocked = useWritesLocked();
 
-  const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
+  const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Insurer | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<string | null>(null);
   const [confirmingDowngrade, setConfirmingDowngrade] = useState<Insurer | null>(null);
 
-  function startEdit(insurer: Insurer) {
+  function openCreate() {
+    setEditing(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(insurer: Insurer) {
     setEditing(insurer);
-    setMode("edit");
-  }
-
-  function closeForm() {
-    setMode("idle");
-    setEditing(null);
-  }
-
-  function toggleCreate() {
-    if (mode === "create") {
-      closeForm();
-      return;
-    }
-    setEditing(null);
-    setMode("create");
+    setFormOpen(true);
   }
 
   async function toggleActive(insurer: Insurer) {
@@ -73,35 +61,22 @@ export function InsurersScreen() {
 
   return (
     <>
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Mutuales</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Las mutuales que atiende el consultorio. Cada paciente con cobertura de mutual
-            se asocia a una de ellas.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={toggleCreate}
-          disabled={writesLocked}
-          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
-        >
-          {mode === "create" ? "Cerrar formulario" : "Nueva mutual"}
-        </button>
-      </header>
+      <PageHeader
+        title="Mutuales"
+        description="Las mutuales que atiende el consultorio. Cada paciente con cobertura de mutual se asocia a una de ellas."
+        action={
+          <Button size="sm" onClick={openCreate} disabled={writesLocked}>
+            Nueva mutual
+          </Button>
+        }
+      />
 
-      {mode !== "idle" && !writesLocked ? (
-        <InsurerForm
-          key={editing?.id ?? "new"}
-          insurer={mode === "edit" ? editing : null}
-          onSaved={() => {
-            closeForm();
-            void reload();
-          }}
-          onCancel={closeForm}
-        />
-      ) : null}
+      <InsurerFormModal
+        open={formOpen}
+        insurer={editing}
+        onClose={() => setFormOpen(false)}
+        onSaved={() => void reload()}
+      />
 
       {failedStatus !== null ? (
         <Notice tone="danger" title="No pudimos leer las mutuales">
@@ -115,8 +90,8 @@ export function InsurersScreen() {
         </p>
       ) : insurers.length === 0 ? (
         <Notice tone="info" title="Todavía no hay mutuales">
-          Cargá la primera con el botón de arriba. Los pacientes con cobertura de mutual la
-          eligen de esta lista.
+          Cargá la primera con el botón de arriba. Los pacientes con cobertura de mutual la eligen de
+          esta lista.
         </Notice>
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-surface">
@@ -128,9 +103,15 @@ export function InsurersScreen() {
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
               <tr>
-                <th scope="col" className="px-4 py-3 font-medium">Mutual</th>
-                <th scope="col" className="px-4 py-3 font-medium">CUIT</th>
-                <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Mutual
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  CUIT
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Estado
+                </th>
                 <th scope="col" className="px-4 py-3 font-medium">
                   <span className="sr-only">Acciones</span>
                 </th>
@@ -154,29 +135,24 @@ export function InsurersScreen() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(insurer)}
-                        disabled={writesLocked}
-                        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-                      >
+                      <Button variant="secondary" size="sm" onClick={() => openEdit(insurer)} disabled={writesLocked}>
                         Editar
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => {
                           if (insurer.isActive) setConfirmingDowngrade(insurer);
                           else void toggleActive(insurer);
                         }}
                         disabled={busyID === insurer.id || writesLocked}
-                        className="rounded-control border border-border px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-60"
                       >
                         {busyID === insurer.id
                           ? "Guardando…"
                           : insurer.isActive
                             ? "Dar de baja"
                             : "Reactivar"}
-                      </button>
+                      </Button>
                       <ConfirmDialog
                         open={confirmingDowngrade?.id === insurer.id}
                         title={`¿Dar de baja ${insurer.name}?`}
