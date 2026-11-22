@@ -66,7 +66,10 @@ export const EXPIRED = {
 /** Signs in as the given account through the product form and waits for the dashboard. */
 export async function signInAs(page: Page, account: Account, tenant: string = DEMO.tenant): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Consultorio").fill(tenant);
+  const consultorio = page.getByLabel("Consultorio");
+  if (await consultorio.isVisible()) {
+    await consultorio.fill(tenant);
+  }
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("Contraseña").fill(account.password);
   await page.getByRole("button", { name: "Entrar" }).click();

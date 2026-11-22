@@ -10,11 +10,17 @@ import { inputClass } from "@/shared/ui/field";
 /**
  * Sign-in form.
  *
- * The tenant is a field and not something inferred from the host: the email is
- * unique per practice, not platform-wide, so the API cannot resolve who is signing
- * in without being told which practice to look in.
+ * The email is unique per practice, not platform-wide, so the API always needs a
+ * practice slug. When the host names one (T65), it arrives filled in and hidden;
+ * otherwise the person types it.
  */
-export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: string }) {
+export function LoginForm({
+  initialTenantSlug = "",
+  hideTenantField = false,
+}: {
+  initialTenantSlug?: string;
+  hideTenantField?: boolean;
+}) {
   const router = useRouter();
   const [tenantSlug, setTenantSlug] = useState(initialTenantSlug);
   const [email, setEmail] = useState("");
@@ -68,24 +74,28 @@ export function LoginForm({ initialTenantSlug = "" }: { initialTenantSlug?: stri
       </p>
 
       <div className="mt-5 grid gap-4">
-        <div>
-          <label htmlFor={tenantId} className="block text-xs font-medium text-ink-muted">
-            Consultorio
-          </label>
-          <input
-            id={tenantId}
-            name="tenantSlug"
-            value={tenantSlug}
-            onChange={(event) => setTenantSlug(event.target.value)}
-            required
-            maxLength={63}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="consultorio-sur"
-            className={inputClass}
-          />
-        </div>
+        {hideTenantField ? (
+          <input type="hidden" name="tenantSlug" value={tenantSlug} />
+        ) : (
+          <div>
+            <label htmlFor={tenantId} className="block text-xs font-medium text-ink-muted">
+              Consultorio
+            </label>
+            <input
+              id={tenantId}
+              name="tenantSlug"
+              value={tenantSlug}
+              onChange={(event) => setTenantSlug(event.target.value)}
+              required
+              maxLength={63}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="consultorio-sur"
+              className={inputClass}
+            />
+          </div>
+        )}
 
         <div>
           <label htmlFor={emailId} className="block text-xs font-medium text-ink-muted">

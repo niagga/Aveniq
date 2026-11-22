@@ -119,7 +119,7 @@ killing the terminal mid-start leaves an orphaned `postmaster.pid` behind.
 | PostgreSQL | `127.0.0.1:5433` (non-default on purpose) |
 | Redis | `127.0.0.1:6380` |
 | API | `127.0.0.1:8080` |
-| Web | `localhost:3000` |
+| Web | `localhost:3000` (platform); `demo.localhost:3000` resolves the demo practice (E8 landing) |
 
 `scripts/local-status.ps1` and `scripts/local-down.ps1` manage the stack.
 

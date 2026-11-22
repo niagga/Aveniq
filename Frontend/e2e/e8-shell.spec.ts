@@ -10,7 +10,7 @@ import { ACCOUNTS, signIn, signInAs } from "./helpers";
 
 const RAIL = "Secciones del consultorio";
 
-test("the first screen of the address is public: it says what Aveniq is and leads to sign-in", async ({
+test("on the platform host the first screen is public Aveniq and leads to sign-in", async ({
   page,
 }) => {
   await page.goto("/");
@@ -20,6 +20,18 @@ test("the first screen of the address is public: it says what Aveniq is and lead
   ).toBeVisible();
   await page.getByRole("link", { name: "Entrar" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel("Consultorio")).toBeVisible();
+});
+
+test("on demo.localhost the first screen is the practice landing and sign-in hides Consultorio", async ({
+  page,
+}) => {
+  await page.goto("http://demo.localhost:3000/");
+
+  await expect(page.getByRole("heading", { name: "Consultorio Demo" })).toBeVisible();
+  await page.getByRole("link", { name: "Entrar" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel("Consultorio")).toBeHidden();
 });
 
 test("the owner lands on the dashboard at /panel, and the rail marks Inicio", async ({ page }) => {
