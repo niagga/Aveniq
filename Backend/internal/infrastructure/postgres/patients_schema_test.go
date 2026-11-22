@@ -103,11 +103,29 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 	})
 
 	t.Run("writing into another tenant is refused by the policy", func(t *testing.T) {
+		var clientB string
+		if hasClientID {
+			if err := withTenantSetting(ctx, app, scratchTenantB, func(ctx context.Context) error {
+				var err error
+				clientB, err = insertClientApp(ctx, app, scratchTenantB, "Intruso", "AR")
+				return err
+			}); err != nil {
+				t.Fatalf("setup client for tenant B: %v", err)
+			}
+		}
 		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			patientID := uuid.NewString()
+			if hasClientID {
+				_, err := app.Exec(ctx, `
+					INSERT INTO patients (id, tenant_id, client_id, full_name, country, billing_currency, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, 'AR', 'ARS', now(), now())`,
+					patientID, scratchTenantB, clientB, "Intruso")
+				return err
+			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (id, tenant_id, full_name, country, billing_currency, created_at, updated_at)
 				VALUES ($1, $2, $3, 'AR', 'ARS', now(), now())`,
-				uuid.NewString(), scratchTenantB, "Intruso")
+				patientID, scratchTenantB, "Intruso")
 			return err
 		})
 

@@ -23,6 +23,7 @@ import (
 type careFixture struct {
 	transactor *postgres.Transactor
 	patients   *postgres.PatientRepository
+	clients    *postgres.ClientRepository
 	grants     *postgres.ClinicalGrantRepository
 	catalog    *postgres.PatientCatalog
 	treating   string
@@ -53,6 +54,7 @@ func careEnv(t *testing.T) careFixture {
 	fixture := careFixture{
 		transactor: postgres.NewTransactor(pool),
 		patients:   postgres.NewPatientRepository(pool),
+		clients:    postgres.NewClientRepository(pool),
 		grants:     postgres.NewClinicalGrantRepository(pool),
 		catalog:    postgres.NewPatientCatalog(pool),
 	}
@@ -95,7 +97,7 @@ func (f careFixture) treatedPatient(t *testing.T, tenantID, name, treatingID str
 		subject = subject.WithTreating(treatingID)
 	}
 	if err := f.transactor.WithTenant(ctx, tenantID, func(ctx context.Context) error {
-		return f.patients.Create(ctx, subject)
+		return persistPatient(ctx, f.clients, f.patients, subject)
 	}); err != nil {
 		t.Fatalf("cannot create the patient %q: %v", name, err)
 	}

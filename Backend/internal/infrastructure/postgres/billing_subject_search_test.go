@@ -35,13 +35,14 @@ func TestBillingSubjectSearch(t *testing.T) {
 
 	transactor := postgres.NewTransactor(pool)
 	patients := postgres.NewPatientRepository(pool)
+	clients := postgres.NewClientRepository(pool)
 	catalog := postgres.NewPatientCatalog(pool)
 	billing := postgres.NewBillingRepository(pool)
 
 	create := func(tenantID string, subject patient.Patient) {
 		t.Helper()
 		if err := transactor.WithTenant(ctx, tenantID, func(ctx context.Context) error {
-			return patients.Create(ctx, subject)
+			return persistPatient(ctx, clients, patients, subject)
 		}); err != nil {
 			t.Fatalf("cannot create %q: %v", subject.FullName, err)
 		}

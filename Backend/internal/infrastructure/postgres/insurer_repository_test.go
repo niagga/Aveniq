@@ -18,7 +18,7 @@ import (
 
 // insurerEnv builds a throwaway database with the real migrations and the insurer
 // and patient adapters, so the patient-to-mutual foreign key is exercised for real.
-func insurerEnv(t *testing.T) (*postgres.Transactor, *postgres.InsurerRepository, *postgres.PatientRepository, string, string) {
+func insurerEnv(t *testing.T) (*postgres.Transactor, *postgres.InsurerRepository, *postgres.PatientRepository, *postgres.ClientRepository, string, string) {
 	t.Helper()
 
 	ownerDSN := os.Getenv("TEST_DATABASE_URL")
@@ -38,7 +38,10 @@ func insurerEnv(t *testing.T) (*postgres.Transactor, *postgres.InsurerRepository
 	}
 	t.Cleanup(func() { pool.Close() })
 
-	return postgres.NewTransactor(pool), postgres.NewInsurerRepository(pool), postgres.NewPatientRepository(pool),
+	return postgres.NewTransactor(pool),
+		postgres.NewInsurerRepository(pool),
+		postgres.NewPatientRepository(pool),
+		postgres.NewClientRepository(pool),
 		scratchTenantA, scratchTenantB
 }
 
@@ -53,7 +56,7 @@ func newInsurerFor(t *testing.T, tenantID, name string) insurer.Insurer {
 }
 
 func TestInsurerRepository(t *testing.T) {
-	transactor, repo, _, tenantA, tenantB := insurerEnv(t)
+	transactor, repo, _, _, tenantA, tenantB := insurerEnv(t)
 	ctx := context.Background()
 
 	create := func(t *testing.T, tenantID string, subject insurer.Insurer) error {
@@ -188,7 +191,7 @@ func TestInsurerRepository(t *testing.T) {
 }
 
 func TestPatientCoverageAgainstMutuals(t *testing.T) {
-	transactor, insurers, patients, tenantA, tenantB := insurerEnv(t)
+	transactor, insurers, patients, clients, tenantA, tenantB := insurerEnv(t)
 	ctx := context.Background()
 
 	mutualA := newInsurerFor(t, tenantA, "OSDE Coverage")
@@ -217,7 +220,7 @@ func TestPatientCoverageAgainstMutuals(t *testing.T) {
 	t.Run("an insured patient persists with its mutual, member number and currency", func(t *testing.T) {
 		subject := insuredIn(tenantA, string(mutualA.ID))
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return patients.Create(ctx, subject)
+			return persistPatient(ctx, clients, patients, subject)
 		}); err != nil {
 			t.Fatalf("cannot create the insured patient: %v", err)
 		}
@@ -249,7 +252,7 @@ func TestPatientCoverageAgainstMutuals(t *testing.T) {
 	t.Run("a patient cannot be covered by another practice's mutual", func(t *testing.T) {
 		subject := insuredIn(tenantB, string(mutualA.ID))
 		err := transactor.WithTenant(ctx, tenantB, func(ctx context.Context) error {
-			return patients.Create(ctx, subject)
+			return persistPatient(ctx, clients, patients, subject)
 		})
 
 		var validation *patient.ValidationError

@@ -2,9 +2,14 @@ package postgres_test
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/niagga/aveniq/backend/internal/domain/client"
+	"github.com/niagga/aveniq/backend/internal/domain/patient"
+	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 )
 
 const clientInsertOwnerSQL = `
@@ -49,4 +54,39 @@ func insertClientApp(ctx context.Context, conn *pgx.Conn, tenantID, displayName,
 	id := uuid.NewString()
 	_, err := conn.Exec(ctx, clientInsertAppSQL, id, tenantID, displayName, country)
 	return id, err
+}
+
+// persistPatient creates the default billing client and the patient in one tenant scope,
+// matching what the application does after migration 0026.
+func persistPatient(
+	ctx context.Context,
+	clients *postgres.ClientRepository,
+	repo *postgres.PatientRepository,
+	subject patient.Patient,
+) error {
+	payer, err := client.New(
+		client.ID(uuid.NewString()),
+		subject.TenantID,
+		clientDraftFromPatient(subject),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	if err := clients.Create(ctx, payer); err != nil {
+		return err
+	}
+	subject.ClientID = string(payer.ID)
+	return repo.Create(ctx, subject)
+}
+
+func clientDraftFromPatient(subject patient.Patient) client.Draft {
+	return client.Draft{
+		DisplayName:     subject.FullName,
+		Country:         subject.Country,
+		TaxID:           subject.TaxID,
+		FiscalCondition: subject.FiscalCondition,
+		FiscalAddress:   subject.FiscalAddress,
+		BillingCurrency: subject.BillingCurrency,
+	}
 }

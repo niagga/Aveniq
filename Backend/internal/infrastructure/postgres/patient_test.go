@@ -19,7 +19,7 @@ import (
 // patientEnv builds a throwaway database with the real migrations, the patient
 // adapter and the country catalog. It skips without the DSNs, like the rest of the
 // package.
-func patientEnv(t *testing.T) (*postgres.Transactor, *postgres.PatientRepository, *postgres.PatientCatalog, string, string) {
+func patientEnv(t *testing.T) (*postgres.Transactor, *postgres.PatientRepository, *postgres.ClientRepository, *postgres.PatientCatalog, string, string) {
 	t.Helper()
 
 	ownerDSN := os.Getenv("TEST_DATABASE_URL")
@@ -39,7 +39,10 @@ func patientEnv(t *testing.T) (*postgres.Transactor, *postgres.PatientRepository
 	}
 	t.Cleanup(func() { pool.Close() })
 
-	return postgres.NewTransactor(pool), postgres.NewPatientRepository(pool), postgres.NewPatientCatalog(pool),
+	return postgres.NewTransactor(pool),
+		postgres.NewPatientRepository(pool),
+		postgres.NewClientRepository(pool),
+		postgres.NewPatientCatalog(pool),
 		scratchTenantA, scratchTenantB
 }
 
@@ -89,13 +92,13 @@ func newPatient(t *testing.T, catalog *postgres.PatientCatalog, tenantID, fullNa
 }
 
 func TestPatientRepository(t *testing.T) {
-	transactor, repo, catalog, tenantA, tenantB := patientEnv(t)
+	transactor, repo, clients, catalog, tenantA, tenantB := patientEnv(t)
 	ctx := context.Background()
 
 	t.Run("a patient persists and reads back with its country data", func(t *testing.T) {
 		subject := newPatient(t, catalog, tenantA, "Ana Pérez", "30.111.222")
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, subject)
+			return persistPatient(ctx, clients, repo, subject)
 		}); err != nil {
 			t.Fatalf("cannot create the patient: %v", err)
 		}
@@ -133,7 +136,7 @@ func TestPatientRepository(t *testing.T) {
 	t.Run("the same document twice in one tenant is a domain conflict", func(t *testing.T) {
 		first := newPatient(t, catalog, tenantA, "Duplicada Uno", "27.222.333")
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, first)
+			return persistPatient(ctx, clients, repo, first)
 		}); err != nil {
 			t.Fatalf("cannot create the first patient: %v", err)
 		}
@@ -142,7 +145,7 @@ func TestPatientRepository(t *testing.T) {
 		// the index compares.
 		second := newPatient(t, catalog, tenantA, "Duplicada Dos", "27222333")
 		err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, second)
+			return persistPatient(ctx, clients, repo, second)
 		})
 		if !errors.Is(err, patient.ErrDocumentTaken) {
 			t.Fatalf("error = %v, want %v", err, patient.ErrDocumentTaken)
@@ -156,7 +159,7 @@ func TestPatientRepository(t *testing.T) {
 		forged.Document = &patient.Document{Country: "AR", Kind: "nie", Number: "X1234567L", Normalized: "X1234567L"}
 
 		err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, forged)
+			return persistPatient(ctx, clients, repo, forged)
 		})
 		if !errors.Is(err, patient.ErrDocumentInvalid) {
 			t.Fatalf("error = %v, want %v", err, patient.ErrDocumentInvalid)
@@ -175,7 +178,7 @@ func TestPatientRepository(t *testing.T) {
 	t.Run("a patient of one tenant is invisible from another", func(t *testing.T) {
 		subject := newPatient(t, catalog, tenantA, "Solo de A", "")
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, subject)
+			return persistPatient(ctx, clients, repo, subject)
 		}); err != nil {
 			t.Fatalf("cannot create the patient: %v", err)
 		}
@@ -192,7 +195,7 @@ func TestPatientRepository(t *testing.T) {
 	t.Run("an edit persists and keeps the identity", func(t *testing.T) {
 		subject := newPatient(t, catalog, tenantA, "Editable", "24.444.555")
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, subject)
+			return persistPatient(ctx, clients, repo, subject)
 		}); err != nil {
 			t.Fatalf("cannot create the patient: %v", err)
 		}
@@ -240,7 +243,7 @@ func TestPatientRepository(t *testing.T) {
 		unique := "Buscable " + uuid.NewString()[:6]
 		subject := newPatient(t, catalog, tenantA, unique, "23.333.444")
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
-			return repo.Create(ctx, subject)
+			return persistPatient(ctx, clients, repo, subject)
 		}); err != nil {
 			t.Fatalf("cannot create the patient: %v", err)
 		}
@@ -276,7 +279,7 @@ func TestPatientRepository(t *testing.T) {
 }
 
 func TestPatientCatalog(t *testing.T) {
-	_, _, catalog, tenantA, _ := patientEnv(t)
+	_, _, _, catalog, tenantA, _ := patientEnv(t)
 	ctx := context.Background()
 
 	t.Run("a Spanish NIE is described by the catalog, not by the code", func(t *testing.T) {
