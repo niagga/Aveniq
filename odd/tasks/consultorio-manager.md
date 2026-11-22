@@ -164,7 +164,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | 8b8813d |
 | T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | 814f380 |
 | T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | 349fe4f |
-| T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | — |
+| T67 | S25, S15 | E8 | Backend de reprogramar turno: chequeo de solapamiento, solo turno agendado, auditoría y tests | inline | cbcade6 |
 | T68 | S25 | E8 | Agenda: barra de filtros, "Nuevo turno" en popup (con serie semanal), clic en celda vacía y popup de detalle con edición según permiso | inline | — |
 | T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | — |
 | T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | — |
@@ -2627,3 +2627,11 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `next typegen` + `tsc --noEmit` en verde. `e8-landing-editor` y `e8-shell` (8 tests de shell) en verde.
 - **Commit.** `349fe4f` (`feat: add practice landing editor screen (E8 T66)`). El registro del hash va en un commit aparte.
 - **Siguiente.** T67 (reprogramar turno en el backend).
+
+**L82 — T67: reprogramar turno (backend)**
+
+- **Qué cambia.** `POST /api/v1/appointments/{id}/reschedule` con `startsAt`, `endsAt` y opcionalmente `modality` y `notes`. Solo turnos `scheduled`; atendido o cancelado responde transición inválida. El solapamiento sigue en `appointments_no_overlap` (23P01 → 409). Auditoría `appointment.rescheduled` en la misma transacción que el `UPDATE`.
+- **Piezas.** Dominio `Reschedule` + `validateInterval`, query `RescheduleAppointment`, puerto y repositorio, `RescheduleAppointmentUseCase`, handler y cableado en `main`/`Deps`.
+- **Verificación.** `go build ./...` y tests de dominio/aplicación de `schedule` en verde; test de esquema Postgres para reprogramar en intervalo ocupado (con `TEST_DATABASE_URL`).
+- **Commit.** `cbcade6` (`feat: add appointment reschedule endpoint with overlap and audit (E8 T67)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T68 (agenda en frontend con popups y reprogramar).
