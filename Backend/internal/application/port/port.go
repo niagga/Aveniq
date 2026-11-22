@@ -13,6 +13,7 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/clinical"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
@@ -91,6 +92,14 @@ type InsurerRepository interface {
 	// which the patient forms offer for new coverage.
 	List(ctx context.Context, activeOnly bool) ([]insurer.Insurer, error)
 	Update(ctx context.Context, subject insurer.Insurer) error
+}
+
+// ClientRepository persists billing clients of a practice (E8/T71).
+type ClientRepository interface {
+	Create(ctx context.Context, subject client.Client) error
+	ByID(ctx context.Context, id client.ID) (client.Client, error)
+	List(ctx context.Context, activeOnly bool) ([]client.Client, error)
+	Update(ctx context.Context, subject client.Client) error
 }
 
 // TariffListItem is a tariff with the names the screen shows for it. The names are read

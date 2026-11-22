@@ -11,6 +11,7 @@ import (
 	patientapp "github.com/niagga/aveniq/backend/internal/application/patient"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
@@ -215,6 +216,46 @@ func (f *fakeInsurerRepository) Update(_ context.Context, subject insurer.Insure
 	return nil
 }
 
+type fakeClientRepository struct {
+	stored map[client.ID]client.Client
+}
+
+func newFakeClientRepository() *fakeClientRepository {
+	return &fakeClientRepository{stored: map[client.ID]client.Client{}}
+}
+
+func (f *fakeClientRepository) Create(_ context.Context, subject client.Client) error {
+	f.stored[subject.ID] = subject
+	return nil
+}
+
+func (f *fakeClientRepository) ByID(_ context.Context, id client.ID) (client.Client, error) {
+	subject, ok := f.stored[id]
+	if !ok {
+		return client.Client{}, client.ErrNotFound
+	}
+	return subject, nil
+}
+
+func (f *fakeClientRepository) List(_ context.Context, activeOnly bool) ([]client.Client, error) {
+	rows := make([]client.Client, 0, len(f.stored))
+	for _, subject := range f.stored {
+		if activeOnly && !subject.IsActive {
+			continue
+		}
+		rows = append(rows, subject)
+	}
+	return rows, nil
+}
+
+func (f *fakeClientRepository) Update(_ context.Context, subject client.Client) error {
+	if _, ok := f.stored[subject.ID]; !ok {
+		return client.ErrNotFound
+	}
+	f.stored[subject.ID] = subject
+	return nil
+}
+
 // ─── world ───────────────────────────────────────────────────────────────────
 
 const start = "2025-06-15T10:30:00Z"
@@ -251,7 +292,7 @@ func newWorld(t *testing.T) *world {
 		insurers:   insurers,
 		catalog:    catalog,
 		scope:      scope,
-		create:     patientapp.NewCreateUseCase(repo, insurers, catalog, scope, clock, ids),
+		create:     patientapp.NewCreateUseCase(repo, newFakeClientRepository(), insurers, catalog, scope, clock, ids),
 		update:     patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
 		deactivate: patientapp.NewDeactivateUseCase(repo, scope, clock, access),
 		activate:   patientapp.NewActivateUseCase(repo, scope, clock, access),

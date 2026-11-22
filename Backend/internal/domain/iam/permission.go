@@ -5,7 +5,7 @@ package iam
 // OpenAPI security. A code that is not here is not a permission.
 type PermissionCode string
 
-// Catalog seeded by migrations 0002, 0010 and 0023. The drift test proves these
+// Catalog seeded by migrations 0002, 0010, 0023 and 0026. The drift test proves these
 // constants and the `permissions` table never disagree in either direction.
 const (
 	PermUsersRead        PermissionCode = "users:read"
@@ -15,6 +15,8 @@ const (
 	PermPatientsRead     PermissionCode = "patients:read"
 	PermPatientsWrite    PermissionCode = "patients:write"
 	PermPatientsAssign   PermissionCode = "patients:assign"
+	PermClientRead       PermissionCode = "client:read"
+	PermClientWrite      PermissionCode = "client:write"
 	PermClinicalReadOwn  PermissionCode = "clinical:read:own"
 	PermClinicalWriteOwn PermissionCode = "clinical:write:own"
 	PermClinicalReadAny  PermissionCode = "clinical:read:any"
@@ -41,6 +43,8 @@ func Catalog() []PermissionCode {
 		PermPatientsRead,
 		PermPatientsWrite,
 		PermPatientsAssign,
+		PermClientRead,
+		PermClientWrite,
 		PermClinicalReadOwn,
 		PermClinicalWriteOwn,
 		PermClinicalReadAny,
@@ -77,12 +81,14 @@ var Grants = map[RoleCode][]PermissionCode{
 	RoleAdmin: {
 		PermUsersRead, PermUsersWrite, PermUsersManage,
 		PermPatientsRead, PermPatientsWrite, PermPatientsAssign,
+		PermClientRead, PermClientWrite,
 		PermScheduleRead, PermScheduleWrite,
 		PermBillingRead, PermReportsRead,
 		PermTenantRead, PermTenantSettings,
 	},
 	RoleProfessional: {
 		PermPatientsRead, PermPatientsWrite,
+		PermClientRead, PermClientWrite,
 		PermClinicalReadOwn, PermClinicalWriteOwn, PermClinicalGrant,
 		PermScheduleRead, PermScheduleWrite,
 		PermReportsReadOwn,
@@ -90,11 +96,13 @@ var Grants = map[RoleCode][]PermissionCode{
 	},
 	RoleAssistant: {
 		PermPatientsRead, PermPatientsWrite,
+		PermClientRead, PermClientWrite,
 		PermScheduleRead, PermScheduleWrite,
 		PermTenantRead, PermUsersDirectory,
 	},
 	RoleAccountant: {
 		PermBillingRead, PermBillingIssue, PermBillingVoid,
+		PermClientRead,
 		PermReportsRead,
 	},
 }

@@ -4,15 +4,15 @@
 
 -- name: CreatePatient :one
 INSERT INTO patients (
-    id, tenant_id, country, full_name, birth_date,
+    id, tenant_id, client_id, country, full_name, birth_date,
     document_type, document_number, document_normalized,
     phone, email, emergency_contact_name, emergency_contact_phone,
     tax_id, tax_id_kind, fiscal_condition, fiscal_address,
     administrative_notes, is_active, created_at, updated_at, treating_professional_id,
     coverage_kind, insurer_id, member_number, billing_currency
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-        $22, $23, $24, $25)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+        $23, $24, $25, $26)
 RETURNING *;
 
 -- name: GetPatientByID :one

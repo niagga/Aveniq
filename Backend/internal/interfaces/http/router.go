@@ -19,6 +19,7 @@ import (
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
@@ -121,6 +122,12 @@ type Deps struct {
 	UpdateInsurer          *insurerapp.UpdateUseCase
 	DeactivateInsurer      *insurerapp.LifecycleUseCase
 	ActivateInsurer        *insurerapp.LifecycleUseCase
+	ListClients            *clientapp.ListUseCase
+	GetClient              *clientapp.GetUseCase
+	CreateClient           *clientapp.CreateUseCase
+	UpdateClient           *clientapp.UpdateUseCase
+	DeactivateClient       *clientapp.LifecycleUseCase
+	ActivateClient         *clientapp.LifecycleUseCase
 	ListTariffs            *pricingapp.ListUseCase
 	CreateTariff           *pricingapp.CreateUseCase
 	UpdateTariff           *pricingapp.UpdateUseCase
@@ -176,6 +183,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerAuthRoutes(api, deps)
 	registerPatientRoutes(api, deps)
 	registerInsurerRoutes(api, deps)
+	registerClientRoutes(api, deps)
 	registerTariffRoutes(api, deps)
 	registerClinicalRoutes(api, deps)
 	registerScheduleRoutes(api, deps)

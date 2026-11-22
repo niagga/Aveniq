@@ -21,6 +21,10 @@ type Patient struct {
 	ID       ID
 	TenantID tenant.ID
 
+	// ClientID is who pays for this patient (S26). Until T72 moves fiscal data off the
+	// patient, new patients still carry a copy on the row, but billing will read the client.
+	ClientID string
+
 	// Country is the one the document and the fiscal data are validated against.
 	// It is always resolved before saving: a patient inherits the practice's
 	// country when nobody chooses one, so no row can carry a document without a
@@ -127,6 +131,8 @@ type Stored struct {
 	ID       ID
 	TenantID tenant.ID
 
+	ClientID string
+
 	Country  string
 	FullName string
 
@@ -170,6 +176,7 @@ func Reconstitute(stored Stored) (Patient, error) {
 	return Patient{
 		ID:                     stored.ID,
 		TenantID:               stored.TenantID,
+		ClientID:               stored.ClientID,
 		Country:                stored.Country,
 		FullName:               stored.FullName,
 		BirthDate:              stored.BirthDate,

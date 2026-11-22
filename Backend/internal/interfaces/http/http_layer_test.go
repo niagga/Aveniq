@@ -17,6 +17,7 @@ import (
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
 	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
+	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
@@ -304,6 +305,7 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	repo := newFakePatientRepository()
+	clients := newFakeClientRepository()
 	insurers := newFakeInsurerRepository()
 	tariffs := newFakeTariffRepository(insurers)
 	catalog := fakeCatalog{}
@@ -339,7 +341,13 @@ func newHarness(t *testing.T) *harness {
 		GetTenantByID:          tenantapp.NewGetByIDUseCase(tenants),
 		TrialExpired:           tenantapp.NewTrialExpiredUseCase(tenants, clock),
 		PracticeStatus:         tenantapp.NewPracticeStatusUseCase(tenants, clock),
-		CreatePatient:          patientapp.NewCreateUseCase(repo, insurers, catalog, scope, clock, uuidIDs{}),
+		CreatePatient:          patientapp.NewCreateUseCase(repo, clients, insurers, catalog, scope, clock, uuidIDs{}),
+		ListClients:            clientapp.NewListUseCase(clients, scope),
+		GetClient:              clientapp.NewGetUseCase(clients, scope),
+		CreateClient:           clientapp.NewCreateUseCase(clients, catalog, scope, clock, uuidIDs{}),
+		UpdateClient:           clientapp.NewUpdateUseCase(clients, catalog, scope, clock),
+		DeactivateClient:       clientapp.NewDeactivateUseCase(clients, scope, clock),
+		ActivateClient:         clientapp.NewActivateUseCase(clients, scope, clock),
 		UpdatePatient:          patientapp.NewUpdateUseCase(repo, insurers, catalog, scope, clock, access),
 		ListInsurers:           insurerapp.NewListUseCase(insurers, scope),
 		CreateInsurer:          insurerapp.NewCreateUseCase(insurers, scope, clock, uuidIDs{}),

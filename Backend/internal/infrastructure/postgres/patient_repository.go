@@ -189,9 +189,15 @@ func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, 
 		return sqlcgen.CreatePatientParams{}, err
 	}
 
+	clientID, err := uuid.Parse(subject.ClientID)
+	if err != nil {
+		return sqlcgen.CreatePatientParams{}, fmt.Errorf("postgres: patient client_id is not a uuid: %w", err)
+	}
+
 	return sqlcgen.CreatePatientParams{
 		ID:                     toPatientUUID(subject.ID),
 		TenantID:               tenantID,
+		ClientID:               pgtype.UUID{Bytes: clientID, Valid: true},
 		Country:                subject.Country,
 		FullName:               subject.FullName,
 		BirthDate:              toPGDate(subject.BirthDate),
@@ -223,6 +229,7 @@ func patientToDomain(row sqlcgen.Patient) (patient.Patient, error) {
 	subject, err := patient.Reconstitute(patient.Stored{
 		ID:                     patient.ID(row.ID.String()),
 		TenantID:               tenantIDOf(row.TenantID),
+		ClientID:               row.ClientID.String(),
 		Country:                row.Country,
 		FullName:               row.FullName,
 		BirthDate:              dateFromPG(row.BirthDate),

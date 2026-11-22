@@ -4,8 +4,10 @@ import (
 	"context"
 
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
+	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/care"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
@@ -23,6 +25,7 @@ type CreateInput struct {
 // CreateUseCase registers a new patient.
 type CreateUseCase struct {
 	repo     port.PatientRepository
+	clients  port.ClientRepository
 	insurers port.InsurerRepository
 	catalog  port.DocumentCatalog
 	scope    port.TenantScope
@@ -33,8 +36,8 @@ type CreateUseCase struct {
 // NewCreateUseCase wires the use case through constructor injection: every
 // dependency is explicit and replaceable, which is what keeps this layer testable
 // without a database.
-func NewCreateUseCase(repo port.PatientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, ids port.IDGenerator) *CreateUseCase {
-	return &CreateUseCase{repo: repo, insurers: insurers, catalog: catalog, scope: scope, clock: clock, ids: ids}
+func NewCreateUseCase(repo port.PatientRepository, clients port.ClientRepository, insurers port.InsurerRepository, catalog port.DocumentCatalog, scope port.TenantScope, clock port.Clock, ids port.IDGenerator) *CreateUseCase {
+	return &CreateUseCase{repo: repo, clients: clients, insurers: insurers, catalog: catalog, scope: scope, clock: clock, ids: ids}
 }
 
 // Execute creates the patient or returns a domain error. Normalization runs
@@ -64,6 +67,17 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (PatientVi
 		if care.BecomesTreatingOnCreate(careapp.Viewer(in.ActorID, in.Role)) {
 			subject = subject.WithTreating(in.ActorID)
 		}
+
+		payerID := client.ID(uc.ids.NewID())
+		payer, err := client.New(payerID, tenant.ID(in.TenantID), clientapp.SelfDraftFromPatient(draft, subject.FullName), uc.clock.Now())
+		if err != nil {
+			return err
+		}
+		if err := uc.clients.Create(ctx, payer); err != nil {
+			return err
+		}
+		subject.ClientID = string(payerID)
+
 		if err := uc.repo.Create(ctx, subject); err != nil {
 			return err
 		}
