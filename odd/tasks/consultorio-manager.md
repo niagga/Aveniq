@@ -169,7 +169,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T69 | S25 | E8 | Mutuales: crear y editar en popup | inline | 56f135d |
 | T70 | S25 | E8 | Usuarios: búsqueda, filtros, "Invitar" y editar en popup; el enlace de invitación se muestra en el popup con botón de copiar | inline | e2aa818 |
 | T71 | S26, S5 | E8 | Backend del cliente: migración `clients` con `patients.client_id` obligatorio y backfill del cliente propio de cada paciente, dominio, repositorio, HTTP y permisos `client:*` con test de drift. RLS forzado | inline | 55669e8 |
-| T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | — |
+| T72 | S26 | E8 | Contrato del paciente: los datos fiscales y la moneda pasan al cliente; el paciente conserva la mutual y el n.º de afiliado | inline | 99f8d41 |
 | T73 | S26, S2 | E8 | Comprobantes y "sin facturar" por cliente: el comprador es el cliente y los comprobantes viejos conservan su snapshot | inline | — |
 | T74 | S26 | E8 | Pantalla "Clientes" y selector de cliente al crear el paciente (por defecto, el propio paciente) | inline | — |
 | T75 | S25 | E8 | Pacientes: crear y editar en popup y página de ficha `/patients/[id]` con pestañas | inline | — |
@@ -2667,4 +2667,12 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Verificación.** `go build ./...`, `go test ./...` en verde (incluye `TestClientRoutesRespectTheMatrix` y drift de permisos con bases de test). Aplicar goose `0026` en la base de desarrollo antes de reiniciar la API.
 - **Commit.** `55669e8` (`feat: add billing clients with patient client_id backfill (E8 T71)`). El registro del hash va en un commit aparte.
 - **CI (tests postgres).** Tras `client_id` obligatorio, los tests de repositorio crean cliente con `persistPatient` (misma forma que la app). Commits `2a3b2b8` (seeds/schema), `a498706` (sqlc v1.31.1), `071f1d2` (repos).
-- **Siguiente.** T72 (contrato del paciente: fiscal y moneda solo en el cliente).
+- **Siguiente.** T73 (comprobantes leen comprador del cliente).
+
+**L87 — T72: contrato HTTP del paciente (fiscal y moneda en el cliente)**
+
+- **Qué cambia.** `POST /patients` exige `client` (o `clientId` existente) con `billingCurrency` y datos fiscales; `GET/PATCH /patients` ya no devuelven ni aceptan `taxId`, condición fiscal, dirección fiscal ni `billingCurrency`. La respuesta incluye `clientId` y `clientDisplayName`. Cobertura (`coverageKind`, `insurerId`, `memberNumber`) sigue en el paciente. La fila del paciente sigue espejando fiscal/moneda hacia el cliente para tarifas y comprobantes hasta T73.
+- **Piezas.** `patient_handlers`, `patientapp` (`ProfileInput`, `CreateInput.ClientProfile`, `PatientView`), `Get`/`List` cargan el nombre del cliente.
+- **Verificación.** `go test ./...` (Backend). Regenerar OpenAPI/`schema.d.ts` en Frontend antes de T75.
+- **Commit.** `99f8d41` (`feat: move patient fiscal fields to billing client on create (E8 T72)`). El registro del hash va en un commit aparte.
+- **Siguiente.** T73 (comprobantes leen comprador del cliente).
