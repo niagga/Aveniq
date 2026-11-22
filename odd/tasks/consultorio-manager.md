@@ -160,7 +160,7 @@ Nota (L68): en esta spec "clientes" son los pacientes. Desde S26, "cliente" es q
 | T60 | S2 | E7 | Informes guardados compartidos dentro del consultorio, con filtros, y exportación CSV | inline | 86816d8 |
 | T61 | S2, S5 | E7 | E2E de E7 y cierre de E7 | inline | 796e6c2 |
 | T62 | S25 | E8 | Base de UI: `Modal` y `FormModal` (`<dialog>` nativo con blur, Esc, foco, aviso de cambios sin guardar, hoja a pantalla completa en celular), `FilterBar`, control segmentado y cabecera con acción primaria. `ConfirmDialog` pasa a usar el `Modal` | inline | 292269e |
-| T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | — |
+| T63 | S24, S25 | E8 | Shell: sidebar con rótulos desde `lg`, "Más" en el celular (hoy las secciones desde la quinta no se alcanzan), `/` público y el dashboard pasa a `/panel` | inline | 07bcc2d |
 | T64 | S24, S5 | E8 | Backend de la landing: migración con `tenant_profiles` (contenido público) y `tenant_domains` (host único por consultorio), endpoint público por host con rate limit y solo los campos publicados, edición por owner y admin | inline | — |
 | T65 | S24 | E8 | Landing SSR y login resuelto por el host: el campo Consultorio queda solo como respaldo cuando el host no resuelve; `demo.localhost` en desarrollo | inline | — |
 | T66 | S24 | E8 | Pantalla "Mi consultorio": el dueño edita el contenido de la landing | inline | — |
@@ -2593,4 +2593,4 @@ Orden: T50 → T51 (contrato) → T52 → T53 → T54 → T55 → T56 (cierre E6
 - **Referencias movidas.** Los E2E que entraban con `goto("/")` pasan a `/panel`: `e2`, `e4-billing`, `e7-figures`, `e7-tariff`, y la lista de pantallas de `e9-responsive`. No había otra dependencia de `/` en el código.
 - **E2E nuevo `e8-shell`** (6 tests): la portada es pública y lleva al login; el dueño aterriza en `/panel` con "Inicio" marcado; el contador sigue aterrizando en `/facturacion`; a 1280 px los rótulos se ven; en celular "Más" abre las cinco secciones plegadas, "Usuarios" lleva a su pantalla y la popup se cierra; Esc la cierra sin cambiar de pantalla; y la barra sigue al pie después de scrollear.
 - **Verificación.** `next typegen` y `tsc --noEmit` sin errores en `src/` ni `e2e/`. Focalizados (`e8-shell`, `e8-base-ui`, `e9-responsive`, `e2`): 14 de 15; el caído es `e2` por la agenda del domingo. `pnpm e2e` completo: 57 en verde, 3 caídos y 9 sin correr. Los caídos son `e2`, `e10-settlement` y `e8-emission` por la agenda demo del domingo, igual que en L74 a L77. Las capturas a 1280, 800 y 390 px se revisaron a mano: el celular muestra la barra fija con "Más", y la popup abierta ocupa la pantalla.
-- **Commit.** Ninguno todavía.
+- **Commit.** `07bcc2d` (`feat: move the dashboard to /panel and add the shell labels and phone menu (E8 T63)`). El registro del hash va en un commit aparte.
