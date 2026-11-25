@@ -3,7 +3,6 @@
 import {
   coverageText,
   documentKindLabel,
-  fiscalConditionLabel,
   formatBirthDate,
   type Patient,
 } from "@/entities/patient/model";
@@ -31,7 +30,7 @@ export function PatientTable({
     return (
       <EmptyState
         title="Todavía no hay pacientes"
-        description="Cargá el primero con el formulario de arriba."
+        description="Cargá el primero con el botón «Nuevo paciente»."
       />
     );
   }
@@ -48,7 +47,7 @@ export function PatientTable({
             <th scope="col" className="px-4 py-3 font-medium">Nacimiento</th>
             <th scope="col" className="px-4 py-3 font-medium">Contacto</th>
             <th scope="col" className="px-4 py-3 font-medium">Cobertura</th>
-            <th scope="col" className="px-4 py-3 font-medium">Moneda</th>
+            <th scope="col" className="px-4 py-3 font-medium">Cliente</th>
             <th scope="col" className="px-4 py-3 font-medium">Estado</th>
           </tr>
         </thead>
@@ -85,9 +84,9 @@ export function PatientTable({
                   patient.insurerId ? insurerNames.get(patient.insurerId) : undefined,
                 )}
               </td>
-              <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                {patient.billingCurrency || "—"}
-              </td>
+              {/* Since T72 the patient no longer carries the billing currency: it belongs to the
+                  client that pays, so the roster names that client instead of guessing. */}
+              <td className="px-4 py-3 text-ink-muted">{patient.clientDisplayName || "—"}</td>
               <td className="px-4 py-3">
                 <Badge tone={patient.isActive ? "success" : "neutral"}>
                   {patient.isActive ? "Activo" : "Inactivo"}
@@ -99,14 +98,10 @@ export function PatientTable({
       </table>
 
       <p className="border-t border-border px-4 py-2 text-xs text-ink-muted">
-        {patients.length} paciente{patients.length === 1 ? "" : "s"} · fiscales:{" "}
-        {patients.filter((patient) => patient.taxId).length} con datos cargados
+        {patients.length} paciente{patients.length === 1 ? "" : "s"} ·{" "}
+        {patients.filter((patient) => patient.isActive).length} activo
+        {patients.filter((patient) => patient.isActive).length === 1 ? "" : "s"}
       </p>
     </div>
   );
-}
-
-/** Shows the fiscal condition next to a patient, used by the detail view. */
-export function fiscalConditionText(patient: Patient): string {
-  return fiscalConditionLabel(patient.fiscalCondition) || "Sin condición fiscal";
 }

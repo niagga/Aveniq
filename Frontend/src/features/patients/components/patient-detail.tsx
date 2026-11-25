@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -8,9 +9,9 @@ import {
   documentKindLabel,
   fiscalConditionLabel,
   formatBirthDate,
-  taxIDKindLabel,
   type Patient,
 } from "@/entities/patient/model";
+import { fiscalDocumentText } from "@/entities/client/model";
 import {
   canAssignTreating,
   canManageGrants,
@@ -18,6 +19,7 @@ import {
   canWriteClinicalRecord,
 } from "@/entities/care/model";
 import { ClinicalPanel } from "@/features/patients/components/clinical-panel";
+import { useClient } from "@/features/clients/use-clients";
 import { GrantsPanel } from "@/features/patients/components/grants-panel";
 import { TreatingProfessional } from "@/features/patients/components/treating-professional";
 import { useStaff } from "@/features/patients/staff";
@@ -222,14 +224,9 @@ export function PatientDetail({
             patient.insurerId ? insurerNames.get(patient.insurerId) : undefined,
           )}
         </Row>
-        <Row label="Moneda de facturación">{currencyLabel(patient.billingCurrency) || "—"}</Row>
-        <Row label="Identificador fiscal">
-          {patient.taxId ? `${taxIDKindLabel(patient.taxId.kind)} ${patient.taxId.number}` : "—"}
+        <Row label="Cliente" wide>
+          <ClientSummary clientId={patient.clientId} name={patient.clientDisplayName} />
         </Row>
-        <Row label="Condición fiscal">
-          {fiscalConditionLabel(patient.fiscalCondition) || "—"}
-        </Row>
-        <Row label="Dirección fiscal">{patient.fiscalAddress ?? "—"}</Row>
         <Row label="Notas administrativas" wide>
           {patient.administrativeNotes ?? "—"}
         </Row>
@@ -298,6 +295,36 @@ function Row({
     <div className={wide ? "sm:col-span-2" : undefined}>
       <dt className="text-xs font-medium text-ink-muted">{label}</dt>
       <dd className="mt-0.5">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * Who pays for this patient and on which fiscal data (T72, T74). The patient response carries
+ * only the client id and its display name, so the rest is read from the client itself: a receipt
+ * freezes this data, and showing a stale copy here would be the first place to disagree with it.
+ */
+function ClientSummary({ clientId, name }: { clientId: string; name: string }) {
+  const { client, failedStatus } = useClient(clientId);
+
+  return (
+    <div>
+      <Link href="/clientes" className="hover:underline">
+        {name || "—"}
+      </Link>
+      {client ? (
+        <span className="block text-xs text-ink-muted">
+          {[
+            fiscalDocumentText(client),
+            fiscalConditionLabel(client.fiscalCondition),
+            currencyLabel(client.billingCurrency),
+          ]
+            .filter((part) => part !== "" && part !== "—")
+            .join(" · ") || "Sin datos fiscales"}
+        </span>
+      ) : failedStatus !== null ? (
+        <span className="block text-xs text-ink-muted">No pudimos leer sus datos fiscales.</span>
+      ) : null}
     </div>
   );
 }

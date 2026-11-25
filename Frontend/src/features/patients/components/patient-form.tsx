@@ -5,6 +5,7 @@ import {
   createContext,
   isValidElement,
   useContext,
+  useEffect,
   useId,
   useState,
   type ReactElement,
@@ -23,13 +24,15 @@ import {
   type Patient,
 } from "@/entities/patient/model";
 import type { Insurer } from "@/entities/insurer/model";
+import { useClients } from "@/features/clients/use-clients";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { useWritesLocked } from "@/shared/auth/practice";
-import { Button } from "@/shared/ui/button";
 import { Field as BaseField, fieldErrorId, inputClass } from "@/shared/ui/field";
+import { FormModal } from "@/shared/ui/form-modal";
 
 type PatientProfile = components["schemas"]["PatientProfileBody"];
+type NewClient = NonNullable<components["schemas"]["CreatePatientBody"]["client"]>;
 
 type Fields = {
   fullName: string;
@@ -44,6 +47,7 @@ type Fields = {
   coverageKind: string;
   insurerId: string;
   memberNumber: string;
+  clientId: string;
   billingCurrency: string;
   taxIdKind: string;
   taxIdNumber: string;
@@ -53,8 +57,10 @@ type Fields = {
 };
 
 /**
- * The currency of a new patient is empty on purpose: it is chosen, never defaulted from
- * the country (L61). Coverage starts private, the common case.
+ * The fiscal fields and the currency describe the client that pays, never the patient (T72).
+ * They are typed here only when the patient brings its own new client; picking an existing one
+ * leaves them empty, and editing a patient never touches them because the API does not accept
+ * them on PATCH: they are edited in Clientes.
  */
 function fieldsFrom(patient: Patient | null | undefined): Fields {
   return {
@@ -70,17 +76,18 @@ function fieldsFrom(patient: Patient | null | undefined): Fields {
     coverageKind: patient?.coverageKind ?? "private",
     insurerId: patient?.insurerId ?? "",
     memberNumber: patient?.memberNumber ?? "",
-    billingCurrency: patient?.billingCurrency ?? "",
-    taxIdKind: patient?.taxId?.kind ?? "",
-    taxIdNumber: patient?.taxId?.number ?? "",
-    fiscalCondition: patient?.fiscalCondition ?? "",
-    fiscalAddress: patient?.fiscalAddress ?? "",
+    clientId: patient?.clientId ?? "",
+    billingCurrency: "",
+    taxIdKind: "",
+    taxIdNumber: "",
+    fiscalCondition: "",
+    fiscalAddress: "",
     administrativeNotes: patient?.administrativeNotes ?? "",
   };
 }
 
 /**
- * Create and edit share this component: the API takes the same profile for both, so
+ * Create and edit share this popup (E8, T75): the API takes the same profile for both, so
  * two forms would be two places for a field to go missing.
  *
  * The document and the tax id are optional pairs. Sending a kind without a number is
@@ -112,6 +119,7 @@ const FIELD_ORDER: readonly (keyof Fields)[] = [
   "birthDate",
   "documentKind",
   "documentNumber",
+  "clientId",
   "billingCurrency",
   "insurerId",
   "memberNumber",
@@ -129,7 +137,7 @@ const FieldErrorsContext = createContext<FieldErrors>({});
  * number is a problem on the number, and typing a number without a type is a problem on the
  * type. Neither is acceptable, and neither is a form-level message.
  */
-function collectErrors(values: Fields, insured: boolean): FieldErrors {
+function collectErrors(values: Fields, insured: boolean, needsClient: boolean): FieldErrors {
   const errors: FieldErrors = {};
 
   if (values.fullName.trim() === "") {
@@ -144,14 +152,16 @@ function collectErrors(values: Fields, insured: boolean): FieldErrors {
   if (values.documentKind === "" && values.documentNumber.trim() !== "") {
     errors.documentKind = "Elegí el tipo del documento que cargaste.";
   }
-  if (values.taxIdKind !== "" && values.taxIdNumber.trim() === "") {
+  if (needsClient && values.taxIdKind !== "" && values.taxIdNumber.trim() === "") {
     errors.taxIdNumber = "Elegiste un identificador fiscal sin número.";
   }
-  if (values.taxIdKind === "" && values.taxIdNumber.trim() !== "") {
+  if (needsClient && values.taxIdKind === "" && values.taxIdNumber.trim() !== "") {
     errors.taxIdKind = "Elegí el tipo del identificador fiscal.";
   }
-  if (values.billingCurrency === "") {
-    errors.billingCurrency = "Elegí la moneda de facturación.";
+  // Only a new client of its own needs a currency here: an existing client already has one, and
+  // editing a patient never writes on the client. The currency is chosen, never derived (L61).
+  if (needsClient && values.billingCurrency === "") {
+    errors.billingCurrency = "Elegí la moneda de facturación del cliente.";
   }
   if (insured && values.insurerId === "") {
     errors.insurerId = "Elegí la mutual que cubre al paciente.";
@@ -169,31 +179,49 @@ function fieldNameOf(htmlFor: string): keyof Fields | null {
   return names.find((name) => htmlFor.endsWith(`-${name}`)) ?? null;
 }
 
-export function PatientForm({
+export function PatientFormModal({
+  open,
   patient,
   insurers,
   onSaved,
-  onCancel,
+  onClose,
 }: {
+  open: boolean;
   patient?: Patient | null;
   insurers: Insurer[] | null;
   onSaved: (id: string) => void;
-  onCancel?: () => void;
+  onClose: () => void;
 }) {
   const [fields, setFields] = useState<Fields>(() => fieldsFrom(patient));
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const writesLocked = useWritesLocked();
+  // The client catalog is only needed while the popup is open: the roster is not a reason to
+  // ask the API for clients it will not show.
+  const { clients } = useClients(open);
 
   const prefix = useId();
   const id = (name: keyof Fields) => `${prefix}-${name}`;
+
+  // Reopening starts from the patient again: the popup keeps one life per opening, so
+  // a cancelled or saved draft cannot leak into the next one.
+  useEffect(() => {
+    if (!open) return;
+    setFields(fieldsFrom(patient));
+    setFieldErrors({});
+    setError(null);
+  }, [open, patient]);
 
   const isEditing = Boolean(patient);
   const documentKinds = DOCUMENT_KINDS_BY_COUNTRY[fields.country] ?? [];
   const taxIDKinds = TAX_ID_KINDS_BY_COUNTRY[fields.country] ?? [];
   const fiscalConditions = FISCAL_CONDITIONS_BY_COUNTRY[fields.country] ?? [];
   const isInsured = fields.coverageKind === "insurer";
+  // A new patient without a chosen client brings its own: the API creates one named after the
+  // patient with the fiscal data typed here, which is the default T74 asks for.
+  const ownsClient = !isEditing && fields.clientId === "";
+  const clientOptions = (clients ?? []).filter((client) => client.isActive);
 
   // A mutual that was deactivated after this patient was covered stays selectable while
   // editing that patient: the API keeps the coverage and refuses only a new choice.
@@ -240,11 +268,11 @@ export function PatientForm({
 
   // Validation runs on blur and on submit, never on every keystroke: a field that turns red
   // after the first character is noise, and one that only complains after the trip is worse.
-  function checkOnBlur(event: React.FocusEvent<HTMLFormElement>) {
+  function checkOnBlur(event: React.FocusEvent) {
     const name = fieldNameOf((event.target as HTMLElement).id);
     if (name === null) return;
 
-    const errors = collectErrors(fields, isInsured);
+    const errors = collectErrors(fields, isInsured, ownsClient);
     setFieldErrors((current) => {
       const next = { ...current };
       if (errors[name] === undefined) delete next[name];
@@ -253,12 +281,11 @@ export function PatientForm({
     });
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit() {
     if (writesLocked) return;
     setError(null);
 
-    const errors = collectErrors(fields, isInsured);
+    const errors = collectErrors(fields, isInsured, ownsClient);
     setFieldErrors(errors);
 
     const first = FIELD_ORDER.find((name) => errors[name] !== undefined);
@@ -268,7 +295,7 @@ export function PatientForm({
       return;
     }
 
-    const body: PatientProfile = {
+    const profile: PatientProfile = {
       fullName: fields.fullName.trim(),
       country: fields.country,
       birthDate: fields.birthDate.trim(),
@@ -281,12 +308,19 @@ export function PatientForm({
       coverageKind: fields.coverageKind as PatientProfile["coverageKind"],
       insurerId: isInsured ? fields.insurerId : "",
       memberNumber: isInsured ? fields.memberNumber.trim() : "",
-      billingCurrency: fields.billingCurrency as PatientProfile["billingCurrency"],
+      administrativeNotes: fields.administrativeNotes.trim(),
+    };
+
+    // A patient is created together with its own client, or linked to one that already exists.
+    // Both carry the fiscal data the receipts freeze; the patient no longer does (T72).
+    const ownClient: NewClient = {
+      displayName: fields.fullName.trim(),
+      country: fields.country,
       taxIdKind: fields.taxIdKind,
       taxIdNumber: fields.taxIdNumber.trim(),
       fiscalCondition: fields.fiscalCondition,
       fiscalAddress: fields.fiscalAddress.trim(),
-      administrativeNotes: fields.administrativeNotes.trim(),
+      billingCurrency: fields.billingCurrency as NewClient["billingCurrency"],
     };
 
     setIsSubmitting(true);
@@ -294,9 +328,13 @@ export function PatientForm({
       const result = patient
         ? await browserApi.PATCH("/api/v1/patients/{id}", {
             params: { path: { id: patient.id } },
-            body,
+            body: profile,
           })
-        : await browserApi.POST("/api/v1/patients", { body });
+        : await browserApi.POST("/api/v1/patients", {
+            body: ownsClient
+              ? { ...profile, client: ownClient }
+              : { ...profile, clientId: fields.clientId },
+          });
 
       if (result.error || !result.data) {
         // The API detail names what is wrong — a document that does not match the
@@ -306,7 +344,6 @@ export function PatientForm({
       }
 
       onSaved(result.data.id);
-      if (!patient) setFields(fieldsFrom(null));
     } catch {
       setError("No pudimos contactar al servidor. Revisá que la API esté corriendo.");
     } finally {
@@ -315,18 +352,18 @@ export function PatientForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      onBlur={checkOnBlur}
-      className="rounded-[var(--radius-panel)] border border-border bg-surface p-5"
-      noValidate
+    <FormModal
+      open={open}
+      title={isEditing ? "Editar paciente" : "Nuevo paciente"}
+      size="lg"
+      submitLabel={isEditing ? "Guardar cambios" : "Crear paciente"}
+      busy={isSubmitting}
+      error={error}
+      onClose={onClose}
+      onSubmit={submit}
     >
-      <h2 className="text-sm font-semibold">
-        {isEditing ? "Editar paciente" : "Nuevo paciente"}
-      </h2>
-
       <FieldErrorsContext.Provider value={fieldErrors}>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2" onBlur={checkOnBlur}>
         <Field label="Nombre y apellido" htmlFor={id("fullName")}>
           <input
             id={id("fullName")}
@@ -472,6 +509,33 @@ export function PatientForm({
           </Field>
         ) : null}
 
+        {isEditing ? (
+          <Field label="Cliente que paga" htmlFor={id("clientId")} wide>
+            <p className="text-sm">
+              {patient?.clientDisplayName || "—"}{" "}
+              <span className="text-ink-muted">· sus datos fiscales se editan en Clientes.</span>
+            </p>
+          </Field>
+        ) : (
+          <Field label="Cliente que paga" htmlFor={id("clientId")} wide>
+            <select
+              id={id("clientId")}
+              value={fields.clientId}
+              onChange={(event) => set("clientId", event.target.value)}
+              className={inputClass}
+            >
+              <option value="">El propio paciente (cliente nuevo)</option>
+              {clientOptions.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.displayName}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {ownsClient ? (
+          <>
         <Field label="Moneda de facturación" htmlFor={id("billingCurrency")}>
           <select
             id={id("billingCurrency")}
@@ -538,6 +602,8 @@ export function PatientForm({
             className={inputClass}
           />
         </Field>
+          </>
+        ) : null}
 
         <Field label="Notas administrativas" htmlFor={id("administrativeNotes")} wide>
           <textarea
@@ -551,25 +617,7 @@ export function PatientForm({
       </div>
 
       </FieldErrorsContext.Provider>
-
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="mt-5 flex items-center gap-3">
-        <Button type="submit" variant="primary" busy={isSubmitting} disabled={writesLocked}>
-          {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear paciente"}
-        </Button>
-
-        {onCancel ? (
-          <Button variant="ghost" onClick={onCancel}>
-            Cancelar
-          </Button>
-        ) : null}
-      </div>
-    </form>
+    </FormModal>
   );
 }
 
