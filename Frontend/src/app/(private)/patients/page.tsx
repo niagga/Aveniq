@@ -1,20 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 import type { Patient } from "@/entities/patient/model";
-import { PatientDetail, PatientLoadError } from "@/features/patients/components/patient-detail";
-import { PatientForm } from "@/features/patients/components/patient-form";
+import { canSeePatients } from "@/entities/iam/model";
+import { PatientLoadError } from "@/features/patients/components/patient-detail";
+import { PatientFormModal } from "@/features/patients/components/patient-form";
 import { PatientTable } from "@/features/patients/components/patient-table";
 import { useInsurers } from "@/features/insurers/use-insurers";
-import { canSeePatients } from "@/entities/iam/model";
 import { browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { RoleGate } from "@/shared/auth/role-gate";
-import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 import { Button } from "@/shared/ui/button";
+import { FilterBar } from "@/shared/ui/filter-bar";
 import { inputClass } from "@/shared/ui/field";
+import { PageHeader } from "@/shared/ui/page-header";
 import { LoadingState } from "@/shared/ui/states";
+import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
 /**
  * Patient roster.
@@ -22,6 +26,10 @@ import { LoadingState } from "@/shared/ui/states";
  * A Client Component, like the dashboard: the access token lives
  * in browser memory, so the server has no credential to fetch with on the user's
  * behalf (T19). The auth gate and the shell come from the private layout.
+ *
+ * Since T75 the roster is a list again: the record lives on its own page
+ * (`/patients/[id]`) and creating opens the popup. The filters stay visible
+ * above the list while it loads or fails (S25).
  */
 export default function PatientsPage() {
   return (
@@ -34,6 +42,7 @@ export default function PatientsPage() {
 }
 
 function PatientsScreen() {
+  const router = useRouter();
   const [patients, setPatients] = useState<Patient[] | null>(null);
   const [failedStatus, setFailedStatus] = useState<number | null>(null);
 
@@ -48,9 +57,7 @@ function PatientsScreen() {
   }, [draftSearch]);
 
   const [activeOnly, setActiveOnly] = useState(true);
-
-  const [selected, setSelected] = useState<Patient | null>(null);
-  const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
+  const [createOpen, setCreateOpen] = useState(false);
   const writesLocked = useWritesLocked();
 
   // The roster shows a mutual by name, and the patient form offers the catalog.
@@ -83,87 +90,67 @@ function PatientsScreen() {
     };
   }, [load]);
 
-  // The selected patient is refreshed from the list so the detail view cannot show
-  // stale data after an edit or a deactivation.
-  useEffect(() => {
-    if (!selected || !patients) return;
-    const current = patients.find((patient) => patient.id === selected.id);
-    if (current && current !== selected) setSelected(current);
-  }, [patients, selected]);
-
-  function afterSave(id: string) {
-    setMode("idle");
-    void load();
-    setSelected((current) => current ?? patients?.find((patient) => patient.id === id) ?? null);
-  }
-
   return (
     <>
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Pacientes</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Ficha del paciente con sus datos fiscales y la historia clínica.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          onClick={() => setMode((current) => (current === "create" ? "idle" : "create"))}
-          disabled={writesLocked}
-        >
-          {mode === "create" ? "Cerrar formulario" : "Nuevo paciente"}
-        </Button>
-      </header>
+      <PageHeader
+        title="Pacientes"
+        description="La ficha del paciente con su historia clínica."
+        action={
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => setCreateOpen(true)}
+            disabled={writesLocked}
+          >
+            Nuevo paciente
+          </Button>
+        }
+      />
 
-      {mode === "create" && !writesLocked ? (
-        <PatientForm
-          insurers={insurers}
-          onSaved={afterSave}
-          onCancel={() => setMode("idle")}
-        />
-      ) : null}
-
-      {mode === "edit" && selected && !writesLocked ? (
-        <PatientForm
-          patient={selected}
-          insurers={insurers}
-          onSaved={afterSave}
-          onCancel={() => setMode("idle")}
-        />
-      ) : null}
-
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          // Enter applies the text at once instead of waiting for the debounce.
-          setSearch(draftSearch.trim());
+      <PatientFormModal
+        open={createOpen}
+        insurers={insurers}
+        onClose={() => setCreateOpen(false)}
+        onSaved={() => {
+          setCreateOpen(false);
+          void load();
         }}
-        className="flex flex-wrap items-end gap-3"
-      >
-        <div className="min-w-56 flex-1">
-          <label htmlFor="patient-search" className="block text-xs font-medium text-ink-muted">
-            Buscar
+      />
+
+      <FilterBar label="Filtros de pacientes">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            // Enter applies the text at once instead of waiting for the debounce.
+            setSearch(draftSearch.trim());
+          }}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <div className="min-w-56 flex-1">
+            <label htmlFor="patient-search" className="block text-xs font-medium text-ink-muted">
+              Buscar
+            </label>
+            <input
+              id="patient-search"
+              value={draftSearch}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder="Nombre o documento exacto"
+              className={inputClass}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-ink-muted">
+            <input
+              type="checkbox"
+              checked={!activeOnly}
+              onChange={(event) => setActiveOnly(!event.target.checked)}
+            />
+            Incluir dados de baja
           </label>
-          <input
-            id="patient-search"
-            value={draftSearch}
-            onChange={(event) => setDraftSearch(event.target.value)}
-            placeholder="Nombre o documento exacto"
-            className={inputClass}
-          />
-        </div>
 
-        <label className="flex items-center gap-2 text-xs text-ink-muted">
-          <input
-            type="checkbox"
-            checked={!activeOnly}
-            onChange={(event) => setActiveOnly(!event.target.checked)}
-          />
-          Incluir dados de baja
-        </label>
-
-        <Button type="submit">Buscar</Button>
-      </form>
+          <Button type="submit">Buscar</Button>
+        </form>
+      </FilterBar>
 
       {failedStatus !== null ? (
         <PatientLoadError status={failedStatus} />
@@ -172,24 +159,12 @@ function PatientsScreen() {
       ) : (
         <PatientTable
           patients={patients}
-          selectedID={selected?.id ?? null}
+          selectedID={null}
           insurerNames={insurerNames}
-          onSelect={(id) => {
-            setSelected(patients.find((patient) => patient.id === id) ?? null);
-            setMode("idle");
-          }}
+          // The record is a page since T75: the popup of S25 belongs to create and edit.
+          onSelect={(id) => router.push(`/patients/${id}` as Route)}
         />
       )}
-
-      {selected ? (
-        <PatientDetail
-          patient={selected}
-          insurerNames={insurerNames}
-          onClose={() => setSelected(null)}
-          onChanged={() => void load()}
-          onEdit={() => setMode("edit")}
-        />
-      ) : null}
     </>
   );
 }

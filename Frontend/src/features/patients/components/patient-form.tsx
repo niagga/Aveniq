@@ -5,6 +5,7 @@ import {
   createContext,
   isValidElement,
   useContext,
+  useEffect,
   useId,
   useState,
   type ReactElement,
@@ -27,8 +28,8 @@ import { useClients } from "@/features/clients/use-clients";
 import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import type { components } from "@/shared/api/schema";
 import { useWritesLocked } from "@/shared/auth/practice";
-import { Button } from "@/shared/ui/button";
 import { Field as BaseField, fieldErrorId, inputClass } from "@/shared/ui/field";
+import { FormModal } from "@/shared/ui/form-modal";
 
 type PatientProfile = components["schemas"]["PatientProfileBody"];
 type NewClient = NonNullable<components["schemas"]["CreatePatientBody"]["client"]>;
@@ -86,7 +87,7 @@ function fieldsFrom(patient: Patient | null | undefined): Fields {
 }
 
 /**
- * Create and edit share this component: the API takes the same profile for both, so
+ * Create and edit share this popup (E8, T75): the API takes the same profile for both, so
  * two forms would be two places for a field to go missing.
  *
  * The document and the tax id are optional pairs. Sending a kind without a number is
@@ -178,26 +179,39 @@ function fieldNameOf(htmlFor: string): keyof Fields | null {
   return names.find((name) => htmlFor.endsWith(`-${name}`)) ?? null;
 }
 
-export function PatientForm({
+export function PatientFormModal({
+  open,
   patient,
   insurers,
   onSaved,
-  onCancel,
+  onClose,
 }: {
+  open: boolean;
   patient?: Patient | null;
   insurers: Insurer[] | null;
   onSaved: (id: string) => void;
-  onCancel?: () => void;
+  onClose: () => void;
 }) {
   const [fields, setFields] = useState<Fields>(() => fieldsFrom(patient));
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const writesLocked = useWritesLocked();
-  const { clients } = useClients(true);
+  // The client catalog is only needed while the popup is open: the roster is not a reason to
+  // ask the API for clients it will not show.
+  const { clients } = useClients(open);
 
   const prefix = useId();
   const id = (name: keyof Fields) => `${prefix}-${name}`;
+
+  // Reopening starts from the patient again: the popup keeps one life per opening, so
+  // a cancelled or saved draft cannot leak into the next one.
+  useEffect(() => {
+    if (!open) return;
+    setFields(fieldsFrom(patient));
+    setFieldErrors({});
+    setError(null);
+  }, [open, patient]);
 
   const isEditing = Boolean(patient);
   const documentKinds = DOCUMENT_KINDS_BY_COUNTRY[fields.country] ?? [];
@@ -254,7 +268,7 @@ export function PatientForm({
 
   // Validation runs on blur and on submit, never on every keystroke: a field that turns red
   // after the first character is noise, and one that only complains after the trip is worse.
-  function checkOnBlur(event: React.FocusEvent<HTMLFormElement>) {
+  function checkOnBlur(event: React.FocusEvent) {
     const name = fieldNameOf((event.target as HTMLElement).id);
     if (name === null) return;
 
@@ -267,8 +281,7 @@ export function PatientForm({
     });
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit() {
     if (writesLocked) return;
     setError(null);
 
@@ -331,7 +344,6 @@ export function PatientForm({
       }
 
       onSaved(result.data.id);
-      if (!patient) setFields(fieldsFrom(null));
     } catch {
       setError("No pudimos contactar al servidor. Revisá que la API esté corriendo.");
     } finally {
@@ -340,18 +352,18 @@ export function PatientForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      onBlur={checkOnBlur}
-      className="rounded-[var(--radius-panel)] border border-border bg-surface p-5"
-      noValidate
+    <FormModal
+      open={open}
+      title={isEditing ? "Editar paciente" : "Nuevo paciente"}
+      size="lg"
+      submitLabel={isEditing ? "Guardar cambios" : "Crear paciente"}
+      busy={isSubmitting}
+      error={error}
+      onClose={onClose}
+      onSubmit={submit}
     >
-      <h2 className="text-sm font-semibold">
-        {isEditing ? "Editar paciente" : "Nuevo paciente"}
-      </h2>
-
       <FieldErrorsContext.Provider value={fieldErrors}>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2" onBlur={checkOnBlur}>
         <Field label="Nombre y apellido" htmlFor={id("fullName")}>
           <input
             id={id("fullName")}
@@ -605,25 +617,7 @@ export function PatientForm({
       </div>
 
       </FieldErrorsContext.Provider>
-
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="mt-5 flex items-center gap-3">
-        <Button type="submit" variant="primary" busy={isSubmitting} disabled={writesLocked}>
-          {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear paciente"}
-        </Button>
-
-        {onCancel ? (
-          <Button variant="ghost" onClick={onCancel}>
-            Cancelar
-          </Button>
-        ) : null}
-      </div>
-    </form>
+    </FormModal>
   );
 }
 
