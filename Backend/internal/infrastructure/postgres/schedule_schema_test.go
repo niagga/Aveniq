@@ -64,10 +64,18 @@ func TestScheduleSchema(t *testing.T) {
 		})
 	}
 
-	firstID := func(ctx context.Context, tenantID string) (string, error) {
+	// earliestSlotID names the appointment the assertions below reschedule. The
+	// ORDER BY is part of the fixture, not a convenience: without it Postgres may
+	// return the later slot, moving that one into a free interval overlaps nothing,
+	// and the test passes or fails on heap order instead of on the constraint.
+	earliestSlotID := func(ctx context.Context, tenantID string) (string, error) {
 		var id string
 		err := withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
-			return app.QueryRow(ctx, `SELECT id FROM appointments WHERE tenant_id = $1 LIMIT 1`, tenantID).Scan(&id)
+			return app.QueryRow(ctx, `
+				SELECT id FROM appointments
+				WHERE tenant_id = $1
+				ORDER BY starts_at, id
+				LIMIT 1`, tenantID).Scan(&id)
 		})
 		return id, err
 	}
@@ -83,9 +91,9 @@ func TestScheduleSchema(t *testing.T) {
 		if err := insert(ctx, scratchTenantA, users[scratchTenantA], patients[scratchTenantA], at); err != nil {
 			t.Fatalf("second slot: %v", err)
 		}
-		id, err := firstID(ctx, scratchTenantA)
+		id, err := earliestSlotID(ctx, scratchTenantA)
 		if err != nil {
-			t.Fatalf("first id: %v", err)
+			t.Fatalf("earliest id: %v", err)
 		}
 		err = reschedule(ctx, scratchTenantA, id, at.Add(15*time.Minute))
 		expectCode(t, err, "23P01", "reschedule into overlap")
