@@ -120,7 +120,7 @@ func TestVoucherClientMigrationRollsBack(t *testing.T) {
 	}
 
 	t.Run("0027 links every patient voucher to its client and keeps the snapshot", func(t *testing.T) {
-		var buyer string
+		var buyer *string
 		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			var clientID *string
 			if err := app.QueryRow(ctx, `SELECT client_id::text, buyer_name FROM vouchers WHERE tenant_id = $1 AND number = 1`, scratchTenantA).Scan(&clientID, &buyer); err != nil {
@@ -133,8 +133,10 @@ func TestVoucherClientMigrationRollsBack(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("cannot read the loose charge: %v", err)
 		}
-		if buyer != "Paciente de prueba" {
-			t.Fatalf("the loose charge lost its buyer: %q", buyer)
+		// The loose charge was issued with nobody paying through it, and the backfill is not
+		// allowed to invent a buyer for it either.
+		if buyer != nil {
+			t.Fatalf("the loose charge gained a buyer: %q", *buyer)
 		}
 
 		wantClient := payerOf(t, scratchTenantA, patients[scratchTenantA])
@@ -160,13 +162,16 @@ func TestVoucherClientMigrationRollsBack(t *testing.T) {
 	})
 
 	t.Run("a loose charge carries no client", func(t *testing.T) {
+		// Read before opening the tenant scope: the helper sets the tenant on its own
+		// transaction, and nesting it inside another one loses the setting.
+		payer := payerOf(t, scratchTenantA, patients[scratchTenantA])
 		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `
 				INSERT INTO vouchers (
 					id, tenant_id, number, client_id, concept, amount_minor, currency,
 					practice_name, issued_by, issued_at, created_at, updated_at
 				) VALUES ($1, $2, 3, $3, 'Cargo suelto', 150000, 'ARS', 'Consultorio Test', $4, now(), now(), now())`,
-				uuid.NewString(), scratchTenantA, payerOf(t, scratchTenantA, patients[scratchTenantA]), users[scratchTenantA])
+				uuid.NewString(), scratchTenantA, payer, users[scratchTenantA])
 			return err
 		})
 		expectCode(t, err, "23514", "loose charge with a client")
@@ -209,12 +214,17 @@ func TestVoucherClientMigrationRollsBack(t *testing.T) {
 
 	t.Run("an issued voucher cannot be re-pointed at another client", func(t *testing.T) {
 		// A second payer of the practice, so the change is a real one in the same tenant.
-		second, err := insertClientApp(ctx, app, scratchTenantA, "Segundo pagador", "AR")
-		if err != nil {
+		// Clients are under forced RLS: the insert needs the tenant set, like the app does.
+		var second string
+		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			var inner error
+			second, inner = insertClientApp(ctx, app, scratchTenantA, "Segundo pagador", "AR")
+			return inner
+		}); err != nil {
 			t.Fatalf("setup: second payer: %v", err)
 		}
 
-		err = withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `UPDATE vouchers SET client_id = $2 WHERE tenant_id = $1 AND number = 2`, scratchTenantA, second)
 			return err
 		})

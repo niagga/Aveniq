@@ -18,11 +18,20 @@ ALTER TABLE vouchers ADD COLUMN client_id uuid NULL;
 -- Every voucher with a patient gets the client of its patient: 0026 gave every patient
 -- exactly one, so the link is complete for vouchers with a patient and NULL for the
 -- loose charges. The snapshot columns are not touched.
+--
+-- The guard of 0020 refuses any update of a voided voucher ('a voided voucher is final'),
+-- and it would refuse this backfill too: a database with a voided receipt could never
+-- migrate. The trigger is disabled for the one statement that only fills the new column
+-- and enabled again right after; the version re-created below is the final one.
+ALTER TABLE vouchers DISABLE TRIGGER vouchers_guard;
+
 UPDATE vouchers v
 SET client_id = p.client_id
 FROM patients p
 WHERE v.tenant_id = p.tenant_id
   AND v.patient_id = p.id;
+
+ALTER TABLE vouchers ENABLE TRIGGER vouchers_guard;
 
 -- client_id is present exactly when patient_id is: the mirror of the buyer snapshot
 -- rule of 0014, now in the payer direction.
