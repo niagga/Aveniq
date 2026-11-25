@@ -26,7 +26,7 @@ type voucherBody struct {
 	PatientID            string    `json:"patientId,omitempty" format:"uuid"`
 	AppointmentID        string    `json:"appointmentId,omitempty" format:"uuid"`
 	PracticeName         string    `json:"practiceName" doc:"Stamped from the practice at issue."`
-	BuyerName            *string   `json:"buyerName,omitempty" doc:"Snapshot of the patient at issue."`
+	BuyerName            *string   `json:"buyerName,omitempty" doc:"Snapshot of the client that pays, taken at issue. Vouchers issued before clients existed (T71) keep the snapshot taken then."`
 	BuyerTaxID           *string   `json:"buyerTaxId,omitempty"`
 	BuyerFiscalCondition *string   `json:"buyerFiscalCondition,omitempty"`
 	Photo                photoBody `json:"photo" doc:"How the patient was covered, the modality of the session and the professional who gave it, as they were at issue. A voucher issued before the photo existed has them all null."`
@@ -47,11 +47,14 @@ type photoBody struct {
 	ProfessionalName *string `json:"professionalName"`
 }
 
-// unbilledSessionBody is one row of the worklist: an attended session that no voucher bills.
+// unbilledSessionBody is one row of the worklist: an attended session that no voucher bills,
+// with the client that would pay for it (S26, T73).
 type unbilledSessionBody struct {
 	ID               string `json:"id" format:"uuid"`
 	PatientID        string `json:"patientId" format:"uuid"`
 	PatientName      string `json:"patientName"`
+	ClientID         string `json:"clientId" format:"uuid" doc:"The client that pays for the patient; the buyer of a voucher issued today."`
+	ClientName       string `json:"clientName"`
 	ProfessionalID   string `json:"professionalId" format:"uuid"`
 	ProfessionalName string `json:"professionalName"`
 	Modality         string `json:"modality" enum:"online,presencial"`
@@ -76,7 +79,7 @@ type issueVoucherBody struct {
 	ProfessionalUserID string `json:"professionalUserId,omitempty" format:"uuid" doc:"The professional of a voucher without an appointment. Optional. A voucher for an appointment takes the session's professional and refuses this field."`
 	Concept            string `json:"concept" minLength:"1" maxLength:"200"`
 	AmountMinor        int64  `json:"amountMinor" minimum:"1" doc:"Amount in minor units (centavos). The tariff proposes it for a session; the emission can change it."`
-	Currency           string `json:"currency" pattern:"^[A-Z]{3}$" doc:"ISO 4217 code, for example ARS. For a patient it must be the patient's billing currency."`
+	Currency           string `json:"currency" pattern:"^[A-Z]{3}$" doc:"ISO 4217 code, for example ARS. For a patient it must be the billing currency of the client that pays."`
 }
 
 // patientSessionBody is one session of a patient on the emission screen. Proposal is the amount the
@@ -146,9 +149,10 @@ type voucherIDInput struct {
 }
 
 type unbilledSessionsInput struct {
-	From  string `query:"from" format:"date-time" doc:"Start of the window, inclusive. Required."`
-	To    string `query:"to" format:"date-time" doc:"End of the window, exclusive. Required."`
-	Limit int32  `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"Page size."`
+	From     string `query:"from" format:"date-time" doc:"Start of the window, inclusive. Required."`
+	To       string `query:"to" format:"date-time" doc:"End of the window, exclusive. Required."`
+	ClientID string `query:"clientId" format:"uuid" doc:"Only the sessions whose patients pay through this client."`
+	Limit    int32  `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"Page size."`
 }
 
 type unbilledSessionsOutput struct {
@@ -236,7 +240,7 @@ func registerBillingRoutes(api huma.API, deps Deps) {
 		Method:        http.MethodGet,
 		Path:          APIPrefix + "/billing/unbilled",
 		Summary:       "List the sessions no voucher bills",
-		Description:   "Attended sessions of the practice inside the window that no issued voucher bills, oldest first: the worklist of the billing screen.",
+		Description:   "Attended sessions of the practice inside the window that no issued voucher bills, oldest first; each row names the client that would pay. Filters by date window and client.",
 		Tags:          []string{"billing"},
 		DefaultStatus: http.StatusOK,
 		Security:      secured,
@@ -259,7 +263,7 @@ func registerBillingRoutes(api huma.API, deps Deps) {
 		Method:        http.MethodPost,
 		Path:          APIPrefix + "/billing/vouchers",
 		Summary:       "Issue an internal voucher",
-		Description:   "Takes the next number of the practice. The buyer is the patient's snapshot and the practice name is the tenant's; the request cannot set either. Recorded in the audit trail.",
+		Description:   "Takes the next number of the practice. The buyer is stamped from the client that pays for the patient (S26) and the practice name is the tenant's; the request cannot set either. Recorded in the audit trail.",
 		Tags:          []string{"billing"},
 		DefaultStatus: http.StatusCreated,
 		Security:      secured,
@@ -367,6 +371,7 @@ func (h *billingHandlers) unbilledSessionsHandler(ctx context.Context, in *unbil
 		TenantID: who.TenantID,
 		From:     from,
 		To:       to,
+		ClientID: in.ClientID,
 		Limit:    in.Limit,
 	})
 	if err != nil {
@@ -380,6 +385,8 @@ func (h *billingHandlers) unbilledSessionsHandler(ctx context.Context, in *unbil
 			ID:               view.ID,
 			PatientID:        view.PatientID,
 			PatientName:      view.PatientName,
+			ClientID:         view.ClientID,
+			ClientName:       view.ClientName,
 			ProfessionalID:   view.ProfessionalID,
 			ProfessionalName: view.ProfessionalName,
 			Modality:         view.Modality,

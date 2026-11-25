@@ -9,22 +9,27 @@ import (
 )
 
 // UnbilledInput asks for the sessions of the practice that no issued voucher bills, inside a
-// window.
+// window, optionally narrowed to one payer (T73).
 type UnbilledInput struct {
 	TenantID string
 	From     time.Time
 	To       time.Time
+	// ClientID narrows the worklist to the patients that pay through one client. Empty
+	// means every payer of the practice.
+	ClientID string
 	Limit    int32
 }
 
-// UnbilledSessionView is one row of the worklist: who was seen, by whom, when. The amount is
-// not here on purpose: pricing a session needs the tariff in force on its day and the patient's
-// billing terms, and the worklist exists to say what is missing, not to quote it. The emission
-// form shows the proposal for the session it is about to bill.
+// UnbilledSessionView is one row of the worklist: who was seen, who pays for them (S26, T73),
+// by whom and when. The amount is not here on purpose: pricing a session needs the tariff in
+// force on its day and the payer's terms, and the worklist exists to say what is missing, not
+// to quote it. The emission form shows the proposal for the session it is about to bill.
 type UnbilledSessionView struct {
 	ID               string
 	PatientID        string `json:"patientId"`
 	PatientName      string `json:"patientName"`
+	ClientID         string `json:"clientId"`
+	ClientName       string `json:"clientName"`
 	ProfessionalID   string `json:"professionalId"`
 	ProfessionalName string `json:"professionalName"`
 	Modality         string `json:"modality"`
@@ -56,7 +61,12 @@ func (uc *UnbilledUseCase) Execute(ctx context.Context, in UnbilledInput) ([]Unb
 
 	var views []UnbilledSessionView
 	err := uc.scope.WithTenant(ctx, in.TenantID, func(ctx context.Context) error {
-		sessions, err := uc.billing.UnbilledSessions(ctx, in.From, in.To, limit)
+		sessions, err := uc.billing.UnbilledSessions(ctx, port.UnbilledFilter{
+			From:     in.From,
+			To:       in.To,
+			ClientID: in.ClientID,
+			Limit:    limit,
+		})
 		if err != nil {
 			return err
 		}
@@ -66,6 +76,8 @@ func (uc *UnbilledUseCase) Execute(ctx context.Context, in UnbilledInput) ([]Unb
 				ID:               session.ID,
 				PatientID:        session.PatientID,
 				PatientName:      session.PatientName,
+				ClientID:         session.ClientID,
+				ClientName:       session.ClientName,
 				ProfessionalID:   session.ProfessionalID,
 				ProfessionalName: session.ProfessionalName,
 				Modality:         session.Modality,

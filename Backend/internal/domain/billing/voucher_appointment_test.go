@@ -26,6 +26,7 @@ func TestAnAppointmentNeedsItsPatient(t *testing.T) {
 		name := "Ana Pérez"
 		draft := validDraft()
 		draft.PatientID = "3c8d2e5f-0000-4000-8000-000000000002"
+		draft.ClientID = "4d9e3f6a-0000-4000-8000-000000000004"
 		draft.AppointmentID = "2b9c1f4e-0000-4000-8000-000000000001"
 		draft.BuyerName = &name
 		draft.Photo = billing.Photo{

@@ -12,11 +12,12 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 )
 
-func billingEnv(t *testing.T) (*postgres.Transactor, *postgres.BillingRepository, map[string]string, map[string]string) {
+func billingEnv(t *testing.T) (*postgres.Transactor, *postgres.BillingRepository, *pgxpool.Pool, map[string]string, map[string]string) {
 	t.Helper()
 
 	ownerDSN := os.Getenv("TEST_DATABASE_URL")
@@ -37,11 +38,11 @@ func billingEnv(t *testing.T) (*postgres.Transactor, *postgres.BillingRepository
 	}
 	t.Cleanup(func() { pool.Close() })
 
-	return postgres.NewTransactor(pool), postgres.NewBillingRepository(pool), patients, users
+	return postgres.NewTransactor(pool), postgres.NewBillingRepository(pool), pool, patients, users
 }
 
 func TestBillingRepository(t *testing.T) {
-	transactor, repo, patients, users := billingEnv(t)
+	transactor, repo, pool, patients, users := billingEnv(t)
 	ctx := context.Background()
 
 	tenantA := scratchTenantA
@@ -123,6 +124,7 @@ func TestBillingRepository(t *testing.T) {
 			issuerA,
 			billing.IssueDraft{
 				PatientID:    patientB,
+				ClientID:     uuid.NewString(),
 				Concept:      "Sesión ajena",
 				AmountMinor:  1000,
 				Currency:     "ARS",
@@ -196,6 +198,7 @@ func TestBillingRepository(t *testing.T) {
 		name := "Ana Pérez"
 		draft := billing.IssueDraft{
 			PatientID:    patientA,
+			ClientID:     clientOf(t, pool, tenantA, patientA),
 			Concept:      "Sesión",
 			AmountMinor:  200000,
 			Currency:     "ARS",
@@ -282,6 +285,66 @@ func TestBillingRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("the buyer is stamped from the client of the patient and survives its edit", func(t *testing.T) {
+		// The payer of the seeded patient: the schema of 0026 gives every patient one.
+		clientID := clientOf(t, pool, tenantA, patientA)
+
+		saved := issue(t, tenantA, issuerA, billing.IssueDraft{
+			PatientID:    patientA,
+			ClientID:     clientID,
+			Concept:      "Sesión",
+			AmountMinor:  200000,
+			Currency:     "ARS",
+			PracticeName: "IAM A",
+			BuyerName:    strPtr("Cliente original"),
+			Photo:        billing.Photo{Coverage: billing.CoveragePrivate},
+		})
+		if saved.ClientID != clientID {
+			t.Fatalf("ClientID = %q, want the payer stamped with the buyer", saved.ClientID)
+		}
+
+		// The payer's name changes through the real repository (the way UpdateClient does);
+		// the receipt keeps what it was printed with. (The trigger freezes it too:
+		// TestVoucherClientMigrationRollsBack proves that shape.)
+		clients := postgres.NewClientRepository(pool)
+		err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
+			current, err := clients.ByID(ctx, client.ID(clientID))
+			if err != nil {
+				return err
+			}
+			renamed, err := current.ChangeProfile(client.Draft{
+				DisplayName:     "Cliente editado",
+				LegalName:       current.LegalName,
+				Country:         current.Country,
+				TaxID:           current.TaxID,
+				FiscalCondition: current.FiscalCondition,
+				FiscalAddress:   current.FiscalAddress,
+				BillingCurrency: current.BillingCurrency,
+			}, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			return clients.Update(ctx, renamed)
+		})
+		if err != nil {
+			t.Fatalf("cannot edit the payer: %v", err)
+		}
+		var readAgain billing.Voucher
+		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
+			var inner error
+			readAgain, inner = repo.ByID(ctx, saved.ID)
+			return inner
+		}); err != nil {
+			t.Fatalf("cannot re-read the voucher: %v", err)
+		}
+		if readAgain.BuyerName == nil || *readAgain.BuyerName != "Cliente original" {
+			t.Fatalf("BuyerName after the payer edit = %v, want the snapshot taken at issue", readAgain.BuyerName)
+		}
+		if readAgain.ClientID != clientID {
+			t.Fatalf("ClientID after the payer edit = %q, want %q", readAgain.ClientID, clientID)
+		}
+	})
+
 	t.Run("issue without a tenant transaction is refused", func(t *testing.T) {
 		built, err := billing.NewIssued(
 			billing.VoucherID(uuid.NewString()),
@@ -300,3 +363,22 @@ func TestBillingRepository(t *testing.T) {
 }
 
 func strPtr(value string) *string { return &value }
+
+// clientOf reads the payer of a patient, the way any billing reads it: inside a tenant
+// transaction on the application role.
+func clientOf(t *testing.T, pool *pgxpool.Pool, tenantID, patientID string) string {
+	t.Helper()
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("cannot begin a transaction: %v", err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(context.Background(), "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+		t.Fatalf("cannot set the tenant: %v", err)
+	}
+	var clientID string
+	if err := tx.QueryRow(context.Background(), `SELECT client_id::text FROM patients WHERE id = $1`, patientID).Scan(&clientID); err != nil {
+		t.Fatalf("cannot read the payer of %s: %v", patientID, err)
+	}
+	return clientID
+}

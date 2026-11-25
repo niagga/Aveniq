@@ -215,6 +215,7 @@ func createVoucherParams(voucher billing.Voucher) (sqlcgen.CreateVoucherParams, 
 		TenantID:             tenantID,
 		Number:               int32(voucher.Number),
 		PatientID:            optionalID(voucher.PatientID),
+		ClientID:             optionalID(voucher.ClientID),
 		AppointmentID:        optionalID(voucher.AppointmentID),
 		Concept:              voucher.Concept,
 		AmountMinor:          voucher.AmountMinor,
@@ -267,6 +268,7 @@ func voucherToDomain(row sqlcgen.Voucher) (billing.Voucher, error) {
 		tenantIDOf(row.TenantID),
 		int(row.Number),
 		uuidText(row.PatientID),
+		uuidText(row.ClientID),
 		uuidText(row.AppointmentID),
 		row.Concept,
 		row.AmountMinor,
@@ -482,17 +484,17 @@ func (r *BillingRepository) Professionals(ctx context.Context) ([]billing.Profes
 // query of this repository.
 func (r *BillingRepository) UnbilledSessions(
 	ctx context.Context,
-	from, to time.Time,
-	limit int32,
+	filter port.UnbilledFilter,
 ) ([]billing.UnbilledSession, error) {
 	queries, err := r.scoped(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rows, err := queries.ListUnbilledSessions(ctx, sqlcgen.ListUnbilledSessionsParams{
-		FromAt: from.UTC(),
-		ToAt:   to.UTC(),
-		Lim:    limit,
+		FromAt:   filter.From.UTC(),
+		ToAt:     filter.To.UTC(),
+		ClientID: optionalID(filter.ClientID),
+		Lim:      filter.Limit,
 	})
 	if err != nil {
 		return nil, translateBillingError(err)
@@ -504,6 +506,8 @@ func (r *BillingRepository) UnbilledSessions(
 			ID:               row.ID.String(),
 			PatientID:        row.PatientID.String(),
 			PatientName:      row.PatientName,
+			ClientID:         uuidText(row.ClientID),
+			ClientName:       row.ClientName,
 			ProfessionalID:   row.ProfessionalUserID.String(),
 			ProfessionalName: row.ProfessionalName,
 			Modality:         row.Modality,
@@ -554,6 +558,7 @@ func (r *BillingRepository) Subject(ctx context.Context, patientID string) (bill
 	}
 	return billing.Subject{
 		PatientID:       row.ID.String(),
+		ClientID:        uuidText(row.ClientID),
 		FullName:        row.FullName,
 		DocumentNumber:  row.DocumentNumber,
 		TaxID:           row.TaxID,

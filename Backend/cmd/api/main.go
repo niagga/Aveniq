@@ -19,8 +19,8 @@ import (
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
-	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
@@ -191,7 +191,7 @@ func run() error {
 		GrantClinical:          careapp.NewGrantClinicalUseCase(clinicalGrantRepository, userRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}, careAccess),
 		ListGrants:             careapp.NewListGrantsUseCase(clinicalGrantRepository, transactor, careAccess),
 		RevokeGrant:            careapp.NewRevokeGrantUseCase(clinicalGrantRepository, transactor, auditLog, clock.New(), careAccess),
-		IssueVoucher:           billingapp.NewIssueUseCase(billingRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
+		IssueVoucher:           billingapp.NewIssueUseCase(billingRepository, clientRepository, tenantRepository, transactor, auditLog, clock.New(), idgen.UUIDGenerator{}),
 		VoidVoucher:            billingapp.NewVoidUseCase(billingRepository, transactor, auditLog, clock.New()),
 		GetVoucher:             billingapp.NewGetUseCase(billingRepository, transactor),
 		ListVouchers:           billingapp.NewListUseCase(billingRepository, transactor),
