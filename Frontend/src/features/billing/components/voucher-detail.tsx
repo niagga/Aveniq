@@ -15,24 +15,33 @@ import {
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { Field, inputClass } from "@/shared/ui/field";
+import { Modal } from "@/shared/ui/modal";
 
 /** The API's limit for the reason (1 to 500 characters). */
 const REASON_MAX = 500;
 
 /**
- * One voucher, as it was issued: the snapshot of the practice and the buyer, not their
- * current records, so a later edit of the patient cannot rewrite a voucher that exists.
+ * One voucher, in a popup over the blurred screen (E8, S25, T76), as it was issued: the
+ * snapshot of the practice and the buyer, not their current records, so a later edit of the
+ * patient cannot rewrite a voucher that exists.
  *
  * Voiding is offered only to a role that may void and only while the voucher is issued. It
  * asks for a reason and for a second click, because a void is final: the voucher keeps its
- * number and nothing brings it back.
+ * number and nothing brings it back. While a reason is typed the popup shows the shared
+ * unsaved-changes guard, so Escape or the backdrop do not throw the reason away quietly.
+ *
+ * The title, the practice and the issue date live in the `Modal` header; the close control
+ * is the header's own "Cerrar", which the caller receives and turns into a URL update that
+ * keeps the active filters.
  */
-export function VoucherDetail({
+export function VoucherDetailModal({
+  open,
   voucher,
   canVoid,
   onVoided,
   onClose,
 }: {
+  open: boolean;
   voucher: Voucher;
   canVoid: boolean;
   onVoided: (voucher: Voucher) => void;
@@ -78,121 +87,113 @@ export function VoucherDetail({
   const voided = voucher.status === "voided";
 
   return (
-    <section
-      aria-label={`Detalle del comprobante ${voucherNumber(voucher.number)}`}
-      className="rounded-[var(--radius-panel)] border border-border bg-surface p-5"
+    <Modal
+      open={open}
+      size="lg"
+      busy={busy}
+      dirty={reason.trim() !== ""}
+      title={`Comprobante ${voucherNumber(voucher.number)}`}
+      description={`${voucher.practiceName} · emitido el ${formatDateTime(voucher.issuedAt)}`}
+      onClose={onClose}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Comprobante {voucherNumber(voucher.number)}</h2>
-          <p className="mt-1 text-xs text-ink-muted">
-            {voucher.practiceName} · emitido el {formatDateTime(voucher.issuedAt)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div aria-label={`Detalle del comprobante ${voucherNumber(voucher.number)}`}>
+        <div className="flex items-start justify-between gap-3">
           <StatusBadge status={voucher.status} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border px-2 py-1 text-xs font-medium"
-          >
-            Cerrar
-          </button>
         </div>
-      </div>
 
-      <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-        <Item label="Concepto" value={voucher.concept} />
-        <Item label="Importe" value={formatMoney(voucher.amountMinor, voucher.currency)} />
-        <Item label="Comprador" value={voucher.buyerName ?? "Cobro sin paciente"} />
-        <Item label="CUIT / CUIL" value={voucher.buyerTaxId ?? "—"} />
-        <Item label="Condición fiscal" value={voucher.buyerFiscalCondition ?? "—"} />
-      </dl>
-
-      <div className="mt-4 border-t border-border pt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          Al emitir
-        </h3>
-        <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-          <Item label="Cobertura" value={coverageText(voucher)} />
-          <Item
-            label="Modalidad"
-            value={photoField(voucher, modalityName(voucher.photo.modality))}
-          />
-          <Item
-            label="Profesional"
-            value={photoField(voucher, voucher.photo.professionalName)}
-          />
+        <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+          <Item label="Concepto" value={voucher.concept} />
+          <Item label="Importe" value={formatMoney(voucher.amountMinor, voucher.currency)} />
+          <Item label="Comprador" value={voucher.buyerName ?? "Cobro sin paciente"} />
+          <Item label="CUIT / CUIL" value={voucher.buyerTaxId ?? "—"} />
+          <Item label="Condición fiscal" value={voucher.buyerFiscalCondition ?? "—"} />
         </dl>
-      </div>
 
-      {voided ? (
-        <div className="mt-4 rounded-md border border-border bg-surface-muted p-3 text-sm">
-          <p className="font-medium">
-            Anulado{voucher.voidedAt ? ` el ${formatDateTime(voucher.voidedAt)}` : ""}
-          </p>
-          <p className="mt-1 text-ink-muted">Motivo: {voucher.voidReason ?? "—"}</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            El comprobante conserva su número. No se reutiliza.
-          </p>
+        <div className="mt-4 border-t border-border pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Al emitir
+          </h3>
+          <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <Item label="Cobertura" value={coverageText(voucher)} />
+            <Item
+              label="Modalidad"
+              value={photoField(voucher, modalityName(voucher.photo.modality))}
+            />
+            <Item
+              label="Profesional"
+              value={photoField(voucher, voucher.photo.professionalName)}
+            />
+          </dl>
         </div>
-      ) : canVoid && !writesLocked ? (
-        confirming ? (
-          <form onSubmit={handleVoid} noValidate className="mt-4 grid gap-3">
-            <Field
-              label="Motivo de la anulación"
-              htmlFor={`${prefix}-reason`}
-              hint="Queda registrado junto al comprobante. La anulación no se puede deshacer."
-            >
-              <textarea
-                id={`${prefix}-reason`}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                maxLength={REASON_MAX}
-                rows={3}
-                className={inputClass}
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-md bg-danger px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+
+        {voided ? (
+          <div className="mt-4 rounded-md border border-border bg-surface-muted p-3 text-sm">
+            <p className="font-medium">
+              Anulado{voucher.voidedAt ? ` el ${formatDateTime(voucher.voidedAt)}` : ""}
+            </p>
+            <p className="mt-1 text-ink-muted">Motivo: {voucher.voidReason ?? "—"}</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              El comprobante conserva su número. No se reutiliza.
+            </p>
+          </div>
+        ) : canVoid && !writesLocked ? (
+          confirming ? (
+            <form onSubmit={handleVoid} noValidate className="mt-4 grid gap-3">
+              <Field
+                label="Motivo de la anulación"
+                htmlFor={`${prefix}-reason`}
+                hint="Queda registrado junto al comprobante. La anulación no se puede deshacer."
               >
-                {busy ? "Anulando…" : "Confirmar anulación"}
-              </button>
+                <textarea
+                  id={`${prefix}-reason`}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={REASON_MAX}
+                  rows={3}
+                  className={inputClass}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-md bg-danger px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {busy ? "Anulando…" : "Confirmar anulación"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setConfirming(false);
+                    setError(null);
+                  }}
+                  className="rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-60"
+                >
+                  Volver
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-4">
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => {
-                  setConfirming(false);
-                  setError(null);
-                }}
-                className="rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-60"
+                onClick={() => setConfirming(true)}
+                className="rounded-md border border-danger/40 px-3 py-2 text-sm font-medium text-danger"
               >
-                Volver
+                Anular comprobante
               </button>
             </div>
-          </form>
-        ) : (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="rounded-md border border-danger/40 px-3 py-2 text-sm font-medium text-danger"
-            >
-              Anular comprobante
-            </button>
-          </div>
-        )
-      ) : null}
+          )
+        ) : null}
 
-      {error ? (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
-    </section>
+        {error ? (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 
