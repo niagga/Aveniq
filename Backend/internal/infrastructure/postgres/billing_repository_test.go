@@ -198,6 +198,7 @@ func TestBillingRepository(t *testing.T) {
 		name := "Ana Pérez"
 		draft := billing.IssueDraft{
 			PatientID:    patientA,
+			ClientID:     clientOf(t, pool, tenantA, patientA),
 			Concept:      "Sesión",
 			AmountMinor:  200000,
 			Currency:     "ARS",
