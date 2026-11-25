@@ -14,25 +14,28 @@ import {
   type Voucher,
   type VoucherStatus,
 } from "@/entities/billing/model";
-import { IssueForm } from "@/features/billing/components/issue-form";
-import { VoucherDetail } from "@/features/billing/components/voucher-detail";
+import { IssueVoucherModal } from "@/features/billing/components/issue-form";
+import { VoucherDetailModal } from "@/features/billing/components/voucher-detail";
 import { VoucherTable } from "@/features/billing/components/voucher-table";
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import { browserApi } from "@/shared/api/client";
 import { getSessionUser } from "@/shared/auth/session";
+import { useWritesLocked } from "@/shared/auth/practice";
 import { Button } from "@/shared/ui/button";
 import { useUnbilledCount, unbilledLabel } from "@/features/billing/use-unbilled";
 import { Field, inputClass } from "@/shared/ui/field";
+import { FilterBar } from "@/shared/ui/filter-bar";
 import { Notice } from "@/shared/ui/notice";
-import { ScreenFrame } from "@/shared/ui/shell/app-shell";
+import { PageHeader } from "@/shared/ui/page-header";
+import { Segmented } from "@/shared/ui/segmented";
 import { LoadingState } from "@/shared/ui/states";
 
 type StatusFilter = "" | VoucherStatus;
 
 /**
- * The saved views of the contextual panel. They carry no counts on purpose: the API exposes
- * sessions per patient but no unbilled aggregate, and pinning a number in the UI would be
- * inventing data. A real counter needs the endpoint tracked as T10.
+ * The views of the history, drawn as one segmented control in the filter bar. They carry no
+ * counts on purpose: counting here would mean asking the API for a list the screen is not
+ * showing, and pinning a number in the UI would be inventing data.
  */
 const VIEWS: readonly { status: StatusFilter; label: string }[] = [
   { status: "", label: "Todos" },
@@ -41,17 +44,18 @@ const VIEWS: readonly { status: StatusFilter; label: string }[] = [
 ];
 
 /**
- * Internal vouchers of the practice (T42): the history, the issue form, the detail and the
- * void.
+ * Internal vouchers of the practice (T42, and since T76 under S25): the issue form and every
+ * detail open in a popup with a blur, and the filters stay fixed at the top of the list.
  *
  * The screen shows what the role may do. The owner and the accountant issue and void; the
- * admin reads the history and sees neither the form nor the void button. The API refuses
- * the rest again if asked, so hiding a control is a courtesy and never the protection.
+ * admin reads the history and sees neither the button nor the void. The API refuses the rest
+ * again if asked, so hiding a control is a courtesy and never the protection.
  */
 export function BillingScreen() {
   const role = getSessionUser()?.role;
   const mayIssue = canIssueVouchers(role);
   const mayVoid = canVoidVouchers(role);
+  const writesLocked = useWritesLocked();
   const prefix = useId();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +77,7 @@ export function BillingScreen() {
   const [opened, setOpened] = useState<Voucher | null>(null);
   const [openedStatus, setOpenedStatus] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [issueOpen, setIssueOpen] = useState(false);
 
   const rangeInvalid = from !== "" && to !== "" && from > to;
   const filtered = status !== "" || from !== "" || to !== "";
@@ -183,6 +188,8 @@ export function BillingScreen() {
   }
 
   function handleIssued(voucher: Voucher) {
+    // Closing the issue popup and opening this voucher's detail are one motion: the
+    // confirmation is the detail itself, with the number, the amount and the snapshot.
     openVoucher(voucher.id);
     setRefreshKey((key) => key + 1);
   }
@@ -195,67 +202,88 @@ export function BillingScreen() {
     setRefreshKey((key) => key + 1);
   }
 
-  // The screen owns the frame because the panel's content is the screen's own state.
-  const panel = (
-    <aside
-      aria-label="Vistas de facturación"
-      className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex"
-    >
-      <div className="border-b border-border px-4 py-3">
+  return (
+    <>
+      <PageHeader
+        title="Facturación"
+        description="Comprobantes internos del consultorio: emitidos, anulados y su historial."
+        action={
+          <div className="flex items-center gap-2">
+            {mayIssue ? (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => setIssueOpen(true)}
+                disabled={writesLocked}
+              >
+                Emitir comprobante
+              </Button>
+            ) : null}
+            {/* The accountant lands here after sign-in and has no other screen to sign out from. */}
+            <LogoutButton />
+          </div>
+        }
+      />
+
+      {mayIssue ? (
+        <IssueVoucherModal
+          open={issueOpen}
+          onClose={() => setIssueOpen(false)}
+          onIssued={handleIssued}
+        />
+      ) : null}
+
+      {/* How many attended sessions of the last 30 days are still owed a receipt. The badge
+          in the rail and this card read the same count, so they cannot tell two stories. */}
+      <section
+        aria-label="Sesiones sin facturar"
+        className="rounded-[var(--radius-panel)] border border-border bg-surface p-4"
+      >
         <h2 className="text-sm font-semibold">Sin facturar</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
+        <p className="mt-1 text-sm text-ink-muted">
           {unbilled === ""
             ? "Ninguna sesión atendida quedó sin comprobante en los últimos 30 días."
             : `${unbilled} ${unbilled === "1" ? "sesión atendida" : "sesiones atendidas"} sin comprobante en los últimos 30 días.`}
         </p>
-      </div>
+      </section>
 
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">Vistas</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">Los filtros viven en la URL</p>
-      </div>
+      {!mayIssue ? (
+        <Notice tone="info" title="Solo lectura">
+          Tu rol consulta el historial. Emitir y anular comprobantes es del titular y del contador.
+        </Notice>
+      ) : null}
 
-      <ul className="grid gap-0.5 p-2">
-        {VIEWS.map((view) => {
-          const active = status === view.status;
-          return (
-            <li key={view.status || "todos"}>
-              <button
-                type="button"
-                aria-current={active ? "true" : undefined}
-                onClick={() => applyFilters({ ...filters, status: view.status })}
-                className={`w-full rounded-control border-l-2 px-3 py-1.5 text-left text-sm ${
-                  active
-                    ? "border-brand bg-brand/10 font-semibold text-brand"
-                    : "border-transparent text-ink hover:bg-surface-muted"
-                }`}
-              >
-                {view.label}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className="mt-auto grid gap-3 border-t border-border p-3">
-        <Field label="Desde" htmlFor={`${prefix}-panel-from`}>
+      {/* The filters stay in view while the history scrolls (S25): the bar is sticky, so a
+          long list never carries the date range off screen. */}
+      <FilterBar label="Filtros de facturación" sticky>
+        <div>
+          <span className="block text-xs font-medium text-ink-muted">Estado</span>
+          <Segmented
+            label="Vistas de facturación"
+            value={status}
+            onChange={(next) => applyFilters({ ...filters, status: next })}
+            options={VIEWS.map((view) => ({ value: view.status, label: view.label }))}
+          />
+        </div>
+        <Field label="Desde" htmlFor={`${prefix}-from`}>
           <input
-            id={`${prefix}-panel-from`}
+            id={`${prefix}-from`}
             type="date"
             value={from}
             onChange={(event) => applyFilters({ ...filters, from: event.target.value })}
             className={inputClass}
           />
         </Field>
-        <Field label="Hasta (inclusive)" htmlFor={`${prefix}-panel-to`}>
+        <Field label="Hasta (inclusive)" htmlFor={`${prefix}-to`}>
           <input
-            id={`${prefix}-panel-to`}
+            id={`${prefix}-to`}
             type="date"
             value={to}
             onChange={(event) => applyFilters({ ...filters, to: event.target.value })}
             className={inputClass}
           />
         </Field>
+
         <Button
           size="sm"
           onClick={() => applyFilters({ status: "", from: "", to: "" })}
@@ -263,76 +291,10 @@ export function BillingScreen() {
         >
           Limpiar filtros
         </Button>
-      </div>
-    </aside>
-  );
-
-  return (
-    <ScreenFrame panel={panel}>
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Facturación</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Comprobantes internos del consultorio: emitidos, anulados y su historial.
-          </p>
-        </div>
-        {/* The accountant lands here after sign-in and has no other screen to sign out from. */}
-        <LogoutButton />
-      </header>
-
-      {mayIssue ? (
-        <IssueForm onIssued={handleIssued} />
-      ) : (
-        <Notice tone="info" title="Solo lectura">
-          Tu rol consulta el historial. Emitir y anular comprobantes es del titular y del contador.
-        </Notice>
-      )}
+      </FilterBar>
 
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold">Historial</h2>
-
-        {/* Under md the panel is hidden, so the same views stay reachable here. */}
-        <div className="flex flex-wrap gap-2 md:hidden">
-          {VIEWS.map((view) => (
-            <button
-              key={view.status || "todos"}
-              type="button"
-              aria-current={status === view.status ? "true" : undefined}
-              onClick={() => applyFilters({ ...filters, status: view.status })}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                status === view.status
-                  ? "border-brand bg-brand/10 font-semibold text-brand"
-                  : "border-border bg-surface text-ink-muted"
-              }`}
-            >
-              {view.label}
-            </button>
-          ))}
-        </div>
-
-        <details className="rounded-control border border-border bg-surface p-3 md:hidden">
-          <summary className="cursor-pointer text-sm font-medium">Rango de fechas</summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field label="Desde" htmlFor={`${prefix}-mobile-from`}>
-              <input
-                id={`${prefix}-mobile-from`}
-                type="date"
-                value={from}
-                onChange={(event) => applyFilters({ ...filters, from: event.target.value })}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Hasta (inclusive)" htmlFor={`${prefix}-mobile-to`}>
-              <input
-                id={`${prefix}-mobile-to`}
-                type="date"
-                value={to}
-                onChange={(event) => applyFilters({ ...filters, to: event.target.value })}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-        </details>
 
         {rangeInvalid ? (
           <Notice tone="warning" title="El rango de fechas está al revés">
@@ -384,15 +346,17 @@ export function BillingScreen() {
         ) : opened === null ? (
           <LoadingState label="Cargando el comprobante…" rows={2} />
         ) : (
-          <VoucherDetail
+          <VoucherDetailModal
             key={`${opened.id}:${opened.status}`}
+            open
             voucher={opened}
             canVoid={mayVoid}
             onVoided={handleVoided}
+            // Closing keeps the filters: only the voucher leaves the URL.
             onClose={() => router.replace(billingUrl(null, filters))}
           />
         )
       ) : null}
-    </ScreenFrame>
+    </>
   );
 }

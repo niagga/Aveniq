@@ -9,7 +9,6 @@ import {
   parseAmount,
   sessionBlockReason,
   sessionLabel,
-  voucherNumber,
   type Professional,
   type Session,
   type Subject,
@@ -20,6 +19,7 @@ import { SubjectPicker } from "@/features/billing/components/subject-picker";
 import { apiErrorMessage, browserApi, CONNECTION_ERROR_MESSAGE } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { Field, inputClass } from "@/shared/ui/field";
+import { FormModal } from "@/shared/ui/form-modal";
 
 /** The API's limit for the concept (1 to 200 characters). */
 const CONCEPT_MAX = 200;
@@ -31,7 +31,8 @@ const NO_SESSION = "";
 type SessionsOfPatient = { patientId: string; items: Session[]; failure: string | null };
 
 /**
- * Issues an internal voucher.
+ * Issues an internal voucher, in a popup (E8, S25, T76): the button of the header opens it
+ * over the blurred screen instead of an always-open block between the filters and the list.
  *
  * A voucher is either for a session of a patient, or a loose charge. For a session the screen
  * sends the session and nothing else about the patient: the server takes the patient, the
@@ -41,8 +42,20 @@ type SessionsOfPatient = { patientId: string; items: Session[]; failure: string 
  *
  * The screen never sends the buyer, the practice name or the photo: the server stamps them
  * from its own records. The number is assigned by the server too.
+ *
+ * On success the popup closes and the screen opens the detail of the voucher it just issued:
+ * the confirmation the inline form used to print is now the detail itself, which shows the
+ * number, the amount and the frozen snapshot.
  */
-export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }) {
+export function IssueVoucherModal({
+  open,
+  onClose,
+  onIssued,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onIssued: (voucher: Voucher) => void;
+}) {
   const prefix = useId();
   const writesLocked = useWritesLocked();
   const [subject, setSubject] = useState<Subject | null>(null);
@@ -53,7 +66,6 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
   const [concept, setConcept] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [issued, setIssued] = useState<Voucher | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const patientId = subject?.patientId;
@@ -61,20 +73,36 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
   const session = sessions?.items.find((item) => item.id === sessionId) ?? null;
   const currency = subject?.billingCurrency ?? DEFAULT_CURRENCY;
 
+  // Reopening starts from a clean draft: the popup keeps one life per opening, so a cancelled
+  // voucher cannot leak into the next one.
   useEffect(() => {
+    if (!open) return;
+    setSubject(null);
+    setSessionsOf(null);
+    setSessionId(NO_SESSION);
+    setProfessionalId("");
+    setConcept("");
+    setAmount("");
+    setError(null);
+  }, [open]);
+
+  // The catalog feeds only an optional field of a loose charge: it is worth a request only
+  // while the popup is actually open, not on every visit to the screen.
+  useEffect(() => {
+    if (!open) return;
     let active = true;
     void (async () => {
       try {
         const { data, response } = await browserApi.GET("/api/v1/billing/professionals");
         if (active && response.ok) setProfessionals(data?.items ?? []);
       } catch {
-        // The list only feeds an optional field: a loose charge can still be issued without it.
+        // A loose charge can still be issued without the list.
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (patientId === undefined) return;
@@ -113,11 +141,9 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
     setAmount(chosen.proposal ? minorToInput(chosen.proposal.amountMinor) : "");
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit() {
     if (writesLocked) return;
     setError(null);
-    setIssued(null);
 
     const trimmedConcept = concept.trim();
     if (trimmedConcept === "") {
@@ -148,11 +174,9 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
         return;
       }
 
-      setIssued(data);
-      setConcept("");
-      setAmount("");
-      setProfessionalId("");
-      changeSubject(null);
+      // Close first, then hand the voucher over: the parent opens its detail, so the
+      // leaving popup and the popup that takes its place are never on screen at once.
+      onClose();
       onIssued(data);
     } catch {
       setError(CONNECTION_ERROR_MESSAGE);
@@ -164,99 +188,78 @@ export function IssueForm({ onIssued }: { onIssued: (voucher: Voucher) => void }
   const proposal = session?.proposal ?? null;
 
   return (
-    <section className="rounded-[var(--radius-panel)] border border-border bg-surface p-5">
-      <h2 className="text-sm font-semibold">Emitir un comprobante</h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        Comprobante interno: no es una factura electrónica. El número lo asigna Aveniq y no se
-        reutiliza, ni siquiera si el comprobante se anula.
-      </p>
+    <FormModal
+      open={open}
+      title="Emitir un comprobante"
+      description="Comprobante interno: no es una factura electrónica. El número lo asigna Aveniq y no se reutiliza, ni siquiera si el comprobante se anula."
+      size="lg"
+      submitLabel="Emitir comprobante"
+      busy={isSubmitting}
+      error={error}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+    >
+      <SubjectPicker value={subject} onChange={changeSubject} disabled={writesLocked} />
 
-      <form onSubmit={handleSubmit} noValidate className="mt-4 grid gap-4">
-        <SubjectPicker value={subject} onChange={changeSubject} disabled={writesLocked} />
-
-        {subject !== null ? (
-          <SessionPicker
-            id={`${prefix}-session`}
-            sessions={sessions}
-            value={sessionId}
-            onChange={chooseSession}
-            disabled={writesLocked}
-          />
-        ) : null}
-
-        {session === null ? (
-          <ProfessionalPicker
-            id={`${prefix}-professional`}
-            professionals={professionals}
-            value={professionalId}
-            onChange={setProfessionalId}
-            disabled={writesLocked}
-          />
-        ) : (
-          <Field label="Profesional" htmlFor={`${prefix}-professional-fixed`}>
-            <input
-              id={`${prefix}-professional-fixed`}
-              value={session.professionalName}
-              readOnly
-              className={inputClass}
-            />
-          </Field>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-          <Field label="Concepto" htmlFor={`${prefix}-concept`}>
-            <input
-              id={`${prefix}-concept`}
-              value={concept}
-              onChange={(event) => setConcept(event.target.value)}
-              maxLength={CONCEPT_MAX}
-              placeholder="Sesión de psicoterapia individual"
-              disabled={writesLocked}
-              className={inputClass}
-            />
-          </Field>
-
-          <Field
-            label={`Importe (${currency})`}
-            htmlFor={`${prefix}-amount`}
-            hint={amountHint(session !== null, proposal?.amountMinor ?? null, proposal?.currency ?? null)}
-          >
-            <input
-              id={`${prefix}-amount`}
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              inputMode="decimal"
-              autoComplete="off"
-              disabled={writesLocked}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <div>
-          <button
-            type="submit"
-            disabled={isSubmitting || writesLocked}
-            className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink disabled:opacity-60"
-          >
-            {isSubmitting ? "Emitiendo…" : "Emitir comprobante"}
-          </button>
-        </div>
-      </form>
-
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error}
-        </p>
+      {subject !== null ? (
+        <SessionPicker
+          id={`${prefix}-session`}
+          sessions={sessions}
+          value={sessionId}
+          onChange={chooseSession}
+          disabled={writesLocked}
+        />
       ) : null}
 
-      {issued ? (
-        <p role="status" className="mt-4 text-sm text-success">
-          Emitimos el comprobante {voucherNumber(issued.number)} por{" "}
-          {formatMoney(issued.amountMinor, issued.currency)}.
-        </p>
-      ) : null}
-    </section>
+      {session === null ? (
+        <ProfessionalPicker
+          id={`${prefix}-professional`}
+          professionals={professionals}
+          value={professionalId}
+          onChange={setProfessionalId}
+          disabled={writesLocked}
+        />
+      ) : (
+        <Field label="Profesional" htmlFor={`${prefix}-professional-fixed`}>
+          <input
+            id={`${prefix}-professional-fixed`}
+            value={session.professionalName}
+            readOnly
+            className={inputClass}
+          />
+        </Field>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+        <Field label="Concepto" htmlFor={`${prefix}-concept`}>
+          <input
+            id={`${prefix}-concept`}
+            value={concept}
+            onChange={(event) => setConcept(event.target.value)}
+            maxLength={CONCEPT_MAX}
+            placeholder="Sesión de psicoterapia individual"
+            disabled={writesLocked}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field
+          label={`Importe (${currency})`}
+          htmlFor={`${prefix}-amount`}
+          hint={amountHint(session !== null, proposal?.amountMinor ?? null, proposal?.currency ?? null)}
+        >
+          <input
+            id={`${prefix}-amount`}
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            inputMode="decimal"
+            autoComplete="off"
+            disabled={writesLocked}
+            className={inputClass}
+          />
+        </Field>
+      </div>
+    </FormModal>
   );
 }
 
