@@ -345,8 +345,9 @@ type BillingRepository interface {
 	// PatientAppointments returns the newest sessions of one patient, bounded by limit.
 	PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error)
 	// UnbilledSessions lists the attended sessions in [from, to) that no issued voucher bills,
-	// oldest first. A voided voucher bills nothing, so its session is listed again.
-	UnbilledSessions(ctx context.Context, from, to time.Time, limit int32) ([]billing.UnbilledSession, error)
+	// oldest first. A voided voucher bills nothing, so its session is listed again. Each row
+	// names the payer of its patient (S26, T73).
+	UnbilledSessions(ctx context.Context, filter UnbilledFilter) ([]billing.UnbilledSession, error)
 	// Professional returns an active professional of the practice, or
 	// billing.ErrProfessionalNotVisible.
 	Professional(ctx context.Context, userID string) (billing.Professional, error)
@@ -363,6 +364,15 @@ type VoucherFilter struct {
 	Status    string
 	Limit     int32
 	Offset    int32
+}
+
+// UnbilledFilter narrows the billing worklist: a window and, when ClientID is set, only
+// the sessions of the patients that pay through that client. Empty bounds mean unbounded.
+type UnbilledFilter struct {
+	From     time.Time
+	To       time.Time
+	ClientID string
+	Limit    int32
 }
 
 // SettlementRepository persists the monthly settlements to the mutuales. A settlement and its

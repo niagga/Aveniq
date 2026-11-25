@@ -53,8 +53,8 @@ func TestNewIssued(t *testing.T) {
 	if voucher.Status != billing.StatusIssued {
 		t.Errorf("Status = %q, want issued", voucher.Status)
 	}
-	if voucher.PatientID != "" || voucher.BuyerName != nil {
-		t.Errorf("a loose charge must carry no buyer snapshot, got patient=%q buyer=%v", voucher.PatientID, voucher.BuyerName)
+	if voucher.PatientID != "" || voucher.BuyerName != nil || voucher.ClientID != "" {
+		t.Errorf("a loose charge must carry no buyer and no client, got patient=%q buyer=%v client=%q", voucher.PatientID, voucher.BuyerName, voucher.ClientID)
 	}
 }
 
@@ -77,7 +77,16 @@ func TestNewIssuedValidation(t *testing.T) {
 		}, "buyer_name"},
 		"patient without buyer": {func(d *billing.IssueDraft) {
 			d.PatientID = uuid.NewString()
+			d.ClientID = uuid.NewString()
 		}, "buyer_name"},
+		"patient without client": {func(d *billing.IssueDraft) {
+			name := "Ana"
+			d.PatientID = uuid.NewString()
+			d.BuyerName = &name
+		}, "client_id"},
+		"client without patient": {func(d *billing.IssueDraft) {
+			d.ClientID = uuid.NewString()
+		}, "client_id"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			draft := validDraft()
@@ -115,11 +124,34 @@ func TestNewIssuedRequiresIdentity(t *testing.T) {
 	}
 }
 
+func TestTheVoucherRemembersItsClient(t *testing.T) {
+	name := "Cliente Uno S.A."
+	draft := validDraft()
+	draft.PatientID = uuid.NewString()
+	draft.ClientID = uuid.NewString()
+	draft.BuyerName = &name
+	draft.Photo = billing.Photo{Coverage: billing.CoveragePrivate}
+
+	voucher := newIssued(t, draft)
+	if voucher.ClientID != draft.ClientID {
+		t.Fatalf("ClientID = %q, want the payer stamped at issue", voucher.ClientID)
+	}
+
+	voided, err := voucher.Void(uuid.NewString(), "Error de carga", now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("Void: %v", err)
+	}
+	if voided.ClientID != draft.ClientID {
+		t.Error("Void rewrote the client snapshot")
+	}
+}
+
 func TestNewIssuedWithPatientSnapshot(t *testing.T) {
 	name := "  Ana Pérez  "
 	tax := "  20123456789  "
 	draft := validDraft()
 	draft.PatientID = uuid.NewString()
+	draft.ClientID = uuid.NewString()
 	draft.BuyerName = &name
 	draft.BuyerTaxID = &tax
 	draft.Photo = billing.Photo{Coverage: billing.CoveragePrivate}
@@ -199,8 +231,9 @@ func TestReconstitute(t *testing.T) {
 	id := billing.VoucherID(uuid.NewString())
 	tenantID := tenant.ID(uuid.NewString())
 
+	client := "3e5f6a7b-0000-4000-8000-000000000003"
 	got, err := billing.Reconstitute(
-		id, tenantID, 3, "", "", "Sesión", 1000, "ARS", "Norte",
+		id, tenantID, 3, "", client, "", "Sesión", 1000, "ARS", "Norte",
 		nil, nil, nil, billing.Photo{}, billing.StatusIssued, uuid.NewString(), now,
 		"", nil, nil, now, now,
 	)
@@ -210,7 +243,10 @@ func TestReconstitute(t *testing.T) {
 	if got.ID != id || got.Number != 3 || got.Concept != "Sesión" {
 		t.Fatalf("got = %+v, want the stored values", got)
 	}
-	if _, err := billing.Reconstitute("", tenantID, 1, "", "", "x", 1, "ARS", "N", nil, nil, nil, billing.Photo{}, billing.StatusIssued, "", now, "", nil, nil, now, now); err == nil {
+	if got.ClientID != client {
+		t.Fatalf("ClientID = %q, want %q", got.ClientID, client)
+	}
+	if _, err := billing.Reconstitute("", tenantID, 1, "", "", "", "x", 1, "ARS", "N", nil, nil, nil, billing.Photo{}, billing.StatusIssued, "", now, "", nil, nil, now, now); err == nil {
 		t.Fatal("Reconstitute without an id must fail")
 	}
 }

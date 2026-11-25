@@ -84,6 +84,68 @@ func TestTheWorklistListsOnlyWhatIsOwedAReceipt(t *testing.T) {
 	if row["professionalName"] != professional.FullName {
 		t.Errorf("professionalName = %v, want %s", row["professionalName"], professional.FullName)
 	}
+	// The row names the payer of the patient (S26, T73): the practice created the patient
+	// with its own client, whose display name is the patient's name.
+	clientID, _ := row["clientId"].(string)
+	if clientID == "" {
+		t.Errorf("clientId = %v, want the payer of the patient: the worklist cannot filter without it", row["clientId"])
+	}
+	if row["clientName"] != "Ana Worklist" {
+		t.Errorf("clientName = %v, want the payer the patient was created with", row["clientName"])
+	}
+}
+
+// TestTheWorklistNamesTheClientAndFilterByIt: the worklist narrows to one client, and each
+// row answers with the payer of its patient, which the client filter asked for.
+func TestTheWorklistNamesTheClientAndFilterByIt(t *testing.T) {
+	h := newHarness(t)
+	tenantA := h.tenantID(t, "practica-a")
+	owner := h.token(t, tenantA, iam.RoleOwner)
+	accountant := h.token(t, tenantA, iam.RoleAccountant)
+
+	ana := createPatient(t, h, owner, "Ana Cliënte", "30111222")
+	bruno := createPatient(t, h, owner, "Bruno Cliënte", "31222333")
+
+	_, anaDetail := h.do(t, http.MethodGet, "/api/v1/patients/"+ana, owner, nil)
+	anaClient, _ := anaDetail["clientId"].(string)
+	if anaClient == "" {
+		t.Fatalf("the patient answered no clientId: %v", anaDetail)
+	}
+
+	professional := seedProfessional(t, h, tenantA, "Dra. Worklist")
+	inside := time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC)
+	for _, session := range []billing.Appointment{
+		{PatientID: ana, ProfessionalID: professional.ID, Modality: billing.ModalityPresencial, Status: billing.AppointmentAttended, StartsAt: inside},
+		{PatientID: bruno, ProfessionalID: professional.ID, Modality: billing.ModalityPresencial, Status: billing.AppointmentAttended, StartsAt: inside.Add(time.Hour)},
+	} {
+		seedSession(t, h, tenantA, session)
+	}
+
+	window := "from=2026-11-16T00:00:00Z&to=2026-11-23T00:00:00Z"
+	status, body := h.do(
+		t,
+		http.MethodGet,
+		"/api/v1/billing/unbilled?"+window+"&clientId="+anaClient,
+		accountant,
+		nil,
+	)
+	if status != http.StatusOK {
+		t.Fatalf("list unbilled by client = %d, want 200: %v", status, body)
+	}
+	items, _ := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("unbilled of one client = %d, want 1: %v", len(items), body)
+	}
+	row, _ := items[0].(map[string]any)
+	if row["patientId"] != ana {
+		t.Errorf("row = %v, want only the payer's own patient", row)
+	}
+	if row["clientId"] != anaClient {
+		t.Errorf("clientId = %v, want %s", row["clientId"], anaClient)
+	}
+	if row["clientName"] != "Ana Cliënte" {
+		t.Errorf("clientName = %v, want the payer's display name", row["clientName"])
+	}
 }
 
 // TestTheWorklistNeedsTheBillingPermission: the clinical roles hold no billing:read, and the

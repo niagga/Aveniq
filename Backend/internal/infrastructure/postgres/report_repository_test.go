@@ -103,11 +103,11 @@ func TestReportRepository(t *testing.T) {
 		// v1 bills the covered patient's session, with the photo of a mutual.
 		if _, err := seeder.Exec(ctx, `
 			INSERT INTO vouchers (
-				id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency,
+				id, tenant_id, number, patient_id, client_id, appointment_id, concept, amount_minor, currency,
 				practice_name, buyer_name, coverage_kind, insurer_id, insurer_name, modality,
 				professional_user_id, professional_name, issued_by, issued_at, created_at, updated_at
 			) VALUES (
-				$1, $2, 1, $3, $4, 'Sesión', 950000, 'ARS', 'Consultorio Test', 'Ana Mutual',
+				$1, $2, 1, $3, (SELECT client_id FROM patients WHERE id = $3), $4, 'Sesión', 950000, 'ARS', 'Consultorio Test', 'Ana Mutual',
 				'insurer', $5, 'OSDE', 'presencial', $6, 'Demo Profesional', $6, $7, now(), now())`,
 			uuid.NewString(), tenantA, covered, billedSession, insurerID, professional,
 			time.Date(2026, 10, 5, 18, 0, 0, 0, time.UTC)); err != nil {
@@ -116,11 +116,11 @@ func TestReportRepository(t *testing.T) {
 		// v2 was voided: it bills nothing and frees its session.
 		if _, err := seeder.Exec(ctx, `
 			INSERT INTO vouchers (
-				id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency,
+				id, tenant_id, number, patient_id, client_id, appointment_id, concept, amount_minor, currency,
 				practice_name, buyer_name, coverage_kind, modality, professional_user_id, professional_name,
 				issued_by, issued_at, status, voided_by, voided_at, void_reason, created_at, updated_at
 			) VALUES (
-				$1, $2, 2, $3, $4, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Paciente',
+				$1, $2, 2, $3, (SELECT client_id FROM patients WHERE id = $3), $4, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Paciente',
 				'private', 'presencial', $5, 'Demo Profesional', $5, $6, 'voided', $5, $7, 'Error de carga', now(), now())`,
 			uuid.NewString(), tenantA, private, voidedSession, professional,
 			time.Date(2026, 10, 7, 18, 0, 0, 0, time.UTC), time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)); err != nil {

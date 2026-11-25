@@ -13,6 +13,7 @@ func patientDraft(photo billing.Photo) billing.IssueDraft {
 	name := "Ana Perez"
 	draft := validDraft()
 	draft.PatientID = uuid.NewString()
+	draft.ClientID = uuid.NewString()
 	draft.BuyerName = &name
 	draft.Photo = photo
 	return draft

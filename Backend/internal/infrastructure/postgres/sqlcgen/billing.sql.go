@@ -14,21 +14,21 @@ import (
 
 const createVoucher = `-- name: CreateVoucher :one
 INSERT INTO vouchers (
-    id, tenant_id, number, patient_id, appointment_id,
+    id, tenant_id, number, patient_id, client_id, appointment_id,
     concept, amount_minor, currency,
     practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition,
     coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name,
     status, issued_by, issued_at,
     created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8,
-    $9, $10, $11, $12,
-    $13, $14, $15, $16, $17, $18,
-    $19, $20, $21,
-    $22, $23
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9,
+    $10, $11, $12, $13,
+    $14, $15, $16, $17, $18, $19,
+    $20, $21, $22,
+    $23, $24
 )
-RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
+RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name, client_id
 `
 
 type CreateVoucherParams struct {
@@ -36,6 +36,7 @@ type CreateVoucherParams struct {
 	TenantID             pgtype.UUID
 	Number               int32
 	PatientID            pgtype.UUID
+	ClientID             pgtype.UUID
 	AppointmentID        pgtype.UUID
 	Concept              string
 	AmountMinor          int64
@@ -63,6 +64,7 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 		arg.TenantID,
 		arg.Number,
 		arg.PatientID,
+		arg.ClientID,
 		arg.AppointmentID,
 		arg.Concept,
 		arg.AmountMinor,
@@ -111,6 +113,7 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 		&i.Modality,
 		&i.ProfessionalUserID,
 		&i.ProfessionalName,
+		&i.ClientID,
 	)
 	return i, err
 }
@@ -184,7 +187,7 @@ func (q *Queries) GetBillingProfessional(ctx context.Context, id pgtype.UUID) (G
 }
 
 const getBillingSubject = `-- name: GetBillingSubject :one
-SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency
+SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency, client_id
 FROM patients
 WHERE id = $1
 `
@@ -196,10 +199,12 @@ type GetBillingSubjectRow struct {
 	TaxID           *string
 	FiscalCondition *string
 	BillingCurrency string
+	ClientID        pgtype.UUID
 }
 
-// The billing identity of one patient. Only the fields a receipt prints: the clinical
-// record and the contact details are not selected.
+// The billing identity of one patient, with the client that pays for it (T73): the
+// client is who a receipt issued today would bill. Only the fields billing answers
+// with: the clinical record and the contact details are not selected.
 func (q *Queries) GetBillingSubject(ctx context.Context, id pgtype.UUID) (GetBillingSubjectRow, error) {
 	row := q.db.QueryRow(ctx, getBillingSubject, id)
 	var i GetBillingSubjectRow
@@ -210,6 +215,7 @@ func (q *Queries) GetBillingSubject(ctx context.Context, id pgtype.UUID) (GetBil
 		&i.TaxID,
 		&i.FiscalCondition,
 		&i.BillingCurrency,
+		&i.ClientID,
 	)
 	return i, err
 }
@@ -250,7 +256,7 @@ func (q *Queries) GetPatientBilling(ctx context.Context, id pgtype.UUID) (GetPat
 }
 
 const getVoucher = `-- name: GetVoucher :one
-SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
+SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name, client_id
 FROM vouchers
 WHERE id = $1
 `
@@ -285,6 +291,7 @@ func (q *Queries) GetVoucher(ctx context.Context, id pgtype.UUID) (Voucher, erro
 		&i.Modality,
 		&i.ProfessionalUserID,
 		&i.ProfessionalName,
+		&i.ClientID,
 	)
 	return i, err
 }
@@ -394,6 +401,8 @@ const listUnbilledSessions = `-- name: ListUnbilledSessions :many
 SELECT a.id,
        a.patient_id,
        p.full_name AS patient_name,
+       c.id AS client_id,
+       c.display_name AS client_name,
        a.professional_user_id,
        u.full_name AS professional_name,
        a.modality,
@@ -404,9 +413,12 @@ JOIN users u
   ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
 JOIN patients p
   ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
 WHERE a.status = 'attended'
   AND a.starts_at >= $1
   AND a.starts_at < $2
+  AND ($3::uuid IS NULL OR p.client_id = $3)
   AND NOT EXISTS (
     SELECT 1
       FROM vouchers v
@@ -415,19 +427,22 @@ WHERE a.status = 'attended'
        AND v.status = 'issued'
   )
 ORDER BY a.starts_at ASC, a.id
-LIMIT $3
+LIMIT $4
 `
 
 type ListUnbilledSessionsParams struct {
-	FromAt time.Time
-	ToAt   time.Time
-	Lim    int32
+	FromAt   time.Time
+	ToAt     time.Time
+	ClientID pgtype.UUID
+	Lim      int32
 }
 
 type ListUnbilledSessionsRow struct {
 	ID                 pgtype.UUID
 	PatientID          pgtype.UUID
 	PatientName        string
+	ClientID           pgtype.UUID
+	ClientName         string
 	ProfessionalUserID pgtype.UUID
 	ProfessionalName   string
 	Modality           string
@@ -437,10 +452,17 @@ type ListUnbilledSessionsRow struct {
 
 // Attended sessions of the practice with no issued voucher: the worklist the billing screen
 // exists for. A cancelled or still-scheduled session is not owed a receipt, and a voided
-// voucher bills nothing, so its session belongs back in this list. Ordered oldest first,
+// voucher bills nothing, so its session belongs back in this list. Each row names the payer
+// of its patient (S26, T73): who a receipt issued today would bill. When the caller passes a
+// client, only the sessions of that client's patients come back. Ordered oldest first,
 // because the oldest is the one most likely to be forgotten.
 func (q *Queries) ListUnbilledSessions(ctx context.Context, arg ListUnbilledSessionsParams) ([]ListUnbilledSessionsRow, error) {
-	rows, err := q.db.Query(ctx, listUnbilledSessions, arg.FromAt, arg.ToAt, arg.Lim)
+	rows, err := q.db.Query(ctx, listUnbilledSessions,
+		arg.FromAt,
+		arg.ToAt,
+		arg.ClientID,
+		arg.Lim,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -452,6 +474,8 @@ func (q *Queries) ListUnbilledSessions(ctx context.Context, arg ListUnbilledSess
 			&i.ID,
 			&i.PatientID,
 			&i.PatientName,
+			&i.ClientID,
+			&i.ClientName,
 			&i.ProfessionalUserID,
 			&i.ProfessionalName,
 			&i.Modality,
@@ -469,7 +493,7 @@ func (q *Queries) ListUnbilledSessions(ctx context.Context, arg ListUnbilledSess
 }
 
 const listVouchers = `-- name: ListVouchers :many
-SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
+SELECT id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name, client_id
 FROM vouchers
 WHERE ($1::timestamptz IS NULL OR issued_at >= $1)
   AND ($2::timestamptz IS NULL OR issued_at < $2)
@@ -531,6 +555,7 @@ func (q *Queries) ListVouchers(ctx context.Context, arg ListVouchersParams) ([]V
 			&i.Modality,
 			&i.ProfessionalUserID,
 			&i.ProfessionalName,
+			&i.ClientID,
 		); err != nil {
 			return nil, err
 		}
@@ -630,7 +655,7 @@ SET status = 'voided',
     updated_at = $5
 WHERE id = $1
   AND status = 'issued'
-RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name
+RETURNING id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency, practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition, status, issued_by, issued_at, voided_by, voided_at, void_reason, created_at, updated_at, coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name, client_id
 `
 
 type VoidVoucherParams struct {
@@ -677,6 +702,7 @@ func (q *Queries) VoidVoucher(ctx context.Context, arg VoidVoucherParams) (Vouch
 		&i.Modality,
 		&i.ProfessionalUserID,
 		&i.ProfessionalName,
+		&i.ClientID,
 	)
 	return i, err
 }

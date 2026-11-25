@@ -363,6 +363,7 @@ type Voucher struct {
 	Modality             *string
 	ProfessionalUserID   pgtype.UUID
 	ProfessionalName     *string
+	ClientID             pgtype.UUID
 }
 
 type VoucherCounter struct {

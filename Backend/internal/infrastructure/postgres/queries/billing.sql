@@ -11,19 +11,19 @@ RETURNING last_number;
 
 -- name: CreateVoucher :one
 INSERT INTO vouchers (
-    id, tenant_id, number, patient_id, appointment_id,
+    id, tenant_id, number, patient_id, client_id, appointment_id,
     concept, amount_minor, currency,
     practice_name, buyer_name, buyer_tax_id, buyer_fiscal_condition,
     coverage_kind, insurer_id, insurer_name, modality, professional_user_id, professional_name,
     status, issued_by, issued_at,
     created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8,
-    $9, $10, $11, $12,
-    $13, $14, $15, $16, $17, $18,
-    $19, $20, $21,
-    $22, $23
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9,
+    $10, $11, $12, $13,
+    $14, $15, $16, $17, $18, $19,
+    $20, $21, $22,
+    $23, $24
 )
 RETURNING *;
 
@@ -54,9 +54,10 @@ ORDER BY issued_at DESC, number DESC
 LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: GetBillingSubject :one
--- The billing identity of one patient. Only the fields a receipt prints: the clinical
--- record and the contact details are not selected.
-SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency
+-- The billing identity of one patient, with the client that pays for it (T73): the
+-- client is who a receipt issued today would bill. Only the fields billing answers
+-- with: the clinical record and the contact details are not selected.
+SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency, client_id
 FROM patients
 WHERE id = $1;
 
@@ -149,11 +150,15 @@ ORDER BY lower(full_name), id;
 -- name: ListUnbilledSessions :many
 -- Attended sessions of the practice with no issued voucher: the worklist the billing screen
 -- exists for. A cancelled or still-scheduled session is not owed a receipt, and a voided
--- voucher bills nothing, so its session belongs back in this list. Ordered oldest first,
+-- voucher bills nothing, so its session belongs back in this list. Each row names the payer
+-- of its patient (S26, T73): who a receipt issued today would bill. When the caller passes a
+-- client, only the sessions of that client's patients come back. Ordered oldest first,
 -- because the oldest is the one most likely to be forgotten.
 SELECT a.id,
        a.patient_id,
        p.full_name AS patient_name,
+       c.id AS client_id,
+       c.display_name AS client_name,
        a.professional_user_id,
        u.full_name AS professional_name,
        a.modality,
@@ -164,9 +169,12 @@ JOIN users u
   ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
 JOIN patients p
   ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
 WHERE a.status = 'attended'
   AND a.starts_at >= sqlc.arg('from_at')
   AND a.starts_at < sqlc.arg('to_at')
+  AND (sqlc.narg('client_id')::uuid IS NULL OR p.client_id = sqlc.narg('client_id'))
   AND NOT EXISTS (
     SELECT 1
       FROM vouchers v

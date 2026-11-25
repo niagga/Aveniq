@@ -16,8 +16,8 @@ import (
 
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
-	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
@@ -327,7 +327,7 @@ func newHarness(t *testing.T) *harness {
 	audit := &fakeAudit{}
 	invitations := newFakeInvitationRepository()
 	limiter := &fakeRateLimiter{hits: map[string]int64{}}
-	vouchers := newFakeBillingRepository(repo)
+	vouchers := newFakeBillingRepository(repo, clients)
 	settlements := newFakeSettlementRepository(insurers, repo, vouchers)
 	saved := newFakeSavedReportRepository()
 	landings := newFakeLandingRepository()
@@ -380,7 +380,7 @@ func newHarness(t *testing.T) *harness {
 		RevokeInvitation:       invitationapp.NewRevokeUseCase(invitations, scope, audit),
 		PreviewInvitation:      invitationapp.NewPreviewUseCase(invitations, scope, clock, tenantapp.NewTrialExpiredUseCase(tenants, clock)),
 		AcceptInvitation:       invitationapp.NewAcceptUseCase(invitations, users, scope, audit, clock, uuidIDs{}, fakeHasher{}, tenantapp.NewTrialExpiredUseCase(tenants, clock)),
-		IssueVoucher:           billingapp.NewIssueUseCase(vouchers, tenants, scope, audit, clock, uuidIDs{}),
+		IssueVoucher:           billingapp.NewIssueUseCase(vouchers, clients, tenants, scope, audit, clock, uuidIDs{}),
 		VoidVoucher:            billingapp.NewVoidUseCase(vouchers, scope, audit, clock),
 		GetVoucher:             billingapp.NewGetUseCase(vouchers, scope),
 		ListVouchers:           billingapp.NewListUseCase(vouchers, scope),

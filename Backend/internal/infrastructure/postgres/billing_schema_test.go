@@ -58,15 +58,30 @@ func TestBillingSchema(t *testing.T) {
 	}
 
 	insert := func(ctx context.Context, tenantID string, number int, patientID, buyerName *string, concept string) error {
-		return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
-			_, err := app.Exec(ctx, `
-				INSERT INTO vouchers (
-					id, tenant_id, number, patient_id, concept, amount_minor, currency,
-					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
-				) VALUES ($1, $2, $3, $4, $5, 150000, 'ARS', 'Consultorio Test', $6, CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END, $7, now(), now(), now())`,
-				uuid.NewString(), tenantID, number, patientID, concept, buyerName, users[tenantID])
-			return err
-		})
+		insertAs := func(ctx context.Context, tenantID string, number int, patientID, clientID, buyerName *string, concept string) error {
+			return withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+				_, err := app.Exec(ctx, `
+					INSERT INTO vouchers (
+						id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
+						practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
+					) VALUES ($1, $2, $3, $4, $5, $6, 150000, 'ARS', 'Consultorio Test', $7, CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END, $8, now(), now(), now())`,
+					uuid.NewString(), tenantID, number, patientID, clientID, concept, buyerName, users[tenantID])
+				return err
+			})
+		}
+		// The client is the one the patient pays through: the helper stamps it the way the
+		// application does, so only the-rule-under-test (client or buyer) stays absent.
+		clientFor := func(patientID *string) *string {
+			if patientID == nil || *patientID == "" {
+				return nil
+			}
+			var clientID *string
+			_ = withTenantSetting(ctx, app, tenantID, func(ctx context.Context) error {
+				return app.QueryRow(ctx, `SELECT client_id::text FROM patients WHERE id = $1`, *patientID).Scan(&clientID)
+			})
+			return clientID
+		}
+		return insertAs(ctx, tenantID, number, patientID, clientFor(patientID), buyerName, concept)
 	}
 
 	// void moves an issued voucher to voided and reports how many rows the viewer could touch.
@@ -143,8 +158,76 @@ func TestBillingSchema(t *testing.T) {
 	})
 
 	t.Run("a voucher cannot point at a patient of another practice", func(t *testing.T) {
-		err := insert(ctx, scratchTenantA, 13, ptr(patients[scratchTenantB]), ptr("Ajena"), "Sesión")
+		// The payer of the voucher is a client of this practice, so the patient is what
+		// the referral fails on.
+		localClient := ptr("")
+		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			return app.QueryRow(ctx, `SELECT client_id::text FROM patients WHERE id = $1`, patients[scratchTenantA]).Scan(localClient)
+		}); err != nil {
+			t.Fatalf("setup: client of the local patient: %v", err)
+		}
+		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO vouchers (
+					id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
+					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, 13, $3, $4, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ajena', 'private', $5, now(), now(), now())`,
+				uuid.NewString(), scratchTenantA, patients[scratchTenantB], localClient, users[scratchTenantA])
+			return err
+		})
 		expectCode(t, err, "23503", "foreign patient")
+	})
+
+	t.Run("client_id is present exactly when patient_id is", func(t *testing.T) {
+		clientPtr := ptr("")
+		if err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			return app.QueryRow(ctx, `SELECT client_id::text FROM patients WHERE id = $1`, patients[scratchTenantA]).Scan(clientPtr)
+		}); err != nil {
+			t.Fatalf("setup: client of the local patient: %v", err)
+		}
+		client := *clientPtr
+
+		// A patient without a payer is refused: the mirror of the buyer rule.
+		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO vouchers (
+					id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
+					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, 41, $3, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', 'private', $4, now(), now(), now())`,
+				uuid.NewString(), scratchTenantA, patients[scratchTenantA], users[scratchTenantA])
+			return err
+		})
+		expectCode(t, err, "23514", "patient voucher without a client")
+
+		// A loose charge with a payer is refused: a charge with nobody attending it.
+		err = withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO vouchers (
+					id, tenant_id, number, client_id, concept, amount_minor, currency,
+					practice_name, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, 42, $3, 'Cargo suelto', 150000, 'ARS', 'Consultorio Test', $4, now(), now(), now())`,
+				uuid.NewString(), scratchTenantA, client, users[scratchTenantA])
+			return err
+		})
+		expectCode(t, err, "23514", "loose charge with a client")
+
+		// The link goes to a client of the same practice: a foreign one is refused.
+		foreignClient := ptr("")
+		if err := withTenantSetting(ctx, app, scratchTenantB, func(ctx context.Context) error {
+			return app.QueryRow(ctx, `SELECT client_id::text FROM patients WHERE id = $1`, patients[scratchTenantB]).Scan(foreignClient)
+		}); err != nil {
+			t.Fatalf("setup: client of the other practice's patient: %v", err)
+		}
+		err = withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `
+				INSERT INTO vouchers (
+					id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
+					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
+				) VALUES ($1, $2, 43, $3, $4, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', 'private', $5, now(), now(), now())`,
+				uuid.NewString(), scratchTenantA, patients[scratchTenantA], foreignClient, users[scratchTenantA])
+			return err
+		})
+		expectCode(t, err, "23503", "foreign client")
 	})
 
 	t.Run("an issued voucher cannot change", func(t *testing.T) {
@@ -153,6 +236,19 @@ func TestBillingSchema(t *testing.T) {
 			return err
 		})
 		expectCode(t, err, "23001", "amount change on an issued voucher")
+
+		// The client link is part of what was issued (T73): re-pointing it is frozen too.
+		foreignClient := ptr("")
+		if err := withTenantSetting(ctx, app, scratchTenantB, func(ctx context.Context) error {
+			return app.QueryRow(ctx, `SELECT client_id::text FROM patients WHERE id = $1`, patients[scratchTenantB]).Scan(foreignClient)
+		}); err != nil {
+			t.Fatalf("setup: client of the other practice's patient: %v", err)
+		}
+		err = withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
+			_, err := app.Exec(ctx, `UPDATE vouchers SET client_id = $2 WHERE tenant_id = $1 AND number = 1`, scratchTenantA, foreignClient)
+			return err
+		})
+		expectCode(t, err, "23001", "client change on an issued voucher")
 	})
 
 	t.Run("a void needs a reason and is final", func(t *testing.T) {
@@ -231,11 +327,11 @@ func TestBillingSchema(t *testing.T) {
 			return withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 				_, err := app.Exec(ctx, `
 					INSERT INTO vouchers (
-						id, tenant_id, number, patient_id, appointment_id, concept, amount_minor, currency,
+						id, tenant_id, number, patient_id, client_id, appointment_id, concept, amount_minor, currency,
 						practice_name, buyer_name, coverage_kind, modality, professional_user_id, professional_name,
 						issued_by, issued_at, created_at, updated_at
 					) VALUES (
-						$1, $2, $3, $4, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6,
+						$1, $2, $3, $4, (SELECT client_id::text FROM patients WHERE id = $4::text)::uuid, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6,
 						CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END,
 						'presencial', $8, 'Demo Profesional',
 						$7, now(), now(), now())`,
@@ -248,6 +344,7 @@ func TestBillingSchema(t *testing.T) {
 		expectCode(t, insertFor(30, nil, ptr(appointment)), "23514", "appointment without a patient")
 
 		// The appointment of another patient of the same practice: the composite key refuses it.
+		// insertFor stamps its own patient's payer, so the appointment's patient is what fires.
 		expectCode(t, insertFor(31, ptr(otherPatient), ptr(appointment)), "23503", "appointment of another patient")
 
 		// The appointment of its own patient is accepted.
@@ -274,7 +371,7 @@ func TestBillingSchema(t *testing.T) {
 				INSERT INTO vouchers (
 					id, tenant_id, number, patient_id, concept, amount_minor, currency,
 					practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
-				) VALUES ($1, $2, 40, $3, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', $4, now(), now(), now())`,
+				) VALUES ($1, $2, 40, $3, (SELECT client_id FROM patients WHERE id = $3), 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', $4, now(), now(), now())`,
 				uuid.NewString(), scratchTenantA, patients[scratchTenantA], users[scratchTenantA])
 			return err
 		})

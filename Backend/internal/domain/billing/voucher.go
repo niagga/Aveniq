@@ -23,13 +23,17 @@ const (
 // rather than an edit.
 //
 // The buyer and the practice name are a snapshot taken at issue. A later edit to
-// the patient must not rewrite what was issued — Void does not touch them.
+// the patient, the appointment or the client must not rewrite what was issued — Void
+// does not touch them.
 type Voucher struct {
 	ID       VoucherID
 	TenantID tenant.ID
 	Number   int
 
-	PatientID     string
+	PatientID string
+	// ClientID is the payer the buyer was stamped from (S26, T73). It is present exactly
+	// when PatientID is: a loose charge has neither.
+	ClientID      string
 	AppointmentID string
 
 	Concept     string
@@ -60,7 +64,10 @@ type Voucher struct {
 // IssueDraft is what a caller may write. The number is not here: the repository
 // assigns it inside the issuing transaction so a rolled-back issue leaves no gap.
 type IssueDraft struct {
-	PatientID     string
+	PatientID string
+	// ClientID is the payer of the patient (S26): stamped by the application from the client,
+	// never carried by the request. It is present exactly when PatientID is.
+	ClientID      string
 	AppointmentID string
 
 	Concept     string
@@ -119,6 +126,15 @@ func NewIssued(id VoucherID, tenantID tenant.ID, issuedBy string, draft IssueDra
 	if appointmentID != "" && patientID == "" {
 		return Voucher{}, &ValidationError{Field: "appointment_id", Message: "needs a patient: an appointment belongs to one patient"}
 	}
+	clientID := strings.TrimSpace(draft.ClientID)
+	// The payer belongs to the patient it pays for (S26, T73): exactly when the patient is
+	// there, the client is too. The schema mirrors this with two CHECKs in 0027.
+	if patientID != "" && clientID == "" {
+		return Voucher{}, &ValidationError{Field: "client_id", Message: "a voucher for a patient must name its client"}
+	}
+	if clientID != "" && patientID == "" {
+		return Voucher{}, &ValidationError{Field: "client_id", Message: "a loose charge carries no client"}
+	}
 	buyerName := sanitize(draft.BuyerName)
 	buyerTaxID := sanitize(draft.BuyerTaxID)
 	buyerFiscal := sanitize(draft.BuyerFiscalCondition)
@@ -141,6 +157,7 @@ func NewIssued(id VoucherID, tenantID tenant.ID, issuedBy string, draft IssueDra
 		ID:                   id,
 		TenantID:             tenantID,
 		PatientID:            patientID,
+		ClientID:             clientID,
 		AppointmentID:        appointmentID,
 		Concept:              concept,
 		AmountMinor:          draft.AmountMinor,
@@ -205,7 +222,7 @@ func Reconstitute(
 	id VoucherID,
 	tenantID tenant.ID,
 	number int,
-	patientID, appointmentID string,
+	patientID, clientID, appointmentID string,
 	concept string,
 	amountMinor int64,
 	currency string,
@@ -228,6 +245,7 @@ func Reconstitute(
 		TenantID:             tenantID,
 		Number:               number,
 		PatientID:            patientID,
+		ClientID:             clientID,
 		AppointmentID:        appointmentID,
 		Concept:              concept,
 		AmountMinor:          amountMinor,

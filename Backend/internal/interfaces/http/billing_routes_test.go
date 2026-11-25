@@ -6,12 +6,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
@@ -22,6 +22,8 @@ import (
 // void never gives it back.
 type fakeBillingRepository struct {
 	patients *fakePatientRepository
+	// clients is the payer of each patient: what the receipt stamps (S26, T73).
+	clients  *fakeClientRepository
 	vouchers map[string]map[billing.VoucherID]billing.Voucher
 	counters map[string]int
 	// sessions and professionals are the appointments and active professionals of each
@@ -31,9 +33,10 @@ type fakeBillingRepository struct {
 	insurerNames  map[string]string
 }
 
-func newFakeBillingRepository(patients *fakePatientRepository) *fakeBillingRepository {
+func newFakeBillingRepository(patients *fakePatientRepository, clients *fakeClientRepository) *fakeBillingRepository {
 	return &fakeBillingRepository{
 		patients:      patients,
+		clients:       clients,
 		vouchers:      map[string]map[billing.VoucherID]billing.Voucher{},
 		counters:      map[string]int{},
 		sessions:      map[string]map[string]billing.Appointment{},
@@ -84,11 +87,12 @@ func (r *fakeBillingRepository) Appointment(ctx context.Context, appointmentID s
 
 // PatientAppointments answers the newest sessions first, the way the adapter orders them.
 // UnbilledSessions mirrors the query: attended sessions inside the window that no issued
-// voucher bills, oldest first. The fake holds no patient names, so the row carries the id only.
+// voucher bills, oldest first, narrowed to a payer when one is asked, each row naming the
+// payer of its patient. The fake holds no patient names beyond the repository, so a name
+// missing there stays empty.
 func (r *fakeBillingRepository) UnbilledSessions(
 	ctx context.Context,
-	from, to time.Time,
-	limit int32,
+	filter port.UnbilledFilter,
 ) ([]billing.UnbilledSession, error) {
 	tenantID, ok := scopedTenant(ctx)
 	if !ok {
@@ -100,15 +104,22 @@ func (r *fakeBillingRepository) UnbilledSessions(
 		if session.Status != "attended" {
 			continue
 		}
-		if session.StartsAt.Before(from) || !session.StartsAt.Before(to) {
+		if session.StartsAt.Before(filter.From) || !session.StartsAt.Before(filter.To) {
 			continue
 		}
 		if r.billedBy(tenantID, session.ID) != "" {
 			continue
 		}
+		clientID, clientName := r.payerOf(ctx, session.PatientID)
+		if filter.ClientID != "" && clientID != filter.ClientID {
+			continue
+		}
 		matches = append(matches, billing.UnbilledSession{
 			ID:               session.ID,
 			PatientID:        session.PatientID,
+			PatientName:      patientNameOf(r, ctx, session.PatientID),
+			ClientID:         clientID,
+			ClientName:       clientName,
 			ProfessionalID:   session.ProfessionalID,
 			ProfessionalName: session.ProfessionalName,
 			Modality:         session.Modality,
@@ -118,10 +129,32 @@ func (r *fakeBillingRepository) UnbilledSessions(
 	}
 
 	sort.Slice(matches, func(i, j int) bool { return matches[i].StartsAt.Before(matches[j].StartsAt) })
-	if int32(len(matches)) > limit {
-		matches = matches[:limit]
+	if int32(len(matches)) > filter.Limit {
+		matches = matches[:filter.Limit]
 	}
 	return matches, nil
+}
+
+// payerOf resolves the payer of a patient: its client's id and display name.
+func (r *fakeBillingRepository) payerOf(ctx context.Context, patientID string) (string, string) {
+	subject, err := r.patients.ByID(ctx, patient.ID(patientID))
+	if err != nil || subject.ClientID == "" {
+		return "", ""
+	}
+	payer, err := r.clients.ByID(ctx, client.ID(subject.ClientID))
+	if err != nil {
+		return subject.ClientID, ""
+	}
+	return subject.ClientID, payer.DisplayName
+}
+
+// patientNameOf reads the patient's name from the patient double.
+func patientNameOf(r *fakeBillingRepository, ctx context.Context, patientID string) string {
+	subject, err := r.patients.ByID(ctx, patient.ID(patientID))
+	if err != nil {
+		return ""
+	}
+	return subject.FullName
 }
 
 func (r *fakeBillingRepository) PatientAppointments(ctx context.Context, patientID string, limit int32) ([]billing.Appointment, error) {
@@ -271,10 +304,12 @@ func (r *fakeBillingRepository) SearchSubjects(ctx context.Context, fragment str
 	return matches, nil
 }
 
-// subjectOf is the projection the billing port promises: identity and fiscal data only.
+// subjectOf is the projection the billing port promises: identity, the payer's id and the
+// fiscal mirror the patient row keeps.
 func subjectOf(subject patient.Patient) billing.Subject {
 	out := billing.Subject{
 		PatientID:       string(subject.ID),
+		ClientID:        subject.ClientID,
 		FullName:        subject.FullName,
 		FiscalCondition: subject.FiscalCondition,
 		BillingCurrency: string(subject.BillingCurrency),
@@ -365,9 +400,14 @@ func TestOnlyTheAccountantAndTheOwnerIssueAndVoid(t *testing.T) {
 	}
 }
 
-// TestTheBuyerAndThePracticeComeFromTheServer pins the snapshot: the buyer is the
-// patient's record and the practice name is the tenant's. A request that names another
-// buyer is answered with the patient's, because the field is not part of the contract.
+// TestTheBuyerAndThePracticeComeFromTheServer pins the snapshot: the buyer is the client
+// that pays for the patient (S26, T73) and the practice name is the tenant's. A request
+// that names another buyer is refused, because the field is not part of the contract.
+//
+// Issuing for a patient that has no client cannot happen through this layer: the schema of
+// 0026 makes patients.client_id mandatory, so every patient of the practice has a payer.
+// The domain still refuses a payerless draft (TestNewIssuedValidation, "patient without
+// buyer"), which is the only answer such state could produce.
 func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 	h := newHarness(t)
 	tenantA := h.tenantID(t, "practica-a")
@@ -379,6 +419,7 @@ func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 		"documentKind":   "dni",
 		"documentNumber": "30111222",
 		"client": map[string]any{
+			"displayName":     "Estudio Pérez S.A.",
 			"billingCurrency": "ARS",
 			"taxIdKind":       "cuit",
 			"taxIdNumber":     "20-12345678-6",
@@ -389,6 +430,7 @@ func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 		t.Fatalf("create patient = %d, want 201: %v", status, created)
 	}
 	patientID, _ := created["id"].(string)
+	clientID, _ := created["clientId"].(string)
 
 	// The contract has no field for the buyer or the practice: naming one is refused.
 	if status, body := issueVoucher(t, h, accountant, map[string]any{
@@ -411,17 +453,130 @@ func TestTheBuyerAndThePracticeComeFromTheServer(t *testing.T) {
 	if status != http.StatusCreated {
 		t.Fatalf("issue for a patient = %d, want 201: %v", status, body)
 	}
-	if body["buyerName"] != "Ana Pérez" {
-		t.Errorf("buyerName = %v, want the patient's name: the request cannot name the buyer", body["buyerName"])
+	voucherID, _ := body["id"].(string)
+
+	// The client's name is not the patient's, and its paper is a CUIT while the patient
+	// only carries a DNI: this buyer line can only come from the client.
+	if body["buyerName"] != "Estudio Pérez S.A." {
+		t.Errorf("buyerName = %v, want the client's name: the request cannot name the buyer", body["buyerName"])
 	}
 	if body["buyerTaxId"] != "20-12345678-6" {
-		t.Errorf("buyerTaxId = %v, want the patient's tax id", body["buyerTaxId"])
+		t.Errorf("buyerTaxId = %v, want the client's tax id", body["buyerTaxId"])
 	}
 	if body["buyerFiscalCondition"] != "monotributo" {
-		t.Errorf("buyerFiscalCondition = %v, want the patient's", body["buyerFiscalCondition"])
+		t.Errorf("buyerFiscalCondition = %v, want the client's", body["buyerFiscalCondition"])
 	}
 	if body["practiceName"] != "practica-a" {
 		t.Errorf("practiceName = %v, want the tenant's name: the letterhead is not typed", body["practiceName"])
+	}
+
+	// The snapshot of a voucher survives an edit of its client: the issued one keeps the
+	// buyer it was printed with, and only a voucher issued later stamps the new name.
+	if status, _ := h.do(t, http.MethodPatch, "/api/v1/clients/"+clientID, owner, map[string]any{
+		"displayName":     "Estudio Renombrado S.A.",
+		"country":         "AR",
+		"taxIdKind":       "cuit",
+		"taxIdNumber":     "20-12345678-6",
+		"fiscalCondition": "monotributo",
+		"billingCurrency": "ARS",
+	}); status != http.StatusOK {
+		t.Fatalf("edit the client = %d, want 200", status)
+	}
+
+	status, first := h.do(t, http.MethodGet, "/api/v1/billing/vouchers/"+voucherID, accountant, nil)
+	if status != http.StatusOK {
+		t.Fatalf("read the old voucher = %d, want 200: %v", status, first)
+	}
+	if first["buyerName"] != "Estudio Pérez S.A." {
+		t.Errorf("buyerName after the edit = %v, want the snapshot taken at issue", first["buyerName"])
+	}
+
+	status, second := issueVoucher(t, h, accountant, map[string]any{
+		"patientId":   patientID,
+		"concept":     "Sesión individual",
+		"amountMinor": 200000,
+		"currency":    "ARS",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("issue after the edit = %d, want 201: %v", status, second)
+	}
+	if second["buyerName"] != "Estudio Renombrado S.A." {
+		t.Errorf("buyerName of the new voucher = %v, want the client's name at issue", second["buyerName"])
+	}
+}
+
+// TestTheCurrencyIsTheClientsBillingCurrency: a voucher for a patient is issued in the
+// payer's currency, not the patient row's. The patient's row still mirrors the payer's
+// data as it was when the patient was created (T72), so this test edits the client to a
+// different currency and pins the difference: the old mirror would accept the old currency,
+// the client rule refuses it.
+func TestTheCurrencyIsTheClientsBillingCurrency(t *testing.T) {
+	h := newHarness(t)
+	tenantA := h.tenantID(t, "practica-a")
+	owner := h.token(t, tenantA, iam.RoleOwner)
+	accountant := h.token(t, tenantA, iam.RoleAccountant)
+
+	status, created := h.do(t, http.MethodPost, "/api/v1/patients", owner, newPatientCreateBody(map[string]any{
+		"fullName":       "Tina Euro",
+		"documentKind":   "dni",
+		"documentNumber": "30555666",
+	}))
+	if status != http.StatusCreated {
+		t.Fatalf("create patient = %d, want 201: %v", status, created)
+	}
+	patientID, _ := created["id"].(string)
+	clientID, _ := created["clientId"].(string)
+
+	status, read := h.do(t, http.MethodGet, "/api/v1/patients/"+patientID, owner, nil)
+	if status != http.StatusOK {
+		t.Fatalf("read the patient = %d, want 200: %v", status, read)
+	}
+	if read["clientId"] != clientID {
+		t.Fatalf("clientId = %v, want %s", read["clientId"], clientID)
+	}
+
+	if status, issued := issueVoucher(t, h, accountant, map[string]any{
+		"patientId":   patientID,
+		"concept":     "Sesión individual",
+		"amountMinor": 200000,
+		"currency":    "ARS",
+	}); status != http.StatusCreated {
+		t.Fatalf("issue in the client's currency = %d, want 201: the client is still ARS: %v", status, issued)
+	}
+
+	if status, _ := h.do(t, http.MethodPatch, "/api/v1/clients/"+clientID, owner, map[string]any{
+		"displayName":     "Paga en euros S.A.",
+		"country":         "AR",
+		"billingCurrency": "EUR",
+	}); status != http.StatusOK {
+		t.Fatalf("edit the client to EUR = %d, want 200", status)
+	}
+
+	// The client now bills in EUR: the ARS the patient's mirror still shows is refused.
+	status, body := issueVoucher(t, h, accountant, map[string]any{
+		"patientId":   patientID,
+		"concept":     "Sesión individual",
+		"amountMinor": 200000,
+		"currency":    "ARS",
+	})
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("issue in the old mirror's currency = %d, want 422: %v", status, body)
+	}
+
+	status, issued := issueVoucher(t, h, accountant, map[string]any{
+		"patientId":   patientID,
+		"concept":     "Sesión individual",
+		"amountMinor": 200000,
+		"currency":    "EUR",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("issue in the payer's currency = %d, want 201: %v", status, issued)
+	}
+	if issued["currency"] != "EUR" {
+		t.Errorf("currency = %v, want EUR", issued["currency"])
+	}
+	if issued["buyerName"] != "Paga en euros S.A." {
+		t.Errorf("buyerName = %v, want the client's edited name", issued["buyerName"])
 	}
 }
 

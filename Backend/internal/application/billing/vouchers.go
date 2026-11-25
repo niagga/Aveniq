@@ -2,17 +2,21 @@ package billingapp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 )
 
-// IssueInput asks to issue one voucher. There is no buyer, no practice name and no photo on
-// the way in: the server takes the buyer and the practice name from the patient and the
-// tenant, and the photo from the patient, the session and the professional.
+// IssueInput asks to issue one voucher. There is no buyer, no client and no practice name on
+// the way in: the server takes the buyer from the client that pays for the patient (S26, T73),
+// the practice name from the tenant, and the photo from the patient, the session and the
+// professional.
 //
 // A voucher for a session names the session and takes its patient, modality and professional
 // from it; PatientID is then optional and must agree with the session. A loose charge names
@@ -31,6 +35,8 @@ type IssueInput struct {
 // IssueUseCase issues a voucher with the next number of the practice.
 type IssueUseCase struct {
 	billing port.BillingRepository
+	// clients resolves the payer of the patient: the buyer of the voucher (S26, T73).
+	clients port.ClientRepository
 	tenants port.TenantRepository
 	scope   port.TenantScope
 	audit   port.AuditLog
@@ -41,13 +47,14 @@ type IssueUseCase struct {
 // NewIssueUseCase wires the use case.
 func NewIssueUseCase(
 	billing port.BillingRepository,
+	clients port.ClientRepository,
 	tenants port.TenantRepository,
 	scope port.TenantScope,
 	audit port.AuditLog,
 	clock port.Clock,
 	ids port.IDGenerator,
 ) *IssueUseCase {
-	return &IssueUseCase{billing: billing, tenants: tenants, scope: scope, audit: audit, clock: clock, ids: ids}
+	return &IssueUseCase{billing: billing, clients: clients, tenants: tenants, scope: scope, audit: audit, clock: clock, ids: ids}
 }
 
 // Execute issues the voucher. The patient, when there is one, must be visible in the
@@ -98,16 +105,44 @@ func (uc *IssueUseCase) Execute(ctx context.Context, in IssueInput) (VoucherView
 			if err != nil {
 				return err
 			}
-			draft = subject.ApplyBuyer(draft)
+			draft.PatientID = subject.PatientID
+			draft.ClientID = subject.ClientID
+
+			// The buyer is the client that pays for the patient (S26, T73), resolved here and
+			// stamped by the domain: the request never carries buying data.
+			if subject.ClientID != "" {
+				payer, err := uc.clients.ByID(ctx, client.ID(subject.ClientID))
+				if errors.Is(err, client.ErrNotFound) {
+					// The patient's payer is unreachable. The schema of 0026 makes this state
+					// impossible for a real patient, so it answers like an invisible patient.
+					return fmt.Errorf("%w: the client that pays for the patient could not be resolved", billing.ErrPatientNotVisible)
+				}
+				if err != nil {
+					return err
+				}
+
+				buyer := billing.Buyer{
+					ClientID:        subject.ClientID,
+					Name:            payer.DisplayName,
+					BillingCurrency: string(payer.BillingCurrency),
+				}
+				if payer.TaxID != nil {
+					tax := payer.TaxID.Number
+					buyer.TaxID = &tax
+				}
+				buyer.FiscalCondition = payer.FiscalCondition
+				draft = buyer.Stamp(draft)
+
+				// A voucher for a patient is issued in the currency the payer is billed in. The
+				// currency of a loose charge is free; the patient's payer's is not.
+				if strings.ToUpper(strings.TrimSpace(in.Currency)) != buyer.BillingCurrency {
+					return &billing.ValidationError{Field: "currency", Message: "must be the billing currency of the client"}
+				}
+			}
 
 			terms, err := uc.billing.PatientBilling(ctx, patientID)
 			if err != nil {
 				return err
-			}
-			// A patient's vouchers are issued in the currency the patient is billed in. The
-			// currency of a loose charge is free; the patient's is not.
-			if strings.ToUpper(strings.TrimSpace(in.Currency)) != terms.Currency {
-				return &billing.ValidationError{Field: "currency", Message: "must be the billing currency of the patient"}
 			}
 			photo.Coverage = terms.Coverage
 			if terms.Coverage == billing.CoverageInsurer {
