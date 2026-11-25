@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { canReadBilling } from "@/entities/billing/model";
+import { canReadClients } from "@/entities/client/model";
 import {
   canManageAccounts,
   canSeePatients,
@@ -60,6 +61,12 @@ const SECTIONS: readonly Section[] = [
     label: "Pacientes",
     icon: <PatientsIcon />,
     allow: canSeePatients,
+  },
+  {
+    href: "/clientes",
+    label: "Clientes",
+    icon: <ClientsIcon />,
+    allow: canReadClients,
   },
   {
     href: "/facturacion",
@@ -389,6 +396,17 @@ function InsurersIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M8 2.5 13.5 5v3.2c0 2.6-2.2 4.6-5.5 5.3-3.3-.7-5.5-2.7-5.5-5.3V5L8 2.5Z" />
+    </svg>
+  );
+}
+
+function ClientsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="1.8" y="3.5" width="12.4" height="9" rx="1.4" />
+      <circle cx="5.6" cy="7.2" r="1.4" />
+      <path d="M3.4 11.2c.4-1.2 1.2-1.9 2.2-1.9s1.8.7 2.2 1.9" />
+      <path d="M10.2 6.6h2.4M10.2 9.2h2.4" />
     </svg>
   );
 }
