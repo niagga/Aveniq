@@ -187,11 +187,12 @@ func TestBillingSchema(t *testing.T) {
 		}
 		client := *clientPtr
 
-		// A patient without a payer is refused: the mirror of the buyer rule.
+		// A patient without a payer is refused: the mirror of the buyer rule. The column is
+		// left out on purpose, not filled with NULL, so the row states "no client".
 		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `
 				INSERT INTO vouchers (
-					id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
+					id, tenant_id, number, patient_id, concept, amount_minor, currency,
 					practice_name, buyer_name, coverage_kind, issued_by, issued_at, created_at, updated_at
 				) VALUES ($1, $2, 41, $3, 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', 'private', $4, now(), now(), now())`,
 				uuid.NewString(), scratchTenantA, patients[scratchTenantA], users[scratchTenantA])
@@ -331,7 +332,7 @@ func TestBillingSchema(t *testing.T) {
 						practice_name, buyer_name, coverage_kind, modality, professional_user_id, professional_name,
 						issued_by, issued_at, created_at, updated_at
 					) VALUES (
-						$1, $2, $3, $4, (SELECT client_id::text FROM patients WHERE id = $4::text)::uuid, $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6,
+						$1, $2, $3, $4, (SELECT client_id FROM patients WHERE id = $4::uuid), $5, 'Sesión', 150000, 'ARS', 'Consultorio Test', $6,
 						CASE WHEN $4::uuid IS NULL THEN NULL ELSE 'private' END,
 						'presencial', $8, 'Demo Profesional',
 						$7, now(), now(), now())`,
@@ -369,9 +370,9 @@ func TestBillingSchema(t *testing.T) {
 		err := withTenantSetting(ctx, app, scratchTenantA, func(ctx context.Context) error {
 			_, err := app.Exec(ctx, `
 				INSERT INTO vouchers (
-					id, tenant_id, number, patient_id, concept, amount_minor, currency,
+					id, tenant_id, number, patient_id, client_id, concept, amount_minor, currency,
 					practice_name, buyer_name, issued_by, issued_at, created_at, updated_at
-				) VALUES ($1, $2, 40, $3, (SELECT client_id FROM patients WHERE id = $3), 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', $4, now(), now(), now())`,
+				) VALUES ($1, $2, 40, $3, (SELECT client_id FROM patients WHERE id = $3::uuid), 'Sesión', 150000, 'ARS', 'Consultorio Test', 'Ana Pérez', $4, now(), now(), now())`,
 				uuid.NewString(), scratchTenantA, patients[scratchTenantA], users[scratchTenantA])
 			return err
 		})
