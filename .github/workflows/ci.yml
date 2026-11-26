@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The end-to-end job takes minutes and needs the whole stack; a manual trigger lets us
+  # re-run it after an environment fix without inventing a commit.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -106,3 +109,148 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # The suite the frontend job cannot run: Playwright needs the whole stack — a migrated and
+  # seeded database, Redis, the Go API on 8080 and Next on 3000. Before this job the suite only
+  # ran by hand, so nothing told us it had rotted between sessions.
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: aveniq
+          POSTGRES_PASSWORD: aveniq_dev
+          POSTGRES_DB: aveniq
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aveniq -d aveniq"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      APP_ENV: development
+      LOG_LEVEL: info
+      BASE_DOMAIN: localhost
+      HTTP_ADDR: 127.0.0.1:8080
+      # The API runs as the application role, exactly as the RLS design requires: a superuser
+      # would ignore every policy and the isolation tests would prove nothing.
+      DATABASE_URL: postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5432/aveniq?sslmode=disable
+      REDIS_ADDR: 127.0.0.1:6379
+      # Migrations run as the owner, which is what the schema expects.
+      OWNER_DATABASE_URL: postgres://aveniq:aveniq_dev@127.0.0.1:5432/aveniq?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: Backend/go.mod
+          cache-dependency-path: Backend/go.sum
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      # The application role must exist before the migrations run: 0003 grants it the
+      # privileges and assumes it is there.
+      - name: Create the application role
+        run: psql "$OWNER_DATABASE_URL" -v ON_ERROR_STOP=1 -f infra/docker/init/01-app-role.sql
+
+      - name: Migrate
+        run: goose -dir Backend/migrations postgres "$OWNER_DATABASE_URL" up
+
+      # The password protects a database that dies with the job, so it is minted per run
+      # instead of being a secret somebody has to configure (and rotate, and leak).
+      - name: Mint the development password
+        run: echo "AVENIQ_SEED_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+
+      # The same script developers run. It hashes the password with the production parameters
+      # and inserts the practices, users and the standing invitation the suite expects.
+      - name: Seed the practices
+        run: pwsh -NoProfile -File scripts/local-seed.ps1 -HostName 127.0.0.1 -Port 5432
+
+      # The specs talk to demo.localhost, which no resolver knows about on a runner.
+      - name: Resolve the practice host
+        run: echo "127.0.0.1 demo.localhost" | sudo tee -a /etc/hosts
+
+      - name: Start the API
+        working-directory: Backend
+        run: |
+          go build -o /tmp/aveniq-api ./cmd/api
+          nohup /tmp/aveniq-api > /tmp/api.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8080/openapi.json > /dev/null; then
+              echo "API up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The API did not answer:"; cat /tmp/api.log; exit 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: Frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: Frontend/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: Frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the browser
+        working-directory: Frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      # The dev server is what the suite has always run against, so it is what CI runs too:
+      # a production build would be a second, untested variable.
+      - name: Start the web app
+        working-directory: Frontend
+        run: |
+          nohup pnpm dev > /tmp/web.log 2>&1 &
+          for _ in $(seq 1 120); do
+            if curl -sf http://localhost:3000/login > /dev/null; then
+              echo "web up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The web app did not answer:"; cat /tmp/web.log; exit 1
+
+      - name: Run the end-to-end suite
+        working-directory: Frontend
+        env:
+          E2E_PASSWORD: ${{ env.AVENIQ_SEED_PASSWORD }}
+        run: pnpm e2e
+
+      - name: Upload the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: Frontend/test-results
+          retention-days: 7
+
+      - name: Stop the servers
+        if: always()
+        run: |
+          pkill -f /tmp/aveniq-api || true
+          pkill -f "next dev" || true
