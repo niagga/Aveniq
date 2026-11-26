@@ -445,9 +445,17 @@ func TestCreateKeepsTypedDocumentAndStoresCanonicalForm(t *testing.T) {
 	if stored.Document.Normalized != "30111222" {
 		t.Fatalf("stored normalized document = %q, want 30111222", stored.Document.Normalized)
 	}
-	if stored.TaxID.Normalized != "20123456786" {
-		t.Fatalf("stored normalized tax id = %q, want 20123456786", stored.TaxID.Normalized)
+	// The tax id belongs to the billing client (T72); since 0028 the patient row
+	// carries no copy, so the canonical form must be on the payer only.
+	payer, ok := w.clients.stored[client.ID(view.ClientID)]
+	if !ok {
+		t.Fatalf("the client created with the patient was not persisted")
 	}
+	if payer.TaxID == nil || payer.TaxID.Normalized != "20123456786" {
+		t.Fatalf("stored normalized tax id = %v, want 20123456786 on the client", payer.TaxID)
+	}
+	// The patient aggregate has no fiscal fields since 0028: the type system itself
+	// refuses the mirror.
 
 	// The same document without separators is the same canonical number: that is
 	// the whole point of normalizing before storing.

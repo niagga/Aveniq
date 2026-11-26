@@ -80,13 +80,18 @@ func persistPatient(
 	return repo.Create(ctx, subject)
 }
 
+// clientDraftFromPatient builds the payer's draft for the fixture patients. The
+// patient aggregate has brought no fiscal data since 0028 (T85), so the shared
+// fixture fiscal data (the Argentine CUIT, monotributo and the ARS currency) now
+// lives where it belongs: on the billing client.
 func clientDraftFromPatient(subject patient.Patient) client.Draft {
+	cuit := patient.TaxID{Kind: "cuit", Number: "20-12345678-6", Normalized: "20123456786"}
+	monotributo := "monotributo"
 	return client.Draft{
 		DisplayName:     subject.FullName,
 		Country:         subject.Country,
-		TaxID:           subject.TaxID,
-		FiscalCondition: subject.FiscalCondition,
-		FiscalAddress:   subject.FiscalAddress,
-		BillingCurrency: subject.BillingCurrency,
+		TaxID:           &cuit,
+		FiscalCondition: &monotributo,
+		BillingCurrency: patient.CurrencyARS,
 	}
 }

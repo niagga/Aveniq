@@ -18,13 +18,12 @@ INSERT INTO patients (
     id, tenant_id, client_id, country, full_name, birth_date,
     document_type, document_number, document_normalized,
     phone, email, emergency_contact_name, emergency_contact_phone,
-    tax_id, tax_id_kind, fiscal_condition, fiscal_address,
     administrative_notes, is_active, created_at, updated_at, treating_professional_id,
-    coverage_kind, insurer_id, member_number, billing_currency
+    coverage_kind, insurer_id, member_number
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-        $23, $24, $25, $26)
-RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, fiscal_condition, legal_name, fiscal_address, administrative_notes, is_active, created_at, updated_at, country, document_normalized, tax_id, tax_id_kind, treating_professional_id, coverage_kind, insurer_id, member_number, billing_currency, client_id
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+        $19, $20, $21)
+RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, legal_name, administrative_notes, is_active, created_at, updated_at, country, document_normalized, treating_professional_id, coverage_kind, insurer_id, member_number, client_id
 `
 
 type CreatePatientParams struct {
@@ -41,10 +40,6 @@ type CreatePatientParams struct {
 	Email                  *string
 	EmergencyContactName   *string
 	EmergencyContactPhone  *string
-	TaxID                  *string
-	TaxIDKind              *string
-	FiscalCondition        *string
-	FiscalAddress          *string
 	AdministrativeNotes    *string
 	IsActive               bool
 	CreatedAt              time.Time
@@ -53,12 +48,13 @@ type CreatePatientParams struct {
 	CoverageKind           string
 	InsurerID              pgtype.UUID
 	MemberNumber           *string
-	BillingCurrency        string
 }
 
 // Patients. Same rule as the other tenant tables: the tenant comes from
 // app.tenant_id, never from a WHERE clause, and a statement without tenant context
 // sees zero rows and writes none.
+// The fiscal columns are gone since 0028 (T85): they belong to the billing client,
+// and the client row is created before this INSERT fires.
 func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error) {
 	row := q.db.QueryRow(ctx, createPatient,
 		arg.ID,
@@ -74,10 +70,6 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		arg.Email,
 		arg.EmergencyContactName,
 		arg.EmergencyContactPhone,
-		arg.TaxID,
-		arg.TaxIDKind,
-		arg.FiscalCondition,
-		arg.FiscalAddress,
 		arg.AdministrativeNotes,
 		arg.IsActive,
 		arg.CreatedAt,
@@ -86,7 +78,6 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		arg.CoverageKind,
 		arg.InsurerID,
 		arg.MemberNumber,
-		arg.BillingCurrency,
 	)
 	var i Patient
 	err := row.Scan(
@@ -100,22 +91,17 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		&i.Email,
 		&i.EmergencyContactName,
 		&i.EmergencyContactPhone,
-		&i.FiscalCondition,
 		&i.LegalName,
-		&i.FiscalAddress,
 		&i.AdministrativeNotes,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Country,
 		&i.DocumentNormalized,
-		&i.TaxID,
-		&i.TaxIDKind,
 		&i.TreatingProfessionalID,
 		&i.CoverageKind,
 		&i.InsurerID,
 		&i.MemberNumber,
-		&i.BillingCurrency,
 		&i.ClientID,
 	)
 	return i, err
@@ -170,7 +156,7 @@ func (q *Queries) GetFiscalCondition(ctx context.Context, arg GetFiscalCondition
 }
 
 const getPatientByID = `-- name: GetPatientByID :one
-SELECT id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, fiscal_condition, legal_name, fiscal_address, administrative_notes, is_active, created_at, updated_at, country, document_normalized, tax_id, tax_id_kind, treating_professional_id, coverage_kind, insurer_id, member_number, billing_currency, client_id
+SELECT id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, legal_name, administrative_notes, is_active, created_at, updated_at, country, document_normalized, treating_professional_id, coverage_kind, insurer_id, member_number, client_id
 FROM patients
 WHERE id = $1
 `
@@ -189,22 +175,17 @@ func (q *Queries) GetPatientByID(ctx context.Context, id pgtype.UUID) (Patient, 
 		&i.Email,
 		&i.EmergencyContactName,
 		&i.EmergencyContactPhone,
-		&i.FiscalCondition,
 		&i.LegalName,
-		&i.FiscalAddress,
 		&i.AdministrativeNotes,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Country,
 		&i.DocumentNormalized,
-		&i.TaxID,
-		&i.TaxIDKind,
 		&i.TreatingProfessionalID,
 		&i.CoverageKind,
 		&i.InsurerID,
 		&i.MemberNumber,
-		&i.BillingCurrency,
 		&i.ClientID,
 	)
 	return i, err
@@ -251,7 +232,7 @@ func (q *Queries) GetTenantCountry(ctx context.Context, id pgtype.UUID) (string,
 }
 
 const listPatients = `-- name: ListPatients :many
-SELECT id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, fiscal_condition, legal_name, fiscal_address, administrative_notes, is_active, created_at, updated_at, country, document_normalized, tax_id, tax_id_kind, treating_professional_id, coverage_kind, insurer_id, member_number, billing_currency, client_id
+SELECT id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, legal_name, administrative_notes, is_active, created_at, updated_at, country, document_normalized, treating_professional_id, coverage_kind, insurer_id, member_number, client_id
 FROM patients
 WHERE ($1::text = '' OR full_name ILIKE '%' || $1::text || '%' OR document_normalized = upper($1::text))
   AND (NOT $2::boolean OR is_active)
@@ -307,22 +288,17 @@ func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]P
 			&i.Email,
 			&i.EmergencyContactName,
 			&i.EmergencyContactPhone,
-			&i.FiscalCondition,
 			&i.LegalName,
-			&i.FiscalAddress,
 			&i.AdministrativeNotes,
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Country,
 			&i.DocumentNormalized,
-			&i.TaxID,
-			&i.TaxIDKind,
 			&i.TreatingProfessionalID,
 			&i.CoverageKind,
 			&i.InsurerID,
 			&i.MemberNumber,
-			&i.BillingCurrency,
 			&i.ClientID,
 		); err != nil {
 			return nil, err
@@ -340,7 +316,7 @@ UPDATE patients
 SET treating_professional_id = $2,
     updated_at             = $3
 WHERE id = $1
-RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, fiscal_condition, legal_name, fiscal_address, administrative_notes, is_active, created_at, updated_at, country, document_normalized, tax_id, tax_id_kind, treating_professional_id, coverage_kind, insurer_id, member_number, billing_currency, client_id
+RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, legal_name, administrative_notes, is_active, created_at, updated_at, country, document_normalized, treating_professional_id, coverage_kind, insurer_id, member_number, client_id
 `
 
 type SetPatientTreatingProfessionalParams struct {
@@ -365,22 +341,17 @@ func (q *Queries) SetPatientTreatingProfessional(ctx context.Context, arg SetPat
 		&i.Email,
 		&i.EmergencyContactName,
 		&i.EmergencyContactPhone,
-		&i.FiscalCondition,
 		&i.LegalName,
-		&i.FiscalAddress,
 		&i.AdministrativeNotes,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Country,
 		&i.DocumentNormalized,
-		&i.TaxID,
-		&i.TaxIDKind,
 		&i.TreatingProfessionalID,
 		&i.CoverageKind,
 		&i.InsurerID,
 		&i.MemberNumber,
-		&i.BillingCurrency,
 		&i.ClientID,
 	)
 	return i, err
@@ -398,19 +369,14 @@ SET country                = $2,
     email                  = $9,
     emergency_contact_name = $10,
     emergency_contact_phone = $11,
-    tax_id                 = $12,
-    tax_id_kind            = $13,
-    fiscal_condition       = $14,
-    fiscal_address         = $15,
-    administrative_notes   = $16,
-    is_active              = $17,
-    updated_at             = $18,
-    coverage_kind          = $19,
-    insurer_id             = $20,
-    member_number          = $21,
-    billing_currency       = $22
+    administrative_notes   = $12,
+    is_active              = $13,
+    updated_at             = $14,
+    coverage_kind          = $15,
+    insurer_id             = $16,
+    member_number          = $17
 WHERE id = $1
-RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, fiscal_condition, legal_name, fiscal_address, administrative_notes, is_active, created_at, updated_at, country, document_normalized, tax_id, tax_id_kind, treating_professional_id, coverage_kind, insurer_id, member_number, billing_currency, client_id
+RETURNING id, tenant_id, full_name, birth_date, document_type, document_number, phone, email, emergency_contact_name, emergency_contact_phone, legal_name, administrative_notes, is_active, created_at, updated_at, country, document_normalized, treating_professional_id, coverage_kind, insurer_id, member_number, client_id
 `
 
 type UpdatePatientParams struct {
@@ -425,19 +391,16 @@ type UpdatePatientParams struct {
 	Email                 *string
 	EmergencyContactName  *string
 	EmergencyContactPhone *string
-	TaxID                 *string
-	TaxIDKind             *string
-	FiscalCondition       *string
-	FiscalAddress         *string
 	AdministrativeNotes   *string
 	IsActive              bool
 	UpdatedAt             time.Time
 	CoverageKind          string
 	InsurerID             pgtype.UUID
 	MemberNumber          *string
-	BillingCurrency       string
 }
 
+// Nothing fiscal is here since 0028 (T85): the client owns that data (T72), and no
+// edit of a patient ever wrote to the mirror again.
 func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error) {
 	row := q.db.QueryRow(ctx, updatePatient,
 		arg.ID,
@@ -451,17 +414,12 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		arg.Email,
 		arg.EmergencyContactName,
 		arg.EmergencyContactPhone,
-		arg.TaxID,
-		arg.TaxIDKind,
-		arg.FiscalCondition,
-		arg.FiscalAddress,
 		arg.AdministrativeNotes,
 		arg.IsActive,
 		arg.UpdatedAt,
 		arg.CoverageKind,
 		arg.InsurerID,
 		arg.MemberNumber,
-		arg.BillingCurrency,
 	)
 	var i Patient
 	err := row.Scan(
@@ -475,22 +433,17 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		&i.Email,
 		&i.EmergencyContactName,
 		&i.EmergencyContactPhone,
-		&i.FiscalCondition,
 		&i.LegalName,
-		&i.FiscalAddress,
 		&i.AdministrativeNotes,
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Country,
 		&i.DocumentNormalized,
-		&i.TaxID,
-		&i.TaxIDKind,
 		&i.TreatingProfessionalID,
 		&i.CoverageKind,
 		&i.InsurerID,
 		&i.MemberNumber,
-		&i.BillingCurrency,
 		&i.ClientID,
 	)
 	return i, err

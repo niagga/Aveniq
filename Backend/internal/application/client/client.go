@@ -144,18 +144,6 @@ func draftFrom(ctx context.Context, catalog port.DocumentCatalog, tenantID strin
 	return draft, nil
 }
 
-// SelfDraftFromPatient builds the default payer profile for a newly registered patient.
-func SelfDraftFromPatient(draft patient.Draft, displayName string) client.Draft {
-	return client.Draft{
-		DisplayName:     displayName,
-		Country:         draft.Country,
-		TaxID:           draft.TaxID,
-		FiscalCondition: draft.FiscalCondition,
-		FiscalAddress:   draft.FiscalAddress,
-		BillingCurrency: draft.BillingCurrency,
-	}
-}
-
 type ListInput struct {
 	TenantID   string
 	ActiveOnly bool

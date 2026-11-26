@@ -144,17 +144,12 @@ func (r *PatientRepository) Update(ctx context.Context, subject patient.Patient)
 		Email:                 subject.Email,
 		EmergencyContactName:  subject.EmergencyContactName,
 		EmergencyContactPhone: subject.EmergencyContactPhone,
-		TaxID:                 taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Number }),
-		TaxIDKind:             taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Kind }),
-		FiscalCondition:       subject.FiscalCondition,
-		FiscalAddress:         subject.FiscalAddress,
 		AdministrativeNotes:   subject.AdministrativeNotes,
 		IsActive:              subject.IsActive,
 		UpdatedAt:             subject.UpdatedAt,
 		CoverageKind:          string(subject.CoverageKind),
 		InsurerID:             optionalUUID(subject.InsurerID),
 		MemberNumber:          subject.MemberNumber,
-		BillingCurrency:       string(subject.BillingCurrency),
 	})
 	if err != nil {
 		return translatePatientError(err)
@@ -208,10 +203,6 @@ func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, 
 		Email:                  subject.Email,
 		EmergencyContactName:   subject.EmergencyContactName,
 		EmergencyContactPhone:  subject.EmergencyContactPhone,
-		TaxID:                  taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Number }),
-		TaxIDKind:              taxIDField(subject.TaxID, func(t *patient.TaxID) string { return t.Kind }),
-		FiscalCondition:        subject.FiscalCondition,
-		FiscalAddress:          subject.FiscalAddress,
 		AdministrativeNotes:    subject.AdministrativeNotes,
 		IsActive:               subject.IsActive,
 		CreatedAt:              subject.CreatedAt,
@@ -220,7 +211,6 @@ func createPatientParams(subject patient.Patient) (sqlcgen.CreatePatientParams, 
 		CoverageKind:           string(subject.CoverageKind),
 		InsurerID:              optionalUUID(subject.InsurerID),
 		MemberNumber:           subject.MemberNumber,
-		BillingCurrency:        string(subject.BillingCurrency),
 	}, nil
 }
 
@@ -238,15 +228,11 @@ func patientToDomain(row sqlcgen.Patient) (patient.Patient, error) {
 		Email:                  row.Email,
 		EmergencyContactName:   row.EmergencyContactName,
 		EmergencyContactPhone:  row.EmergencyContactPhone,
-		TaxID:                  taxIDFromRow(row),
-		FiscalCondition:        row.FiscalCondition,
-		FiscalAddress:          row.FiscalAddress,
-		AdministrativeNotes:    row.AdministrativeNotes,
+		AdministrativeNotes:    row.AdministrativeNotes, // fiscal data lives on the client row since 0028 (T85)
 		TreatingProfessionalID: uuidString(row.TreatingProfessionalID),
 		CoverageKind:           patient.Coverage(row.CoverageKind),
 		InsurerID:              uuidString(row.InsurerID),
 		MemberNumber:           row.MemberNumber,
-		BillingCurrency:        patient.Currency(row.BillingCurrency),
 		IsActive:               row.IsActive,
 		CreatedAt:              row.CreatedAt,
 		UpdatedAt:              row.UpdatedAt,
@@ -271,18 +257,6 @@ func documentFromRow(row sqlcgen.Patient) *patient.Document {
 	}
 }
 
-// taxIDFromRow rebuilds the fiscal identifier only when both halves are present.
-func taxIDFromRow(row sqlcgen.Patient) *patient.TaxID {
-	if row.TaxID == nil || row.TaxIDKind == nil {
-		return nil
-	}
-	return &patient.TaxID{
-		Kind:       *row.TaxIDKind,
-		Number:     *row.TaxID,
-		Normalized: *row.TaxID,
-	}
-}
-
 // documentField reads one column of an optional document.
 func documentField(document *patient.Document, pick func(*patient.Document) string) *string {
 	if document == nil {
@@ -292,7 +266,8 @@ func documentField(document *patient.Document, pick func(*patient.Document) stri
 	return &value
 }
 
-// taxIDField reads one column of an optional fiscal identifier.
+// taxIDField reads one column of an optional fiscal identifier. Kept for the billing
+// client adapter: the patient row has carried no tax id since 0028 (T85).
 func taxIDField(taxID *patient.TaxID, pick func(*patient.TaxID) string) *string {
 	if taxID == nil {
 		return nil

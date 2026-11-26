@@ -95,8 +95,6 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (PatientVi
 			}
 		}
 
-		applyBillingFromClient(&draft, payer)
-
 		subject, err := patient.New(patient.ID(uc.ids.NewID()), tenant.ID(in.TenantID), draft, uc.clock.Now())
 		if err != nil {
 			return err

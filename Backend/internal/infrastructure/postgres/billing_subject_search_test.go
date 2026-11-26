@@ -48,8 +48,9 @@ func TestBillingSubjectSearch(t *testing.T) {
 		}
 	}
 
-	// Saved with separators, which is how people type them. newPatient gives every
-	// patient the CUIT 20-12345678-6; the document is what tells them apart.
+	// Saved with separators, which is how people type them. The payer fixture
+	// (clientDraftFromPatient) gives every client the CUIT 20-12345678-6; the
+	// document is what tells the patients apart.
 	ana := newPatient(t, catalog, scratchTenantA, "Ana Pérez", "30.111.222")
 	create(scratchTenantA, ana)
 	bruno := newPatient(t, catalog, scratchTenantA, "Bruno Díaz", "31.222.333")

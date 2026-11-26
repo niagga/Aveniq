@@ -42,8 +42,6 @@ func TestPatientsCountryModel(t *testing.T) {
 		documentType *string
 		document     *string
 		normalized   *string
-		taxKind      *string
-		fiscalCond   *string
 	}
 
 	insert := func(ctx context.Context, tenantID string, row patient) error {
@@ -61,19 +59,19 @@ func TestPatientsCountryModel(t *testing.T) {
 				_, err = app.Exec(ctx, `
 					INSERT INTO patients (
 						id, tenant_id, client_id, full_name, country, document_type, document_number,
-						document_normalized, tax_id_kind, fiscal_condition, billing_currency, created_at, updated_at
-					) VALUES ($1, $2, $3, 'Paciente de prueba', $4, $5, $6, $7, $8, $9, 'ARS', now(), now())`,
+						document_normalized, created_at, updated_at
+					) VALUES ($1, $2, $3, 'Paciente de prueba', $4, $5, $6, $7, now(), now())`,
 					patientID, tenantID, clientID, row.country, row.documentType, row.document,
-					row.normalized, row.taxKind, row.fiscalCond)
+					row.normalized)
 				return err
 			}
 			_, err := app.Exec(ctx, `
 				INSERT INTO patients (
 					id, tenant_id, full_name, country, document_type, document_number,
-					document_normalized, tax_id_kind, fiscal_condition, billing_currency, created_at, updated_at
-				) VALUES ($1, $2, 'Paciente de prueba', $3, $4, $5, $6, $7, $8, 'ARS', now(), now())`,
+					document_normalized, created_at, updated_at
+				) VALUES ($1, $2, 'Paciente de prueba', $3, $4, $5, $6, now(), now())`,
 				patientID, tenantID, row.country, row.documentType, row.document,
-				row.normalized, row.taxKind, row.fiscalCond)
+				row.normalized)
 			return err
 		})
 	}
@@ -123,16 +121,6 @@ func TestPatientsCountryModel(t *testing.T) {
 	t.Run("a document without its country is refused", func(t *testing.T) {
 		half := patient{documentType: text("dni"), document: text("30111222"), normalized: text("30111222")}
 		expectCode(t, insert(ctx, scratchTenantB, half), "23502", "document without country")
-	})
-
-	t.Run("fiscal condition belongs to the country too", func(t *testing.T) {
-		inArgentina := patient{country: text("AR"), fiscalCond: text("monotributo")}
-		if err := insert(ctx, scratchTenantA, inArgentina); err != nil {
-			t.Fatalf("monotributo is a valid AR condition: %v", err)
-		}
-
-		inPortugal := patient{country: text("PT"), fiscalCond: text("monotributo")}
-		expectCode(t, insert(ctx, scratchTenantB, inPortugal), "23503", "monotributo under PT")
 	})
 
 	t.Run("the unique index compares the normalized document", func(t *testing.T) {

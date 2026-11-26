@@ -295,13 +295,13 @@ func TestBillingSchema(t *testing.T) {
 					return err
 				}
 				_, err = app.Exec(ctx, `
-					INSERT INTO patients (id, tenant_id, client_id, country, full_name, billing_currency, created_at, updated_at)
-					VALUES ($1, $2, $3, 'AR', 'Otra paciente', 'ARS', now(), now())`, otherPatient, scratchTenantA, clientID)
+					INSERT INTO patients (id, tenant_id, client_id, country, full_name, created_at, updated_at)
+					VALUES ($1, $2, $3, 'AR', 'Otra paciente', now(), now())`, otherPatient, scratchTenantA, clientID)
 				return err
 			}
 			_, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, country, full_name, billing_currency, created_at, updated_at)
-				VALUES ($1, $2, 'AR', 'Otra paciente', 'ARS', now(), now())`, otherPatient, scratchTenantA)
+				INSERT INTO patients (id, tenant_id, country, full_name, created_at, updated_at)
+				VALUES ($1, $2, 'AR', 'Otra paciente', now(), now())`, otherPatient, scratchTenantA)
 			return err
 		}); err != nil {
 			t.Fatalf("setup: second patient: %v", err)

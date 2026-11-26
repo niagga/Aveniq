@@ -62,8 +62,12 @@ func (r *fakeBillingRepository) PatientBilling(ctx context.Context, patientID st
 	}
 	terms := billing.PatientBilling{
 		Coverage: billing.Coverage(subject.CoverageKind),
-		Currency: string(subject.BillingCurrency),
 		Active:   subject.IsActive,
+	}
+	// Since T81 the proposed currency is read from the client row, never from a
+	// copy on the patient double.
+	if payer, err := r.clients.ByID(ctx, client.ID(subject.ClientID)); err == nil {
+		terms.Currency = string(payer.BillingCurrency)
 	}
 	if subject.InsurerID != nil {
 		terms.InsurerID = *subject.InsurerID
@@ -278,7 +282,7 @@ func (r *fakeBillingRepository) Subject(ctx context.Context, patientID string) (
 	if err != nil {
 		return billing.Subject{}, billing.ErrPatientNotVisible
 	}
-	return subjectOf(subject), nil
+	return r.subjectOf(ctx, subject), nil
 }
 
 // SearchSubjects matches the fragment literally, against the active patients only.
@@ -295,7 +299,7 @@ func (r *fakeBillingRepository) SearchSubjects(ctx context.Context, fragment str
 		if !strings.Contains(strings.ToLower(subject.FullName), strings.ToLower(fragment)) {
 			continue
 		}
-		matches = append(matches, subjectOf(subject))
+		matches = append(matches, r.subjectOf(ctx, subject))
 	}
 	sort.Slice(matches, func(i, j int) bool { return matches[i].FullName < matches[j].FullName })
 	if int32(len(matches)) > limit {
@@ -304,23 +308,26 @@ func (r *fakeBillingRepository) SearchSubjects(ctx context.Context, fragment str
 	return matches, nil
 }
 
-// subjectOf is the projection the billing port promises: identity, the payer's id and the
-// fiscal mirror the patient row keeps.
-func subjectOf(subject patient.Patient) billing.Subject {
+// subjectOf is the projection the billing port promises: identity from the patient row,
+// the payer's id and the fiscal data from the billing client — the mirror on the patient
+// row was dropped by 0028 (T85).
+func (r *fakeBillingRepository) subjectOf(ctx context.Context, subject patient.Patient) billing.Subject {
 	out := billing.Subject{
-		PatientID:       string(subject.ID),
-		ClientID:        subject.ClientID,
-		FullName:        subject.FullName,
-		FiscalCondition: subject.FiscalCondition,
-		BillingCurrency: string(subject.BillingCurrency),
+		PatientID: string(subject.ID),
+		ClientID:  subject.ClientID,
+		FullName:  subject.FullName,
+	}
+	if payer, err := r.clients.ByID(ctx, client.ID(subject.ClientID)); err == nil {
+		out.FiscalCondition = payer.FiscalCondition
+		out.BillingCurrency = string(payer.BillingCurrency)
+		if payer.TaxID != nil {
+			number := payer.TaxID.Number
+			out.TaxID = &number
+		}
 	}
 	if subject.Document != nil {
 		number := subject.Document.Number
 		out.DocumentNumber = &number
-	}
-	if subject.TaxID != nil {
-		number := subject.TaxID.Number
-		out.TaxID = &number
 	}
 	return out
 }

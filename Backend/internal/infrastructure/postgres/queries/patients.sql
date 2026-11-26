@@ -3,16 +3,17 @@
 -- sees zero rows and writes none.
 
 -- name: CreatePatient :one
+-- The fiscal columns are gone since 0028 (T85): they belong to the billing client,
+-- and the client row is created before this INSERT fires.
 INSERT INTO patients (
     id, tenant_id, client_id, country, full_name, birth_date,
     document_type, document_number, document_normalized,
     phone, email, emergency_contact_name, emergency_contact_phone,
-    tax_id, tax_id_kind, fiscal_condition, fiscal_address,
     administrative_notes, is_active, created_at, updated_at, treating_professional_id,
-    coverage_kind, insurer_id, member_number, billing_currency
+    coverage_kind, insurer_id, member_number
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-        $23, $24, $25, $26)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+        $19, $20, $21)
 RETURNING *;
 
 -- name: GetPatientByID :one
@@ -21,6 +22,8 @@ FROM patients
 WHERE id = $1;
 
 -- name: UpdatePatient :one
+-- Nothing fiscal is here since 0028 (T85): the client owns that data (T72), and no
+-- edit of a patient ever wrote to the mirror again.
 UPDATE patients
 SET country                = $2,
     full_name              = $3,
@@ -32,17 +35,12 @@ SET country                = $2,
     email                  = $9,
     emergency_contact_name = $10,
     emergency_contact_phone = $11,
-    tax_id                 = $12,
-    tax_id_kind            = $13,
-    fiscal_condition       = $14,
-    fiscal_address         = $15,
-    administrative_notes   = $16,
-    is_active              = $17,
-    updated_at             = $18,
-    coverage_kind          = $19,
-    insurer_id             = $20,
-    member_number          = $21,
-    billing_currency       = $22
+    administrative_notes   = $12,
+    is_active              = $13,
+    updated_at             = $14,
+    coverage_kind          = $15,
+    insurer_id             = $16,
+    member_number          = $17
 WHERE id = $1
 RETURNING *;
 

@@ -21,8 +21,9 @@ type Patient struct {
 	ID       ID
 	TenantID tenant.ID
 
-	// ClientID is who pays for this patient (S26). The HTTP contract exposes fiscal data on
-	// the client; this row still mirrors billing currency for tariffs until billing reads the client (T73).
+	// ClientID is who pays for this patient (S26). The fiscal data and the billing
+	// currency live on the client row; the mirror that used to copy them here was
+	// dropped by 0028 (T85), so nothing of it remains in the aggregate.
 	ClientID string
 
 	// Country is the one the document and the fiscal data are validated against.
@@ -43,11 +44,6 @@ type Patient struct {
 	EmergencyContactName  *string
 	EmergencyContactPhone *string
 
-	// Fiscal data, optional as a group: not every patient is invoiced.
-	TaxID           *TaxID
-	FiscalCondition *string
-	FiscalAddress   *string
-
 	AdministrativeNotes *string
 
 	// TreatingProfessionalID is the professional who treats the patient (the tratante).
@@ -61,10 +57,6 @@ type Patient struct {
 	CoverageKind Coverage
 	InsurerID    *string
 	MemberNumber *string
-
-	// BillingCurrency is chosen by hand at registration. Nothing derives it from the
-	// country, so an Argentine patient can be billed in dollars.
-	BillingCurrency Currency
 
 	// IsActive is the deactivation flag. Patients are never deleted: clinical
 	// notes will reference this row.
@@ -91,15 +83,11 @@ type Draft struct {
 	Email                 *string
 	EmergencyContactName  *string
 	EmergencyContactPhone *string
-	TaxID                 *TaxID
-	FiscalCondition       *string
-	FiscalAddress         *string
 	AdministrativeNotes   *string
 
-	CoverageKind    Coverage
-	InsurerID       *string
-	MemberNumber    *string
-	BillingCurrency Currency
+	CoverageKind Coverage
+	InsurerID    *string
+	MemberNumber *string
 }
 
 // New builds a patient and validates every invariant the schema also enforces, so
@@ -144,18 +132,13 @@ type Stored struct {
 	EmergencyContactName  *string
 	EmergencyContactPhone *string
 
-	TaxID           *TaxID
-	FiscalCondition *string
-	FiscalAddress   *string
-
 	AdministrativeNotes *string
 
 	TreatingProfessionalID *string
 
-	CoverageKind    Coverage
-	InsurerID       *string
-	MemberNumber    *string
-	BillingCurrency Currency
+	CoverageKind Coverage
+	InsurerID    *string
+	MemberNumber *string
 
 	IsActive  bool
 	CreatedAt time.Time
@@ -185,15 +168,11 @@ func Reconstitute(stored Stored) (Patient, error) {
 		Email:                  stored.Email,
 		EmergencyContactName:   stored.EmergencyContactName,
 		EmergencyContactPhone:  stored.EmergencyContactPhone,
-		TaxID:                  stored.TaxID,
-		FiscalCondition:        stored.FiscalCondition,
-		FiscalAddress:          stored.FiscalAddress,
 		AdministrativeNotes:    stored.AdministrativeNotes,
 		TreatingProfessionalID: stored.TreatingProfessionalID,
 		CoverageKind:           stored.CoverageKind,
 		InsurerID:              stored.InsurerID,
 		MemberNumber:           stored.MemberNumber,
-		BillingCurrency:        stored.BillingCurrency,
 		IsActive:               stored.IsActive,
 		CreatedAt:              stored.CreatedAt.UTC(),
 		UpdatedAt:              stored.UpdatedAt.UTC(),
@@ -229,12 +208,6 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		}
 	}
 
-	if draft.TaxID != nil {
-		if draft.TaxID.Kind == "" || draft.TaxID.Normalized == "" {
-			return Patient{}, &ValidationError{Field: "tax_id", Message: "must be normalized before it reaches the aggregate"}
-		}
-	}
-
 	// A birth date is a date of birth, not a date of appointment: today describes a person zero
 	// days old, which this practice does not register. The bound is the start of today in UTC,
 	// which is how a date-only value arrives from the API. The screen applies the same rule, so
@@ -244,9 +217,6 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		return Patient{}, &ValidationError{Field: "birth_date", Message: "must be before today"}
 	}
 
-	if !ValidCurrency(draft.BillingCurrency) {
-		return Patient{}, &ValidationError{Field: "billing_currency", Message: "must be ARS, EUR or USD"}
-	}
 	coverage, insurerID, memberNumber, err := coverageFromDraft(draft)
 	if err != nil {
 		return Patient{}, err
@@ -263,14 +233,10 @@ func fromDraft(id ID, tenantID tenant.ID, draft Draft, now time.Time) (Patient, 
 		Email:                 sanitizeEmail(draft.Email),
 		EmergencyContactName:  sanitize(draft.EmergencyContactName),
 		EmergencyContactPhone: sanitize(draft.EmergencyContactPhone),
-		TaxID:                 draft.TaxID,
-		FiscalCondition:       sanitize(draft.FiscalCondition),
-		FiscalAddress:         sanitize(draft.FiscalAddress),
 		AdministrativeNotes:   sanitize(draft.AdministrativeNotes),
 		CoverageKind:          coverage,
 		InsurerID:             insurerID,
 		MemberNumber:          memberNumber,
-		BillingCurrency:       draft.BillingCurrency,
 	}, nil
 }
 
@@ -309,7 +275,6 @@ func (p Patient) ChangeProfile(draft Draft, now time.Time) (Patient, error) {
 		return Patient{}, fmt.Errorf("%w: an inactive patient must be reactivated before editing", ErrInvalidTransition)
 	}
 
-	draft.BillingCurrency = p.BillingCurrency
 	updated, err := fromDraft(p.ID, p.TenantID, draft, now)
 	if err != nil {
 		return Patient{}, err
@@ -320,10 +285,6 @@ func (p Patient) ChangeProfile(draft Draft, now time.Time) (Patient, error) {
 	updated.UpdatedAt = stored(now)
 	updated.ClientID = p.ClientID
 	updated.TreatingProfessionalID = p.TreatingProfessionalID
-	updated.TaxID = p.TaxID
-	updated.FiscalCondition = p.FiscalCondition
-	updated.FiscalAddress = p.FiscalAddress
-	updated.BillingCurrency = p.BillingCurrency
 	return updated, nil
 }
 

@@ -49,14 +49,14 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 					return err
 				}
 				_, err = app.Exec(ctx, `
-					INSERT INTO patients (id, tenant_id, client_id, full_name, country, billing_currency, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, 'AR', 'ARS', now(), now())`,
+					INSERT INTO patients (id, tenant_id, client_id, full_name, country, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, 'AR', now(), now())`,
 					patientID, tenantID, clientID, fullName)
 				return err
 			}
 			_, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, full_name, country, billing_currency, created_at, updated_at)
-				VALUES ($1, $2, $3, 'AR', 'ARS', now(), now())`,
+				INSERT INTO patients (id, tenant_id, full_name, country, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', now(), now())`,
 				patientID, tenantID, fullName)
 			return err
 		})
@@ -117,14 +117,14 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 			patientID := uuid.NewString()
 			if hasClientID {
 				_, err := app.Exec(ctx, `
-					INSERT INTO patients (id, tenant_id, client_id, full_name, country, billing_currency, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, 'AR', 'ARS', now(), now())`,
+					INSERT INTO patients (id, tenant_id, client_id, full_name, country, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, 'AR', now(), now())`,
 					patientID, scratchTenantB, clientB, "Intruso")
 				return err
 			}
 			_, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, full_name, country, billing_currency, created_at, updated_at)
-				VALUES ($1, $2, $3, 'AR', 'ARS', now(), now())`,
+				INSERT INTO patients (id, tenant_id, full_name, country, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', now(), now())`,
 				patientID, scratchTenantB, "Intruso")
 			return err
 		})
@@ -151,14 +151,14 @@ func TestPatientsSchemaPrivileges(t *testing.T) {
 						return err
 					}
 					_, err = app.Exec(ctx, `
-						INSERT INTO patients (id, tenant_id, client_id, full_name, country, document_type, document_number, document_normalized, billing_currency, created_at, updated_at)
-						VALUES ($1, $2, $3, $4, 'AR', 'dni', $5, $6, 'ARS', now(), now())`,
+						INSERT INTO patients (id, tenant_id, client_id, full_name, country, document_type, document_number, document_normalized, created_at, updated_at)
+						VALUES ($1, $2, $3, $4, 'AR', 'dni', $5, $6, now(), now())`,
 						patientID, tenantID, clientID, "Persona Compartida", typed, normalized)
 					return err
 				}
 				_, err := app.Exec(ctx, `
-					INSERT INTO patients (id, tenant_id, full_name, country, document_type, document_number, document_normalized, billing_currency, created_at, updated_at)
-					VALUES ($1, $2, $3, 'AR', 'dni', $4, $5, 'ARS', now(), now())`,
+					INSERT INTO patients (id, tenant_id, full_name, country, document_type, document_number, document_normalized, created_at, updated_at)
+					VALUES ($1, $2, $3, 'AR', 'dni', $4, $5, now(), now())`,
 					patientID, tenantID, "Persona Compartida", typed, normalized)
 				return err
 			})

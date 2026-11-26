@@ -157,22 +157,17 @@ type Patient struct {
 	Email                  *string
 	EmergencyContactName   *string
 	EmergencyContactPhone  *string
-	FiscalCondition        *string
 	LegalName              *string
-	FiscalAddress          *string
 	AdministrativeNotes    *string
 	IsActive               bool
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 	Country                string
 	DocumentNormalized     *string
-	TaxID                  *string
-	TaxIDKind              *string
 	TreatingProfessionalID pgtype.UUID
 	CoverageKind           string
 	InsurerID              pgtype.UUID
 	MemberNumber           *string
-	BillingCurrency        string
 	ClientID               pgtype.UUID
 }
 
