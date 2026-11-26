@@ -18,7 +18,17 @@ param(
     # Keep the practice slug stable so re-runs find it.
     [string]$Slug = 'demo',
     [string]$Name = 'Consultorio Demo',
-    [string]$Email = 'demo@aveniq.local'
+    [string]$Email = 'demo@aveniq.local',
+
+    # Where to seed. The defaults are the local Docker stack; CI passes its own service, which
+    # listens on the standard port and offers no .local directory at all.
+    [string]$HostName = '127.0.0.1',
+    [string]$Port = '5433',
+    [string]$Database = 'aveniq',
+    [string]$DbUser = 'aveniq',
+    [string]$DbPass = 'aveniq_dev',
+    # An explicit client path; empty means "the bundled one, else the one on the PATH".
+    [string]$Psql = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,26 +52,41 @@ if ([string]::IsNullOrEmpty($Password)) {
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $LocalDir = Join-Path $RepoRoot '.local'
-$PgBin = Join-Path $LocalDir 'pgsql\bin'
-$Psql = Join-Path $PgBin 'psql.exe'
 
-$PgPort = 5433
-$DbName = 'aveniq'
-$DbUser = 'aveniq'
-$DbPass = 'aveniq_dev'
+# The client, in order of preference: the path given, the binary bootstrap downloads for
+# Windows, whatever psql the PATH offers. CI runs the last case: a Linux runner with the
+# PostgreSQL client preinstalled and no .local directory.
+$PsqlClient = $Psql
+if ([string]::IsNullOrEmpty($PsqlClient)) {
+    $bundled = Join-Path (Join-Path $LocalDir 'pgsql\bin') 'psql.exe'
+    if (Test-Path $bundled) {
+        $PsqlClient = $bundled
+    } else {
+        $found = Get-Command psql -ErrorAction SilentlyContinue
+        if ($found) { $PsqlClient = $found.Source }
+    }
+}
+if ([string]::IsNullOrEmpty($PsqlClient) -or -not (Test-Path $PsqlClient)) {
+    throw 'psql not found. On Windows run scripts/bootstrap.ps1; elsewhere install the PostgreSQL client or pass -Psql <path>.'
+}
 
-# TEMP must stay inside the repository: a non-ASCII user profile breaks the client
-# DLL initialisation on this machine (see local-up.ps1).
-$TmpDir = Join-Path $LocalDir 'tmp'
-New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
-$env:TEMP = $TmpDir
-$env:TMP = $TmpDir
+$PgPort = $Port
+$DbName = $Database
+
+# TEMP must stay inside the repository on Windows: a non-ASCII user profile breaks the client
+# DLL initialisation (see local-up.ps1). Linux has no such DLL, and nothing to redirect.
+if (-not $IsLinux -and -not $IsMacOS) {
+    $TmpDir = Join-Path $LocalDir 'tmp'
+    New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
+    $env:TEMP = $TmpDir
+    $env:TMP = $TmpDir
+}
 
 function Write-Step($Message) { Write-Host "  $Message" -ForegroundColor Cyan }
 function Write-Ok($Message) { Write-Host "  $Message" -ForegroundColor Green }
 
-if (-not (Test-Path $Psql)) {
-    throw "psql not found at $Psql. Run scripts/bootstrap.ps1 first."
+if (-not (Test-Path $PsqlClient)) {
+    throw "psql not found at $PsqlClient."
 }
 
 $env:PGPASSWORD = $DbPass
@@ -183,7 +208,7 @@ ON CONFLICT ON CONSTRAINT users_tenant_email_unique DO UPDATE
 SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role_code = EXCLUDED.role_code, is_active = true, updated_at = now();
 "@
 
-$output = & $Psql "postgres://${DbUser}:${DbPass}@127.0.0.1:${PgPort}/${DbName}?sslmode=disable" -v ON_ERROR_STOP=1 -q -c $sql 2>&1
+$output = & $PsqlClient "postgres://${DbUser}:${DbPass}@${HostName}:${PgPort}/${DbName}?sslmode=disable" -v ON_ERROR_STOP=1 -q -c $sql 2>&1
 if ($LASTEXITCODE -ne 0) {
     throw "Seeding failed. Is the local stack up? Run scripts/local-up.ps1.`n$output"
 }
