@@ -383,7 +383,7 @@ export interface paths {
         };
         /**
          * List the sessions no voucher bills
-         * @description Attended sessions of the practice inside the window that no issued voucher bills, oldest first: the worklist of the billing screen.
+         * @description Attended sessions of the practice inside the window that no issued voucher bills, oldest first; each row names the client that would pay. Filters by date window and client.
          */
         get: operations["list-unbilled-sessions"];
         put?: never;
@@ -409,7 +409,7 @@ export interface paths {
         put?: never;
         /**
          * Issue an internal voucher
-         * @description Takes the next number of the practice. The buyer is the patient's snapshot and the practice name is the tenant's; the request cannot set either. Recorded in the audit trail.
+         * @description Takes the next number of the practice. The buyer is stamped from the client that pays for the patient (S26) and the practice name is the tenant's; the request cannot set either. Recorded in the audit trail.
          */
         post: operations["issue-voucher"];
         delete?: never;
@@ -1669,7 +1669,7 @@ export interface components {
              */
             appointmentId?: string;
             concept: string;
-            /** @description ISO 4217 code, for example ARS. For a patient it must be the patient's billing currency. */
+            /** @description ISO 4217 code, for example ARS. For a patient it must be the billing currency of the client that pays. */
             currency: string;
             /**
              * Format: uuid
@@ -2649,6 +2649,12 @@ export interface components {
             professionalId: string;
         };
         UnbilledSessionBody: {
+            /**
+             * Format: uuid
+             * @description The client that pays for the patient; the buyer of a voucher issued today.
+             */
+            clientId: string;
+            clientName: string;
             /** Format: uuid */
             id: string;
             /** @enum {string} */
@@ -2742,7 +2748,7 @@ export interface components {
             /** Format: uuid */
             appointmentId?: string;
             buyerFiscalCondition?: string;
-            /** @description Snapshot of the patient at issue. */
+            /** @description Snapshot of the client that pays, taken at issue. Vouchers issued before clients existed (T71) keep the snapshot taken then. */
             buyerName?: string;
             buyerTaxId?: string;
             concept: string;
@@ -3484,6 +3490,8 @@ export interface operations {
                 from?: string;
                 /** @description End of the window, exclusive. Required. */
                 to?: string;
+                /** @description Only the sessions whose patients pay through this client. */
+                clientId?: string;
                 /** @description Page size. */
                 limit?: number;
             };
