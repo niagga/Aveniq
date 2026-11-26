@@ -63,12 +63,6 @@ const SECTIONS: readonly Section[] = [
     allow: canSeePatients,
   },
   {
-    href: "/clientes",
-    label: "Clientes",
-    icon: <ClientsIcon />,
-    allow: canReadClients,
-  },
-  {
     href: "/facturacion",
     label: "Facturación",
     icon: <BillingIcon />,
@@ -97,6 +91,14 @@ const SECTIONS: readonly Section[] = [
     label: "Mutuales",
     icon: <InsurersIcon />,
     allow: canManageInsurers,
+  },
+  {
+    // The catalogs sit together, and both stay behind "Más" on a phone: the four slots of the
+    // bottom bar belong to the screens a practice uses every day (T77).
+    href: "/clientes",
+    label: "Clientes",
+    icon: <ClientsIcon />,
+    allow: canReadClients,
   },
   {
     href: "/usuarios",
