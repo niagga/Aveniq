@@ -54,39 +54,48 @@ ORDER BY issued_at DESC, number DESC
 LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: GetBillingSubject :one
--- The billing identity of one patient, with the client that pays for it (T73): the
--- client is who a receipt issued today would bill. Only the fields billing answers
--- with: the clinical record and the contact details are not selected.
-SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency, client_id
+-- The billing key of one patient: the patient and the client that pays for it (S26).
+-- The buyer of a receipt is stamped from that client (T73), so no fiscal field is
+-- selected here: anything else billing answers with about the payer comes from the
+-- client itself, which is the only row that stays current.
+SELECT id, client_id
 FROM patients
 WHERE id = $1;
 
 -- name: SearchBillingSubjects :many
--- Active patients whose name contains the pattern, or whose document or tax id contains
--- the identifier. The caller wraps the name fragment in % and escapes the LIKE wildcards;
--- the identifier is already letters and digits in upper case (billing.IdentifierFragment)
--- and is NULL when the fragment is too short to search identifiers by. Documents and tax
--- ids are compared with their separators stripped, so "30111222" finds "30.111.222" and
--- "20123456786" finds "20-12345678-6". The page is bounded here.
-SELECT id, full_name, document_number, tax_id, fiscal_condition, billing_currency
-FROM patients
-WHERE is_active
-  AND (full_name ILIKE sqlc.arg('pattern')
+-- Active patients whose name contains the pattern, or whose document or the client's
+-- tax id contains the identifier. The caller wraps the name fragment in % and escapes
+-- the LIKE wildcards; the identifier is already letters and digits in upper case
+-- (billing.IdentifierFragment) and is NULL when the fragment is too short to search
+-- identifiers by. Documents are compared with their separators stripped, so "30111222"
+-- finds "30.111.222", and so is tax id, which is read from the client (S26): searching
+-- finds the payer's live data, not the frozen copy the patient was born with.
+-- The page is bounded here.
+SELECT p.id, p.full_name, p.document_number, c.tax_id, c.fiscal_condition, c.billing_currency
+FROM patients p
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
+WHERE p.is_active
+  AND (p.full_name ILIKE sqlc.arg('pattern')
        OR (sqlc.narg('identifier')::text IS NOT NULL
-           AND (strpos(regexp_replace(upper(document_normalized), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0
-                OR strpos(regexp_replace(upper(tax_id), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0)))
-ORDER BY full_name, id
+           AND (strpos(regexp_replace(upper(p.document_normalized), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0
+                OR strpos(regexp_replace(upper(c.tax_id), '[^0-9A-Z]', '', 'g'), sqlc.narg('identifier')::text) > 0)))
+ORDER BY p.full_name, p.id
 LIMIT sqlc.arg('lim');
 
 -- name: GetPatientBilling :one
 -- How a patient is billed. The insurer name is read here, not from a second call, so the
--- photo of a voucher is taken from one consistent read.
+-- photo of a voucher is taken from one consistent read. The currency is read from the
+-- client (S26): what the practice bills in today, not what it billed the day the patient
+-- was created.
 SELECT p.coverage_kind,
        p.insurer_id,
        i.name AS insurer_name,
-       p.billing_currency,
+       c.billing_currency,
        p.is_active
 FROM patients p
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
 LEFT JOIN insurers i
   ON i.tenant_id = p.tenant_id AND i.id = p.insurer_id
 WHERE p.id = $1;

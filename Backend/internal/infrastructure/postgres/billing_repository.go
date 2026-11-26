@@ -537,9 +537,11 @@ func sessionOf(
 	}
 }
 
-// Subject returns the billing identity of a patient of this practice, or
-// billing.ErrPatientNotVisible: a patient of another practice is indistinguishable from
-// one that does not exist.
+// Subject returns the billing key of a patient of this practice — the patient and the
+// client that pays for it — or billing.ErrPatientNotVisible: a patient of another
+// practice is indistinguishable from one that does not exist. The buyer is stamped
+// from that client (T73); the fiscal data and the currency the search answers with
+// come from the client elsewhere, so this read selects none of them.
 func (r *BillingRepository) Subject(ctx context.Context, patientID string) (billing.Subject, error) {
 	queries, err := r.scoped(ctx)
 	if err != nil {
@@ -557,13 +559,8 @@ func (r *BillingRepository) Subject(ctx context.Context, patientID string) (bill
 		return billing.Subject{}, translateBillingError(err)
 	}
 	return billing.Subject{
-		PatientID:       row.ID.String(),
-		ClientID:        uuidText(row.ClientID),
-		FullName:        row.FullName,
-		DocumentNumber:  row.DocumentNumber,
-		TaxID:           row.TaxID,
-		FiscalCondition: row.FiscalCondition,
-		BillingCurrency: row.BillingCurrency,
+		PatientID: row.ID.String(),
+		ClientID:  uuidText(row.ClientID),
 	}, nil
 }
 
