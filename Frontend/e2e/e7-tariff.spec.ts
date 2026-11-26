@@ -65,7 +65,8 @@ test("a second value for the same professional, coverage, modality, currency and
   await page.getByLabel("Valor de la sesión").fill("20000,00");
   await page.getByRole("button", { name: "Cargar valor" }).click();
 
-  await expect(page.getByRole("alert")).toBeVisible({ timeout: 10_000 });
+  // Scoped to the form so Next's route announcer (also role=alert) cannot win strict mode.
+  await expect(page.locator("form").getByRole("alert")).toBeVisible({ timeout: 10_000 });
 });
 
 test("the owner edits the amounts of a price, and nothing else", async ({ page }) => {

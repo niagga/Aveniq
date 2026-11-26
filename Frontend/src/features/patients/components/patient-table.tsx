@@ -85,8 +85,13 @@ export function PatientTable({
                 )}
               </td>
               {/* Since T72 the patient no longer carries the billing currency: it belongs to the
-                  client that pays, so the roster names that client instead of guessing. */}
-              <td className="px-4 py-3 text-ink-muted">{patient.clientDisplayName || "—"}</td>
+                  client that pays. When that client is the patient themselves the name is already
+                  in the first column, so the cell says who pays instead of repeating it. */}
+              <td className="px-4 py-3 text-ink-muted">
+                {patient.clientDisplayName === patient.fullName
+                  ? "Propio"
+                  : patient.clientDisplayName || "—"}
+              </td>
               <td className="px-4 py-3">
                 <Badge tone={patient.isActive ? "success" : "neutral"}>
                   {patient.isActive ? "Activo" : "Inactivo"}

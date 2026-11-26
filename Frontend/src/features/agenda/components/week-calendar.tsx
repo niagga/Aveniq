@@ -128,6 +128,13 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
     () => patients.filter((patient) => canBookWith(role, patient, bookingProfessional)),
     [patients, role, bookingProfessional],
   );
+  // The search answers with patients that are not in the week's page of the roster (T80),
+  // so the same rule has to be applied to what it returns: a patient a role cannot book
+  // must not become selectable because it was searched for.
+  const canBook = useCallback(
+    (patient: Patient) => canBookWith(role, patient, bookingProfessional),
+    [role, bookingProfessional],
+  );
   const bookingNotice =
     role === "professional" && bookable.length === 0
       ? "No tenés pacientes a tu cargo para agendar. Un paciente queda a tu cargo cuando lo registrás vos o el titular te lo asigna."
@@ -254,11 +261,21 @@ export function WeekCalendar({ timeZone }: { timeZone: string }) {
         open={bookingOpen}
         professionalId={bookingProfessional}
         patients={bookable}
+        canBook={canBook}
         notice={bookingNotice}
         zone={zone}
         initialStartsAt={bookingStartsAt}
         onClose={() => setBookingOpen(false)}
-        onCreated={() => void load()}
+        onCreated={(created) => {
+          // The booked patient may come from the picker's search (T80) and so be outside
+          // the roster page the screen loaded: without it here the slot renders with the
+          // fallback name and nothing on the week would name it. It was booked by this
+          // role, so it satisfies the same bookability rule.
+          if (created) {
+            setPatients((current) => (current.some((p) => p.id === created.id) ? current : [...current, created]));
+          }
+          void load();
+        }}
       />
 
       <AppointmentDetailModal

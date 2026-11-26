@@ -33,10 +33,11 @@ test("the owner edits a professional role in a popup", async ({ page }) => {
   const row = page.getByRole("row").filter({ hasText: DEMO.email }).first();
   await expect(row).toBeVisible();
 
+  // Scoped by the account the seed makes professional, not by the role cell: the edit changes
+  // that cell, and the restore below must find the same row again.
   const other = page
     .getByRole("row")
-    .filter({ has: page.getByRole("cell", { name: "Profesional" }) })
-    .filter({ hasNotText: DEMO.email })
+    .filter({ hasText: "profesional2@aveniq.local" })
     .first();
 
   const hasOther = await other.isVisible().catch(() => false);
@@ -46,8 +47,23 @@ test("the owner edits a professional role in a popup", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: "Editar cuenta" });
   await expect(dialog).toBeVisible();
 
-  await dialog.getByLabel("Rol").selectOption("assistant");
-  await dialog.getByRole("button", { name: "Guardar cambios" }).click();
-  await expect(dialog).toBeHidden({ timeout: 15_000 });
-  await expect(other.getByRole("cell", { name: "Recepción" })).toBeVisible();
+  try {
+    await dialog.getByLabel("Rol").selectOption("assistant");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(other.getByRole("cell", { name: "Recepción" })).toBeVisible();
+  } finally {
+    // The seed keeps this account a professional. An assistant sees the whole roster, so a
+    // role left changed would make the isolation tests of the next run fail on the role this
+    // test flipped — leaks between files have to stay impossible, not merely unlikely.
+    if (!(await dialog.isVisible().catch(() => false))) {
+      await other.getByRole("button", { name: "Editar" }).click();
+      await expect(dialog).toBeVisible();
+      await dialog.getByLabel("Rol").selectOption("professional");
+      await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+      await expect(dialog).toBeHidden({ timeout: 15_000 });
+      // Exact: "Profesional" is a substring of the account's name cell, too.
+      await expect(other.getByRole("cell", { name: "Profesional", exact: true })).toBeVisible();
+    }
+  }
 });

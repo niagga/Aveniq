@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
-import { ACCOUNTS, signInAs } from "./helpers";
+import { ACCOUNTS, openBookingPopup, searchRoster as searchLoadedRoster, signInAs } from "./helpers";
 
 /**
  * Instance-level isolation (T38) through the product screens, with one browser context
@@ -43,24 +43,17 @@ test.afterAll(async () => {
   await Promise.all([professionalContext?.close(), otherContext?.close(), assistantContext?.close()]);
 });
 
+/** Opens the roster, so a negative check runs on an already loaded list. */
 async function openRoster(page: Page) {
   await page.goto("/patients");
   await expect(page.getByRole("heading", { name: "Pacientes" })).toBeVisible({ timeout: 15_000 });
 }
 
-/** Searches the roster and waits for the answer to that exact search, so a negative check runs on a loaded list. */
+/** Navigates to the roster and searches it, waiting for the answer to that exact search. */
 async function searchRoster(page: Page, text: string) {
   await openRoster(page);
-  const answered = page.waitForResponse(
-    (response) =>
-      response.url().includes("/api/v1/patients?") &&
-      new URL(response.url()).searchParams.get("search") === text,
-  );
-  await page.getByLabel("Buscar").fill(text);
-  await page.getByRole("button", { name: "Buscar", exact: true }).click();
-  await answered;
+  await searchLoadedRoster(page, text);
 }
-
 async function registerPatient(page: Page, fullName: string) {
   await openRoster(page);
   await page.getByRole("button", { name: "Nuevo paciente" }).click();
@@ -68,6 +61,9 @@ async function registerPatient(page: Page, fullName: string) {
   await page.getByLabel("Fecha de nacimiento").fill("1990-05-12");
   await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
+  // The roster shows one page of 50 in name order and the development database keeps
+  // accumulating runs, so the new patient is found by the roster's search (as e4/e5/e6).
+  await searchLoadedRoster(page, fullName);
   await expect(page.getByRole("cell", { name: fullName })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -117,10 +113,24 @@ test("a granted professional reads the record, cannot write or book it, and lose
   await expect(other.getByRole("button", { name: "Guardar ficha" })).toHaveCount(0);
   await expect(other.getByRole("button", { name: "Registrar evolución" })).toHaveCount(0);
 
-  // It cannot book the patient: the agenda offers only its own patients.
+  // It cannot book the patient: the agenda offers only its own patients. The select lives
+  // in the booking popup since T68, and the search answers with patients the practice
+  // has (not only the ones the role books), so the check runs on the searched popup (T80):
+  // the rule the screen applies to the search results must be the same one it applies to
+  // the page it loads.
   await other.goto("/agenda");
   await expect(other.getByRole("heading", { name: "Agenda" })).toBeVisible({ timeout: 15_000 });
-  const patientOptions = other.getByLabel("Paciente").locator("option");
+  const booking = await openBookingPopup(other);
+  const searchBox = booking.getByLabel("Buscar paciente");
+  const answered = other.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/patients?") &&
+      response.status() === 200 &&
+      new URL(response.url()).searchParams.get("search") === fragment,
+  );
+  await searchBox.fill(fragment);
+  await answered;
+  const patientOptions = booking.getByRole("combobox", { name: "Paciente" }).locator("option");
   await expect(patientOptions.filter({ hasText: ownName })).toHaveCount(1, { timeout: 10_000 });
   await expect(patientOptions.filter({ hasText: treatedName })).toHaveCount(0);
 
