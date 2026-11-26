@@ -7,8 +7,9 @@ import "strings"
 // roster (L46), so the clinical and contact fields do not travel here.
 //
 // The buyer no longer comes from here: since S26/T73 the payer is the client, stamped
-// from Buyer. The patient is the search key; the row's tax id and currency are the
-// mirror the patient write keeps until the payer data is read everywhere.
+// from Buyer. Since T81 the fiscal fields and the currency are read from the client's
+// row through the subject search; GetBillingSubject, the issue path's read, selects only
+// the patient and who pays for it, so a Subject built there carries none of them.
 type Subject struct {
 	PatientID string
 	// ClientID is the payer of this patient (S26): the client whose data a receipt
@@ -18,8 +19,8 @@ type Subject struct {
 	DocumentNumber  *string
 	TaxID           *string
 	FiscalCondition *string
-	// BillingCurrency is the patient row's billing currency. A voucher is issued in
-	// the payer's currency, which the issue use case reads from the client.
+	// BillingCurrency is the payer's live currency (S26): a voucher is issued in the
+	// currency the client bills in, which the issue use case reads from the client.
 	BillingCurrency string
 }
 

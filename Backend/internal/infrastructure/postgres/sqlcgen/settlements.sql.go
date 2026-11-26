@@ -189,10 +189,12 @@ SELECT a.id,
        u.full_name AS professional_name,
        a.modality,
        a.starts_at,
-       p.billing_currency
+       c.billing_currency
 FROM appointments a
 JOIN patients p
   ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
 JOIN users u
   ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
 WHERE p.coverage_kind = 'insurer'
@@ -229,7 +231,8 @@ type ListSettlableSessionsRow struct {
 }
 
 // The attended sessions of one mutual's patients in a window, not yet liquidated by an active
-// settlement. Each carries the currency its patient is billed in, which the tariff is priced by.
+// settlement. Each carries the currency its client is billed in, which the tariff is priced by
+// (T81: the client's row, never the copy the patient keeps).
 func (q *Queries) ListSettlableSessions(ctx context.Context, arg ListSettlableSessionsParams) ([]ListSettlableSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listSettlableSessions, arg.InsurerID, arg.FromAt, arg.ToAt)
 	if err != nil {

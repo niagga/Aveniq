@@ -102,12 +102,14 @@ SELECT a.starts_at,
        p.coverage_kind,
        p.insurer_id,
        i.name AS insurer_name,
-       p.billing_currency
+       c.billing_currency
 FROM appointments a
 JOIN users u
   ON u.tenant_id = a.tenant_id AND u.id = a.professional_user_id
 JOIN patients p
   ON p.tenant_id = a.tenant_id AND p.id = a.patient_id
+JOIN clients c
+  ON c.tenant_id = p.tenant_id AND c.id = p.client_id
 LEFT JOIN insurers i
   ON i.tenant_id = p.tenant_id AND i.id = p.insurer_id
 WHERE a.status = 'attended'
@@ -149,7 +151,9 @@ type ReportPendingSessionsRow struct {
 
 // What the practice attended and did not bill: the attended sessions of the window with no
 // issued voucher. A voided voucher bills nothing, so its session is here again. The cuts are the
-// session's professional and modality and the patient's coverage, mutual and currency today.
+// session's professional and modality, the patient's coverage and mutual, and the
+// client's currency today (S26): the session is valued in what the practice bills, not in
+// what it billed the day the patient was created.
 func (q *Queries) ReportPendingSessions(ctx context.Context, arg ReportPendingSessionsParams) ([]ReportPendingSessionsRow, error) {
 	rows, err := q.db.Query(ctx, reportPendingSessions,
 		arg.FromAt,
