@@ -27,6 +27,7 @@ export function AppointmentBookingModal({
   open,
   professionalId,
   patients,
+  canBook,
   notice,
   zone,
   initialStartsAt,
@@ -36,14 +37,17 @@ export function AppointmentBookingModal({
   open: boolean;
   professionalId: string;
   patients: Patient[];
+  /** The bookability rule for the picker's search results (T80); the preloaded list is already filtered. */
+  canBook?: (patient: Patient) => boolean;
   notice: string | null;
   zone: string;
   initialStartsAt: string;
   onClose: () => void;
-  onCreated: () => void;
+  /** Called with the patient the appointment was made for, so the agenda can name its slot (T80). */
+  onCreated: (patient: Patient | null) => void;
 }) {
   const [mode, setMode] = useState<BookingMode>("one");
-  const [patientId, setPatientId] = useState("");
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [startsAt, setStartsAt] = useState(initialStartsAt);
   const [duration, setDuration] = useState(45);
   const [modality, setModality] = useState<Modality | "">("");
@@ -64,7 +68,7 @@ export function AppointmentBookingModal({
     if (writesLocked) return;
     setError(null);
     const start = dateTimeLocalToRFC3339(startsAt);
-    if (!start || patientId === "") {
+    if (!start || patient === null) {
       setError("Elegí un paciente y una hora de inicio.");
       return;
     }
@@ -79,7 +83,7 @@ export function AppointmentBookingModal({
         const ends = new Date(new Date(start).getTime() + duration * 60_000).toISOString();
         const result = await browserApi.POST("/api/v1/appointments", {
           body: {
-            patientId,
+            patientId: patient.id,
             professionalUserId: professionalId,
             startsAt: start,
             endsAt: ends,
@@ -99,7 +103,7 @@ export function AppointmentBookingModal({
         const localMinutes = startDate.getHours() * 60 + startDate.getMinutes();
         const result = await browserApi.POST("/api/v1/appointment-series", {
           body: {
-            patientId,
+            patientId: patient.id,
             professionalUserId: professionalId,
             weekday: startDate.getDay(),
             localStartMinute: localMinutes,
@@ -114,7 +118,7 @@ export function AppointmentBookingModal({
           return;
         }
       }
-      onCreated();
+      onCreated(patient);
       onClose();
     } catch {
       setError("No pudimos contactar al servidor.");
@@ -147,8 +151,9 @@ export function AppointmentBookingModal({
 
       <PatientSelect
         patients={patients}
-        value={patientId}
-        onChange={setPatientId}
+        canBook={canBook}
+        value={patient?.id ?? ""}
+        onChange={setPatient}
         disabled={writesLocked}
       />
       <StartsAtField value={startsAt} onChange={setStartsAt} disabled={writesLocked} />
