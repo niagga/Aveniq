@@ -103,7 +103,7 @@ export function PatientTable({
       </table>
 
       <p className="border-t border-border px-4 py-2 text-xs text-ink-muted">
-        {patients.length} paciente{patients.length === 1 ? "" : "s"} ·{" "}
+        {patients.length} paciente{patients.length === 1 ? "" : "s"} en esta página ·{" "}
         {patients.filter((patient) => patient.isActive).length} activo
         {patients.filter((patient) => patient.isActive).length === 1 ? "" : "s"}
       </p>

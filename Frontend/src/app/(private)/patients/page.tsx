@@ -20,6 +20,9 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { LoadingState } from "@/shared/ui/states";
 import { ScreenFrame } from "@/shared/ui/shell/app-shell";
 
+/** How many patients one page of the roster asks for; the pager moves by this block. */
+const PAGE_SIZE = 50;
+
 /**
  * Patient roster.
  *
@@ -57,6 +60,10 @@ function PatientsScreen() {
   }, [draftSearch]);
 
   const [activeOnly, setActiveOnly] = useState(true);
+  // The roster pages instead of hiding everyone past the first block (T84): with a search box
+  // and no pager, a practice with hundreds of patients could only reach the rest by guessing a
+  // name. The API returns no total, so a full page is what says there may be another one.
+  const [offset, setOffset] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const writesLocked = useWritesLocked();
 
@@ -67,9 +74,14 @@ function PatientsScreen() {
     [insurers],
   );
 
+  // A different filter describes a different list, so it starts at its first page.
+  useEffect(() => {
+    setOffset(0);
+  }, [search, activeOnly]);
+
   const load = useCallback(async () => {
     const { data, response } = await browserApi.GET("/api/v1/patients", {
-      params: { query: { search, activeOnly, limit: 50, offset: 0 } },
+      params: { query: { search, activeOnly, limit: PAGE_SIZE, offset } },
     });
 
     if (!response.ok) {
@@ -78,7 +90,7 @@ function PatientsScreen() {
     }
     setFailedStatus(null);
     setPatients(data?.items ?? []);
-  }, [search, activeOnly]);
+  }, [search, activeOnly, offset]);
 
   useEffect(() => {
     let active = true;
@@ -157,13 +169,46 @@ function PatientsScreen() {
       ) : patients === null ? (
         <LoadingState label="Cargando pacientes…" />
       ) : (
-        <PatientTable
-          patients={patients}
-          selectedID={null}
-          insurerNames={insurerNames}
-          // The record is a page since T75: the popup of S25 belongs to create and edit.
-          onSelect={(id) => router.push(`/patients/${id}` as Route)}
-        />
+        <>
+          <PatientTable
+            patients={patients}
+            selectedID={null}
+            insurerNames={insurerNames}
+            // The record is a page since T75: the popup of S25 belongs to create and edit.
+            onSelect={(id) => router.push(`/patients/${id}` as Route)}
+          />
+
+          {/* The API returns no total, so a full page is the only honest signal that another
+              one may follow; the label says the range instead of inventing a count. */}
+          <nav
+            aria-label="Páginas de pacientes"
+            className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-muted"
+          >
+            <p aria-live="polite">
+              {patients.length === 0
+                ? "Sin resultados en esta página"
+                : `Mostrando del ${offset + 1} al ${offset + patients.length}`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                disabled={offset === 0}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setOffset((current) => current + PAGE_SIZE)}
+                disabled={patients.length < PAGE_SIZE}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </nav>
+        </>
       )}
     </>
   );
