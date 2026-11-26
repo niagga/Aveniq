@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ACCOUNTS, signIn, signInAs } from "./helpers";
+import { ACCOUNTS, openBookingPopup, signIn, signInAs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -74,9 +74,12 @@ test("a professional registers a patient, keeps its clinical record, and books i
 
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
-  await page.getByLabel("Paciente").selectOption({ label: patientName });
+
+  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno".
+  const booking = await openBookingPopup(page);
+  await booking.getByLabel("Paciente").selectOption({ label: patientName });
   // The modality has no default: a booking must name it (L61).
-  await page.getByLabel("Modalidad").selectOption("presencial");
+  await booking.getByLabel("Modalidad").selectOption("presencial");
 
   // The week grid is Monday–Sunday. Booking +3 days from Friday lands next week
   // and never appears; book tomorrow (or later today on Sunday).
@@ -96,8 +99,10 @@ test("a professional registers a patient, keeps its clinical record, and books i
     start.setHours(hour, 0, 0, 0);
     if (start < new Date()) continue;
     const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
-    await page.getByLabel("Inicio").fill(local);
-    await page.getByRole("button", { name: "Reservar" }).click();
+    // A refused hour keeps the popup open with its error; a taken one closes it and the
+    // calendar shows the new slot.
+    await booking.getByLabel("Inicio").fill(local);
+    await booking.getByRole("button", { name: "Reservar" }).click();
     isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
       () => true,
       () => false,

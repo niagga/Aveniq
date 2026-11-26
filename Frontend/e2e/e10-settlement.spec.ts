@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ACCOUNTS, signInAs } from "./helpers";
+import { ACCOUNTS, openBookingPopup, openIssuePopup, signInAs, submitIssuePopup } from "./helpers";
 
 // T56: the whole of E6 in one story. The owner adds a mutual and prices the professional for it, the
 // professional registers a covered patient and attends the session, the accountant bills it at the
@@ -41,6 +41,21 @@ function monthInPractice(instant: Date): string {
 async function openSettlements(page: Page) {
   await page.getByRole("link", { name: "Liquidaciones" }).click();
   await expect(page.getByRole("heading", { name: "Liquidaciones" })).toBeVisible({ timeout: 15_000 });
+}
+
+/**
+ * Opens the issue popup and names the patient whose session is billed, waiting for the
+ * search answer to this exact text before choosing.
+ */
+async function pickPatient(page: Page, dialog: Awaited<ReturnType<typeof openIssuePopup>>, patientName: string) {
+  const answered = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/billing/subjects") &&
+      new URL(response.url()).searchParams.get("search") === patientName,
+  );
+  await dialog.getByLabel("Paciente (opcional)").fill(patientName);
+  await answered;
+  await dialog.getByRole("list", { name: "Pacientes encontrados" }).getByRole("button", { name: patientName }).click();
 }
 
 /** Chooses the mutual and the month and asks for the sessions to settle. */
@@ -105,8 +120,11 @@ test("the professional registers a patient of the mutual, books the session and 
 
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
-  await page.getByLabel("Paciente").selectOption({ label: patientName });
-  await page.getByLabel("Modalidad").selectOption("presencial");
+
+  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno".
+  const booking = await openBookingPopup(page);
+  await booking.getByLabel("Paciente").selectOption({ label: patientName });
+  await booking.getByLabel("Modalidad").selectOption("presencial");
 
   // Whole hours of tomorrow, one until a slot is free. Sundays book later today, as in E8.
   const day = new Date();
@@ -123,8 +141,8 @@ test("the professional registers a patient of the mutual, books the session and 
     start.setHours(hour, 0, 0, 0);
     if (start < new Date()) continue;
     const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
-    await page.getByLabel("Inicio").fill(local);
-    await page.getByRole("button", { name: "Reservar" }).click();
+    await booking.getByLabel("Inicio").fill(local);
+    await booking.getByRole("button", { name: "Reservar" }).click();
     isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
       () => true,
       () => false,
@@ -145,22 +163,21 @@ test("the accountant bills the session at the mutual's share plus the copago", a
   await page.goto("/facturacion");
   await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByLabel("Paciente (opcional)").fill(patientName);
-  await page
-    .getByRole("list", { name: "Pacientes encontrados" })
-    .getByRole("button", { name: patientName })
-    .click();
+  // The issue form is a popup since T76; every control below lives inside "Emitir un comprobante".
+  const dialog = await openIssuePopup(page);
+  await pickPatient(page, dialog, patientName);
 
-  const sessions = page.getByLabel("Turno (opcional)");
+  const sessions = dialog.getByLabel("Turno (opcional)");
   await expect(sessions).toBeVisible({ timeout: 10_000 });
   await sessions.selectOption({ index: 1 });
 
-  await expect(page.getByLabel("Importe (ARS)")).toHaveValue(proposedTotal);
-  await expect(page.getByText(/Propuesto por el tarifario/)).toBeVisible();
-  await page.getByRole("button", { name: "Emitir comprobante" }).click();
-  await expect(page.getByRole("status")).toContainText(/Emitimos el comprobante N° \d{6} por ARS 15\.000,00/, {
-    timeout: 10_000,
-  });
+  await expect(dialog.getByLabel("Importe (ARS)")).toHaveValue(proposedTotal);
+  await expect(dialog.getByText(/Propuesto por el tarifario/)).toBeVisible();
+  const detail = await submitIssuePopup(page, dialog);
+  // The detail popup is the issuance confirmation (T76): the number in its title, the amount
+  // and the buyer stamped by the server.
+  await expect(detail.getByText("ARS 15.000,00")).toBeVisible();
+  await expect(detail.getByText(patientName)).toBeVisible();
 });
 
 test("the accountant settles the month to the mutual: its share is the total, the copago only shows", async ({

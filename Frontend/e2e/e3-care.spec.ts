@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
-import { ACCOUNTS, signInAs } from "./helpers";
+import { ACCOUNTS, searchRoster as searchLoadedRoster, signInAs } from "./helpers";
 
 /**
  * Instance-level isolation (T38) through the product screens, with one browser context
@@ -43,24 +43,17 @@ test.afterAll(async () => {
   await Promise.all([professionalContext?.close(), otherContext?.close(), assistantContext?.close()]);
 });
 
+/** Opens the roster, so a negative check runs on an already loaded list. */
 async function openRoster(page: Page) {
   await page.goto("/patients");
   await expect(page.getByRole("heading", { name: "Pacientes" })).toBeVisible({ timeout: 15_000 });
 }
 
-/** Searches the roster and waits for the answer to that exact search, so a negative check runs on a loaded list. */
+/** Navigates to the roster and searches it, waiting for the answer to that exact search. */
 async function searchRoster(page: Page, text: string) {
   await openRoster(page);
-  const answered = page.waitForResponse(
-    (response) =>
-      response.url().includes("/api/v1/patients?") &&
-      new URL(response.url()).searchParams.get("search") === text,
-  );
-  await page.getByLabel("Buscar").fill(text);
-  await page.getByRole("button", { name: "Buscar", exact: true }).click();
-  await answered;
+  await searchLoadedRoster(page, text);
 }
-
 async function registerPatient(page: Page, fullName: string) {
   await openRoster(page);
   await page.getByRole("button", { name: "Nuevo paciente" }).click();

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { ACCOUNTS, signInAs, type Account } from "./helpers";
+import { ACCOUNTS, closeDialog, issueLooseVoucher, signInAs, type Account, voucherDetail } from "./helpers";
 
 /**
  * The figures of E7 end to end (T61): what the accountant bills moves the report, a voided
@@ -87,10 +87,11 @@ test("what the accountant issues moves the billed figure, and a voided voucher d
     ] as const) {
       await page.goto("/facturacion");
       await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
-      await page.getByLabel("Concepto").fill(concept);
-      await page.getByLabel("Importe (ARS)").fill(amount);
-      await page.getByRole("button", { name: "Emitir comprobante" }).click();
-      await expect(page.getByText(/Emitimos el comprobante N° \d{6}/)).toBeVisible({ timeout: 10_000 });
+      // The issue form is a popup since T76: it opens over the screen and, on success, the
+      // detail popup takes its place, so it is closed before the next voucher.
+      const detail = await issueLooseVoucher(page, concept, amount);
+      await expect(detail.getByText(concept)).toBeVisible();
+      await closeDialog(detail);
     }
 
     // Both are in the figure while both are issued.
@@ -103,11 +104,12 @@ test("what the accountant issues moves the billed figure, and a voided voucher d
     const row = page.getByRole("row").filter({ hasText: voidedConcept });
     await expect(row).toBeVisible({ timeout: 10_000 });
     await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
-    const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
+    const detail = voucherDetail(page);
     await detail.getByRole("button", { name: "Anular comprobante" }).click();
     await detail.getByLabel("Motivo de la anulación").fill("Prueba de cifras E7");
     await detail.getByRole("button", { name: "Confirmar anulación" }).click();
     await expect(detail.getByText(/^Anulado el /)).toBeVisible({ timeout: 10_000 });
+    await closeDialog(detail);
 
     const after = await readBilled(page);
     expect(after.minor - before.minor).toBe(KEPT_MINOR);

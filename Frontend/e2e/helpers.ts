@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // The development password is never written into the repository. It is the value the seed
 // was run with (AVENIQ_SEED_PASSWORD in scripts/local-seed.ps1), passed in here as E2E_PASSWORD.
@@ -78,7 +78,107 @@ export async function signInAs(page: Page, account: Account, tenant: string = DE
   });
 }
 
+/**
+ * Searches the roster and waits for the list that answers this exact search (a negative
+ * check has to run on a loaded list).
+ *
+ * The fill can lose to the re-render that follows the create popup closing (T75): the
+ * controlled "Buscar" input belongs to that render and reverts to what its state had, so
+ * the submit then asks for an empty search. Retrying until the request carries the text is
+ * the deterministic fact here; a missing patient still fails, it just cannot fail by race.
+ */
+export async function searchRoster(page: Page, text: string): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const answered = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/patients?") &&
+        response.status() === 200 &&
+        new URL(response.url()).searchParams.get("search") === text,
+      { timeout: 3_000 },
+    );
+    const box = page.getByLabel("Buscar", { exact: true });
+    await box.fill(text);
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    const ok = await answered.then(
+      () => true,
+      () => false,
+    );
+    if (ok && (await box.inputValue()) === text) return;
+  }
+  throw new Error(`the roster never answered the search for "${text}"`);
+}
+
 /** Signs in as the demo owner. */
 export async function signIn(page: Page): Promise<void> {
   await signInAs(page, ACCOUNTS.owner);
+}
+
+/**
+ * Opens the agenda's booking popup (T68, S25): the booking form no longer lives inline
+ * under the filter bar, it opens with "Nuevo turno". Each refused hour keeps the popup
+ * open with its error, so a caller that walks free hours retries inside the same dialog.
+ */
+export async function openBookingPopup(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Nuevo turno" }).click();
+  const dialog = page.getByRole("dialog", { name: "Nuevo turno" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/**
+ * Opens the issue popup of /facturacion (T76, S25): the issue form no longer lives between
+ * the filters and the history, it opens with "Emitir comprobante".
+ */
+export async function openIssuePopup(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Emitir comprobante" }).click();
+  const dialog = page.getByRole("dialog", { name: "Emitir un comprobante" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/**
+ * Submits the issue popup and waits for the voucher detail popup the screen opens in its
+ * place (T76). The inline "Emitimos el comprobante N° …" status no longer exists: the
+ * detail itself is the confirmation, and it carries the number, the buyer and the amount,
+ * so callers keep asserting what was issued instead of that a popup appeared.
+ */
+export async function submitIssuePopup(page: Page, dialog: Locator): Promise<Locator> {
+  await dialog.getByRole("button", { name: "Emitir el comprobante" }).click();
+  const detail = page.getByRole("dialog", { name: /Comprobante N° \d{6}/ });
+  await expect(detail).toBeVisible({ timeout: 10_000 });
+  return detail;
+}
+
+/**
+ * Issues a loose voucher (no patient, no session) from the issue popup and returns the
+ * detail popup the screen opens on success (T76).
+ */
+export async function issueLooseVoucher(page: Page, concept: string, amount: string): Promise<Locator> {
+  const dialog = await openIssuePopup(page);
+  await dialog.getByLabel("Concepto").fill(concept);
+  await dialog.getByLabel("Importe (ARS)").fill(amount);
+  return submitIssuePopup(page, dialog);
+}
+
+/**
+ * Closes a popup with the header's own close button, so the page behind becomes clickable
+ * again: a native `<dialog>` on top swallows clicks on what sits under it.
+ */
+export async function closeDialog(dialog: Locator): Promise<void> {
+  await dialog.getByRole("button", { name: "Cerrar" }).click();
+  await expect(dialog).toBeHidden();
+}
+
+/**
+ * Reads the voucher detail popup the screen holds open (T76): clicking "Ver el comprobante"
+ * opens it through the URL, and asserting inside it is how a test states what was issued.
+ */
+export function voucherDetail(page: Page): Locator {
+  return page.getByRole("dialog", { name: /Comprobante N° \d{6}/ });
+}
+
+export async function openPatientRecord(page: Page, patientRow: Locator, patientName: string): Promise<void> {
+  await patientRow.getByRole("button", { name: patientName }).click();
+  await expect(page).toHaveURL(new RegExp(`/patients/[0-9a-f-]{36}`));
+  await expect(page.getByRole("heading", { name: patientName })).toBeVisible();
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ACCOUNTS, DEMO, EXPIRED, expiredInvitationToken, signInAs } from "./helpers";
+import { ACCOUNTS, DEMO, EXPIRED, expiredInvitationToken, searchRoster, signInAs } from "./helpers";
 
 /**
  * The trial of a practice (E5, T48). Inside the trial a practice writes. Once the trial has ended
@@ -61,8 +61,7 @@ test("inside the trial the owner writes: a patient is created and no banner show
 
     // The roster shows 50 patients by name and the development database keeps growing, so the
     // new patient is found by its exact name, not by its place in the list.
-    await page.getByLabel("Buscar", { exact: true }).fill(patientInsideTrial);
-    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    await searchRoster(page, patientInsideTrial);
     await expect(page.getByRole("cell", { name: patientInsideTrial })).toBeVisible({ timeout: 10_000 });
   } finally {
     await context.close();
@@ -126,11 +125,13 @@ test("the expired practice's billing screen reads the history and offers no issu
 
     // Positive control: the screen has loaded for the owner, who may issue in a live practice.
     await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole("heading", { name: "Emitir un comprobante" })).toBeVisible();
     await expect(page.getByText(bannerTitle)).toBeVisible();
 
-    await expect(page.getByLabel("Concepto")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Emitir comprobante" })).toBeDisabled();
+    // The issue form lives in a popup since T76: with the trial ended the trigger that opens
+    // it is off, so the unwritable form can never even be opened (T78).
+    const trigger = page.getByRole("button", { name: "Emitir comprobante" });
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toBeDisabled();
   } finally {
     await context.close();
   }
@@ -146,12 +147,10 @@ test("the expired practice's accountant is told too, and cannot issue", async ({
 
     // Positive control: the accountant lands on billing, which loaded for it.
     await expect(page).toHaveURL(/\/facturacion$/);
-    await expect(page.getByRole("heading", { name: "Emitir un comprobante" })).toBeVisible({
-      timeout: 15_000,
-    });
+    await page.getByRole("heading", { name: "Facturación" }).waitFor({ timeout: 15_000 });
 
     await expect(page.getByText(bannerTitle)).toBeVisible();
-    await expect(page.getByLabel("Concepto")).toBeDisabled();
+    // The issue form lives in a popup since T76; the trigger that would open it is off (T78).
     await expect(page.getByRole("button", { name: "Emitir comprobante" })).toBeDisabled();
   } finally {
     await context.close();

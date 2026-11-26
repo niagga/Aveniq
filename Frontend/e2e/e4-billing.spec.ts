@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { ACCOUNTS, signInAs, type Account } from "./helpers";
+import { ACCOUNTS, closeDialog, issueLooseVoucher, openIssuePopup, searchRoster, signInAs, submitIssuePopup, type Account, voucherDetail } from "./helpers";
 
 /**
  * Internal vouchers through the product screens (E4, T44): the accountant issues and voids,
@@ -31,15 +31,6 @@ async function openBilling(page: Page) {
   await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
 }
 
-/** Issues a loose voucher (no patient) from the form and waits for the server's answer. */
-async function issueLoose(page: Page, concept: string, amount: string) {
-  await openBilling(page);
-  await page.getByLabel("Concepto").fill(concept);
-  await page.getByLabel("Importe (ARS)").fill(amount);
-  await page.getByRole("button", { name: "Emitir comprobante" }).click();
-  await expect(page.getByText(/Emitimos el comprobante N° \d{6}/)).toBeVisible({ timeout: 10_000 });
-}
-
 function rowFor(page: Page, concept: string) {
   return page.getByRole("row").filter({ hasText: concept });
 }
@@ -50,15 +41,17 @@ test("the accountant lands on billing, issues a voucher and voids it", async ({ 
     // The sign-in lands the accountant on billing, not on the dashboard.
     await expect(page).toHaveURL(/\/facturacion$/);
 
-    await issueLoose(page, voidedConcept, "1500");
-    await issueLoose(page, issuedConcept, "800,50");
+    await issueLooseVoucher(page, voidedConcept, "1500");
+    await closeDialog(voucherDetail(page));
+    await issueLooseVoucher(page, issuedConcept, "800,50");
+    await closeDialog(voucherDetail(page));
 
     // The voucher is in the history, and the detail shows what was issued.
     const row = rowFor(page, voidedConcept);
     await expect(row).toBeVisible({ timeout: 10_000 });
     await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
 
-    const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
+    const detail = voucherDetail(page);
     await expect(detail.getByText("ARS 1.500,00")).toBeVisible();
     await expect(detail.getByText("Cobro sin paciente")).toBeVisible();
 
@@ -81,7 +74,6 @@ test("the owner reads the same history and sees the voided voucher as voided", a
   const { page, close } = await openAs(browser, ACCOUNTS.owner);
   try {
     await openBilling(page);
-    await expect(page.getByRole("heading", { name: "Emitir un comprobante" })).toBeVisible();
 
     await expect(rowFor(page, voidedConcept)).toBeVisible({ timeout: 10_000 });
     await expect(rowFor(page, voidedConcept).getByText("Anulado", { exact: true })).toBeVisible();
@@ -103,7 +95,7 @@ test("the admin reads the history and can neither issue nor void", async ({ brow
     await expect(row).toBeVisible({ timeout: 10_000 });
     await row.getByRole("link", { name: /^Ver el comprobante/ }).click();
 
-    const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
+    const detail = voucherDetail(page);
     await expect(detail.getByText("ARS 800,50")).toBeVisible();
     await expect(detail.getByRole("button", { name: "Anular comprobante" })).toHaveCount(0);
   } finally {
@@ -127,8 +119,7 @@ test("the accountant's voucher can name a patient, and the buyer comes from the 
 
     // The roster shows 50 patients by name and the development database keeps growing, so the
     // new patient is found by its exact name, not by its place in the list.
-    await owner.page.getByLabel("Buscar", { exact: true }).fill(patientName);
-    await owner.page.getByRole("button", { name: "Buscar", exact: true }).click();
+    await searchRoster(owner.page, patientName);
     await expect(owner.page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
   } finally {
     await owner.close();
@@ -138,25 +129,35 @@ test("the accountant's voucher can name a patient, and the buyer comes from the 
   try {
     await openBilling(page);
 
+    // The issue form is a popup since T76; the picker and the rest of the fields live inside
+    // "Emitir un comprobante".
+    const dialog = await openIssuePopup(page);
+
     // Search by the patient's full name: at least three characters, answered after a short pause.
     const answered = page.waitForResponse(
       (response) =>
         response.url().includes("/api/v1/billing/subjects") &&
         new URL(response.url()).searchParams.get("search") === patientName,
     );
-    await page.getByLabel("Paciente (opcional)").fill(patientName);
+    await dialog.getByLabel("Paciente (opcional)").fill(patientName);
     await answered;
-    await page.getByRole("button", { name: patientName }).click();
+    await dialog
+      .getByRole("list", { name: "Pacientes encontrados" })
+      .getByRole("button", { name: patientName })
+      .click();
 
     // The chosen patient is shown, and the form offers to take it off again.
-    await expect(page.getByRole("button", { name: "Quitar" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Quitar" })).toBeVisible();
 
-    await page.getByLabel("Concepto").fill(patientConcept);
-    await page.getByLabel("Importe (ARS)").fill("2500");
-    await page.getByRole("button", { name: "Emitir comprobante" }).click();
-    await expect(page.getByText(/Emitimos el comprobante N° \d{6}/)).toBeVisible({ timeout: 10_000 });
+    await dialog.getByLabel("Concepto").fill(patientConcept);
+    await dialog.getByLabel("Importe (ARS)").fill("2500");
 
-    // The buyer is the patient's name, stamped by the server; nothing was typed for it.
+    const detail = await submitIssuePopup(page, dialog);
+
+    // The buyer is the patient's name, stamped by the server; nothing was typed for it. The
+    // history row shows the same buyer (T73).
+    await expect(detail.getByText(patientName)).toBeVisible();
+    await expect(detail.getByText("ARS 2.500,00")).toBeVisible();
     await expect(rowFor(page, patientConcept).getByRole("cell", { name: patientName })).toBeVisible({
       timeout: 10_000,
     });
@@ -203,14 +204,14 @@ test("a voucher is reachable by its URL and GET, even after a reload", async ({ 
     expect((await gotOne).ok()).toBeTruthy();
 
     await expect(page).toHaveURL(/\/facturacion\?voucher=/);
-    const detail = page.getByRole("region", { name: /Detalle del comprobante/ });
+    const detail = voucherDetail(page);
     await expect(detail.getByText("ARS 800,50")).toBeVisible();
 
     const url = page.url();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible({ timeout: 15_000 });
     await expect(page).toHaveURL(url);
-    await expect(page.getByRole("region", { name: /Detalle del comprobante/ }).getByText("ARS 800,50")).toBeVisible({
+    await expect(voucherDetail(page).getByText("ARS 800,50")).toBeVisible({
       timeout: 10_000,
     });
 
