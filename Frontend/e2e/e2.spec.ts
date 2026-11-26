@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ACCOUNTS, openBookingPopup, signIn, signInAs } from "./helpers";
+import { ACCOUNTS, bookFirstFreeHour, openBookingPopup, searchRoster, signIn, signInAs } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -40,8 +40,7 @@ test("two tabs can refresh at once without killing the session", async ({ contex
 });
 
 test("a professional registers a patient, keeps its clinical record, and books it", async ({ page }) => {
-  // The booking loop walks the hours of tomorrow past the appointments earlier runs left in the
-  // development database, each one costing a short wait. 30 seconds is not enough for that walk.
+  // Registration plus the booking walk over the coming days go past the 30 s default.
   test.setTimeout(120_000);
 
   // Only a professional opens the clinical record, and registering a patient makes that
@@ -55,6 +54,9 @@ test("a professional registers a patient, keeps its clinical record, and books i
   await page.getByLabel("Fecha de nacimiento").fill("1990-05-12");
   await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
+  // The roster shows one page of 50 in name order and the development database keeps
+  // accumulating runs, so the new patient is found by the roster's search (T77, as e4/e5/e6).
+  await searchRoster(page, patientName);
   await expect(page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("cell", { name: patientName }).click();
@@ -75,39 +77,14 @@ test("a professional registers a patient, keeps its clinical record, and books i
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
 
-  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno".
+  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno". The
+  // helper names the patient and the modality — no default (L61) — and walks the whole hours
+  // of the coming days (T77), moving to the next day when one is full, instead of being
+  // pinned to tomorrow and giving up once it fills.
   const booking = await openBookingPopup(page);
-  await booking.getByLabel("Paciente").selectOption({ label: patientName });
-  // The modality has no default: a booking must name it (L61).
-  await booking.getByLabel("Modalidad").selectOption("presencial");
+  await bookFirstFreeHour(page, booking, { patientName, modality: "presencial" });
 
-  // The week grid is Monday–Sunday. Booking +3 days from Friday lands next week
-  // and never appears; book tomorrow (or later today on Sunday).
-  // The professional keeps earlier appointments from previous runs, so try whole hours
-  // until one is free. Each slot is on the hour and lasts 45 minutes, so no two can overlap.
-  const day = new Date();
-  if (day.getDay() === 0) {
-    day.setHours(day.getHours() + 1, 0, 0, 0);
-  } else {
-    day.setDate(day.getDate() + 1);
-  }
-  const pad = (n: number) => String(n).padStart(2, "0");
+  // The booked slot shows the modality the professional named.
   const booked = page.getByRole("button", { name: new RegExp(patientName) });
-  let isBooked = false;
-  for (let hour = 8; hour < 20 && !isBooked; hour++) {
-    const start = new Date(day);
-    start.setHours(hour, 0, 0, 0);
-    if (start < new Date()) continue;
-    const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
-    // A refused hour keeps the popup open with its error; a taken one closes it and the
-    // calendar shows the new slot.
-    await booking.getByLabel("Inicio").fill(local);
-    await booking.getByRole("button", { name: "Reservar" }).click();
-    isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
-      () => true,
-      () => false,
-    );
-  }
-  expect(isBooked, "no free hour left on the next day").toBe(true);
   await expect(booked.first()).toContainText("Presencial");
 });

@@ -125,6 +125,209 @@ export async function openBookingPopup(page: Page): Promise<Locator> {
   return dialog;
 }
 
+/** The zone the demo practice runs in: it is the week the agenda grid renders. */
+const PRACTICE_ZONE = "America/Argentina/Buenos_Aires";
+
+/** The whole hours the booking walk tries on every candidate day: 8:00 through 19:00. */
+const firstWalkHour = 8;
+const lastWalkHour = 19;
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Monday 00:00 of the week containing `anchor`, in the practice zone — the same instant
+ * the agenda's `startOfWeek` computes, so the helper can match the `from` of the week the
+ * grid loads when it navigates.
+ *
+ * Standalone copies of `civilDate` and `zonedDate` (entities/schedule/model.ts): the e2e
+ * suite cannot import the "@/" aliased app source.
+ */
+function civilPartsInZone(date: Date, timeZone: string): { year: number; month: number; day: number } {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(formatted.map((part) => [part.type, part.value]));
+  return { year: Number(lookup.year), month: Number(lookup.month), day: Number(lookup.day) };
+}
+
+function zonedDate(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): Date {
+  // Approximate: construct a UTC instant and shift until the civil fields match.
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const parts = civilPartsInZone(guess, timeZone);
+  const deltaDays = Date.UTC(year, month - 1, day) - Date.UTC(parts.year, parts.month - 1, parts.day);
+  return new Date(guess.getTime() + deltaDays);
+}
+
+function mondayOfWeek(anchor: Date): Date {
+  const parts = civilPartsInZone(anchor, PRACTICE_ZONE);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(); // 0 Sunday
+  const daysFromMonday = (weekday + 6) % 7;
+  return zonedDate(parts.year, parts.month, parts.day - daysFromMonday, 0, 0, PRACTICE_ZONE);
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+/** The local `datetime-local` value of an instant, as the booking form stores it. */
+function localDateTimeValue(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
+}
+
+/**
+ * Names the patient in the booking popup's picker (T80): the popup's select holds the
+ * page of the roster the agenda loads when it opens, and a practice with more active
+ * patients than that (and any development database with runs behind it) has patients
+ * beyond it. So the test types the patient into "Buscar paciente", waits for the API
+ * answer to this exact search and only then picks the patient from the narrowed options:
+ * no assumption on the name's place in the roster, no `.first()`, no forced clicks.
+ *
+ * Clearing the input first makes the next fill a real change even when the walk reopens
+ * the popup with the same name already typed in, so it is always this search's own
+ * answer that is awaited.
+ */
+export async function pickBookingPatient(booking: Locator, patientName: string): Promise<void> {
+  const search = booking.getByLabel("Buscar paciente");
+  if ((await search.inputValue()) !== "") {
+    await search.fill("");
+  }
+  const answered = booking.page().waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/patients?") &&
+      response.status() === 200 &&
+      new URL(response.url()).searchParams.get("search") === patientName,
+  );
+  await search.fill(patientName);
+  await answered;
+  // The picker's select is the one combobox in the popup named "Paciente": getByLabel with
+  // exact does not match a wrapped-label select (the input picker is a searchbox, so the
+  // plain label locator is ambiguous), the role locator is not.
+  await booking
+    .getByRole("combobox", { name: "Paciente" })
+    .selectOption({ label: patientName });
+}
+
+/**
+ * Books a free whole hour for the patient named inside the open booking popup (T68):
+ * it walks the whole hours 8:00–19:00 of tomorrow — later today first, on a Sunday, when
+ * the Monday–Sunday week the grid shows has no tomorrow — and when a day is full it moves
+ * to the following day, up to `maxDays` candidate days (7 covers a week of 12 hours).
+ *
+ * The popup stays open with its error when an hour is refused (Conflict) and closes when
+ * the hour is taken, so the walk reads the POST /api/v1/appointments answer instead of
+ * probing the grid: a refusal costs no idle wait, and a day outside the shown week does
+ * not hide a booking. When it does walk into a later week, it closes the popup (the walk
+ * made its form dirty, so "Cancelar" asks to discard), moves the grid with "Semana
+ * siguiente" and reopens it.
+ *
+ * It returns the instant the booked hour starts, with the agenda showing the booked day
+ * so callers can assert on the slot. When the whole window is full it throws, naming what
+ * it searched: an unbooked session must fail its test, never skip silently.
+ */
+export async function bookFirstFreeHour(
+  page: Page,
+  booking: Locator,
+  options: { patientName: string; modality: string; maxDays?: number },
+): Promise<Date> {
+  const { patientName, modality, maxDays = 7 } = options;
+  const slotButton = page.getByRole("button", { name: new RegExp(escapeRegExp(patientName)) });
+
+  const now = new Date();
+  const firstDay =
+    now.getDay() === 0
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      : addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), 1);
+  const lastDay = addDays(firstDay, maxDays - 1);
+
+  // The patient and the modality have no default (L61): the walk sets both, and again on
+  // every reopening below. The patient goes through the picker's search (T80), so the
+  // name's place in the roster never matters.
+  async function namePatientAndModality(currentBooking: Locator): Promise<void> {
+    await pickBookingPatient(currentBooking, patientName);
+    await currentBooking.getByLabel("Modalidad").selectOption(modality);
+  }
+  await namePatientAndModality(booking);
+
+  // The week the grid shows when the walk starts: the agenda opens on the week of today.
+  let shownMonday = mondayOfWeek(new Date());
+  let refused = 0;
+  let lastRefusal = "";
+
+  for (let offset = 0; offset < maxDays; offset++) {
+    const day = addDays(firstDay, offset);
+    const targetMonday = mondayOfWeek(day);
+
+    if (targetMonday.getTime() !== shownMonday.getTime()) {
+      // The walk filled the popup, so "Cancelar" opens the unsaved-changes guard before
+      // closing: discard it. The modal covers the page, so the grid is reached only after.
+      await booking.getByRole("button", { name: "Cancelar" }).click();
+      await page.getByRole("button", { name: "Descartar cambios" }).click();
+      await expect(booking).toBeHidden();
+      while (targetMonday.getTime() > shownMonday.getTime()) {
+        const nextMonday = addDays(shownMonday, 7);
+        const reloaded = page.waitForResponse(
+          (response) =>
+            response.request().method() === "GET" &&
+            response.url().includes("/api/v1/appointments") &&
+            new URL(response.url()).searchParams.get("from") === nextMonday.toISOString(),
+          { timeout: 10_000 },
+        );
+        await page.getByRole("button", { name: "Semana siguiente" }).click();
+        const answer = await reloaded;
+        if (!answer.ok()) {
+          throw new Error(`bookFirstFreeHour: the agenda week did not load (${answer.status()}).`);
+        }
+        shownMonday = nextMonday;
+      }
+      booking = await openBookingPopup(page);
+      await namePatientAndModality(booking);
+    }
+
+    for (let hour = firstWalkHour; hour <= lastWalkHour; hour++) {
+      const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
+      if (start < new Date()) continue; // past hours of the Sunday start were never free
+      const attempted = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().includes("/api/v1/appointments") &&
+          !response.url().includes("appointment-series"),
+        { timeout: 10_000 },
+      );
+      await booking.getByLabel("Inicio").fill(localDateTimeValue(start));
+      await booking.getByRole("button", { name: "Reservar" }).click();
+      const answer = await attempted;
+      if (answer.ok()) {
+        await expect(booking).toBeHidden();
+        await expect(slotButton).toBeVisible();
+        return start;
+      }
+      refused += 1;
+      const body = (await answer.json().catch(() => null)) as { error?: { message?: string } } | null;
+      lastRefusal = `${answer.status()} ${body?.error?.message ?? ""}`.trim();
+    }
+  }
+
+  throw new Error(
+    `bookFirstFreeHour: no free whole hour between ${localDateTimeValue(firstDay).slice(0, 10)} ` +
+      `and ${localDateTimeValue(lastDay).slice(0, 10)} (${maxDays} days, hours ${firstWalkHour}:00–${lastWalkHour}:00) ` +
+      `for "${patientName}": every hour tried was refused, the last one ${lastRefusal}.`,
+  );
+}
+
 /**
  * Opens the issue popup of /facturacion (T76, S25): the issue form no longer lives between
  * the filters and the history, it opens with "Emitir comprobante".

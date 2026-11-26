@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ACCOUNTS, closeDialog, openBookingPopup, openIssuePopup, signInAs, submitIssuePopup } from "./helpers";
+import { ACCOUNTS, bookFirstFreeHour, closeDialog, openBookingPopup, openIssuePopup, searchRoster, signInAs, submitIssuePopup } from "./helpers";
 
 // T54: emission from a session. Serial: the professional books the session the accountant bills,
 // and the accountant bills it once.
@@ -64,7 +64,7 @@ test("the owner prices a particular session for the professional from today", as
 });
 
 test("the professional registers a patient and books a session for tomorrow", async ({ page }) => {
-  // The booking loop walks the hours of tomorrow past the appointments earlier runs left behind.
+  // Registration plus the booking walk over the coming days go past the 30 s default.
   test.setTimeout(120_000);
 
   await signInAs(page, ACCOUNTS.professional);
@@ -76,39 +76,19 @@ test("the professional registers a patient and books a session for tomorrow", as
   await page.getByLabel("Fecha de nacimiento").fill("1990-05-12");
   await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
+  // The roster shows one page of 50 in name order and the development database keeps
+  // accumulating runs, so the new patient is found by the roster's search (T77, as e4/e5/e6).
+  await searchRoster(page, patientName);
   await expect(page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
 
-  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno".
+  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno". The
+  // helper names the patient and the modality and walks the whole hours of the coming days
+  // (T77), moving to the next day when one is full, instead of being pinned to tomorrow.
   const booking = await openBookingPopup(page);
-  await booking.getByLabel("Paciente").selectOption({ label: patientName });
-  await booking.getByLabel("Modalidad").selectOption("presencial");
-
-  // Whole hours of tomorrow, one until a slot is free. Sundays book later today, as in E2.
-  const day = new Date();
-  if (day.getDay() === 0) {
-    day.setHours(day.getHours() + 1, 0, 0, 0);
-  } else {
-    day.setDate(day.getDate() + 1);
-  }
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const booked = page.getByRole("button", { name: new RegExp(patientName) });
-  let isBooked = false;
-  for (let hour = 8; hour < 20 && !isBooked; hour++) {
-    const start = new Date(day);
-    start.setHours(hour, 0, 0, 0);
-    if (start < new Date()) continue;
-    const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
-    await booking.getByLabel("Inicio").fill(local);
-    await booking.getByRole("button", { name: "Reservar" }).click();
-    isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
-      () => true,
-      () => false,
-    );
-  }
-  expect(isBooked, "no free hour left on the next day").toBe(true);
+  await bookFirstFreeHour(page, booking, { patientName, modality: "presencial" });
 });
 
 test("the accountant bills a session at the proposed amount, once", async ({ page }) => {

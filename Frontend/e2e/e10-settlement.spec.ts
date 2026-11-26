@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ACCOUNTS, openBookingPopup, openIssuePopup, signInAs, submitIssuePopup } from "./helpers";
+import { ACCOUNTS, bookFirstFreeHour, openBookingPopup, openIssuePopup, searchRoster, signInAs, submitIssuePopup } from "./helpers";
 
 // T56: the whole of E6 in one story. The owner adds a mutual and prices the professional for it, the
 // professional registers a covered patient and attends the session, the accountant bills it at the
@@ -22,7 +22,7 @@ const proposedTotal = "15000,00";
 const today = new Date().toISOString().slice(0, 10);
 
 // Month of the session as the settlement reads it, in the practice's timezone. Set when the
-// session is booked, because tomorrow can already be the next month.
+// session is booked, because the booked day can already be the next month.
 let sessionMonth = "";
 const practiceZone = "America/Argentina/Buenos_Aires";
 
@@ -101,7 +101,7 @@ test("the owner adds a mutual with its CUIT and prices the professional for it",
 test("the professional registers a patient of the mutual, books the session and attends it", async ({
   page,
 }) => {
-  // The booking loop walks the hours of tomorrow past the appointments earlier runs left behind.
+  // Registration plus the booking walk over the coming days go past the 30 s default.
   test.setTimeout(120_000);
 
   await signInAs(page, ACCOUNTS.professional);
@@ -116,43 +116,27 @@ test("the professional registers a patient of the mutual, books the session and 
   await page.getByLabel("Número de afiliado").fill(memberNumber);
   await page.getByLabel("Moneda de facturación").selectOption("ARS");
   await page.getByRole("button", { name: "Crear paciente" }).click();
+  // The roster shows one page of 50 in name order and the development database keeps
+  // accumulating runs, so the new patient is found by the roster's search (T77, as e4/e5/e6).
+  await searchRoster(page, patientName);
   await expect(page.getByRole("cell", { name: patientName })).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("link", { name: "Agenda" }).click();
   await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
 
-  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno".
+  // The booking form opens in a popup since T68: the fields live inside "Nuevo turno". The
+  // helper names the patient and the modality and walks the whole hours of the coming days
+  // (T77), moving to the next day when one is full, instead of being pinned to tomorrow.
   const booking = await openBookingPopup(page);
-  await booking.getByLabel("Paciente").selectOption({ label: patientName });
-  await booking.getByLabel("Modalidad").selectOption("presencial");
+  const start = await bookFirstFreeHour(page, booking, { patientName, modality: "presencial" });
 
-  // Whole hours of tomorrow, one until a slot is free. Sundays book later today, as in E8.
-  const day = new Date();
-  if (day.getDay() === 0) {
-    day.setHours(day.getHours() + 1, 0, 0, 0);
-  } else {
-    day.setDate(day.getDate() + 1);
-  }
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const booked = page.getByRole("button", { name: new RegExp(patientName) });
-  let isBooked = false;
-  for (let hour = 8; hour < 20 && !isBooked; hour++) {
-    const start = new Date(day);
-    start.setHours(hour, 0, 0, 0);
-    if (start < new Date()) continue;
-    const local = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:00`;
-    await booking.getByLabel("Inicio").fill(local);
-    await booking.getByRole("button", { name: "Reservar" }).click();
-    isBooked = await booked.waitFor({ state: "visible", timeout: 5_000 }).then(
-      () => true,
-      () => false,
-    );
-    if (isBooked) sessionMonth = monthInPractice(start);
-  }
-  expect(isBooked, "no free hour left on the next day").toBe(true);
+  // Month of the session as the settlement reads it: the booked day can already be the next
+  // month, and the settlement bills that month.
+  sessionMonth = monthInPractice(start);
   expect(sessionMonth).toMatch(/^\d{4}-\d{2}$/);
 
   // Only an attended session is settled.
+  const booked = page.getByRole("button", { name: new RegExp(patientName) });
   await booked.click();
   await page.getByRole("button", { name: "Marcar atendido" }).click();
   await expect(page.getByRole("button", { name: "Marcar atendido" })).toHaveCount(0, { timeout: 10_000 });
