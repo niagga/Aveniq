@@ -164,7 +164,7 @@ jobs:
           cache-dependency-path: Backend/go.sum
 
       - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.30.0
 
       # The application role must exist before the migrations run: 0003 grants it the
       # privileges and assumes it is there.
