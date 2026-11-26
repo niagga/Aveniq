@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 )
@@ -25,6 +26,11 @@ type Config struct {
 	DatabaseURL string
 	RedisAddr   string
 	LogLevel    slog.Level
+	// MetricsAddr is the listen address of the private scrape endpoint, for
+	// example "127.0.0.1:9090". The empty default serves nothing: a multi-tenant
+	// process must answer its tenants, never expose its internal measurement
+	// alongside them, unless an operator asks for this listener explicitly.
+	MetricsAddr string
 	// BaseDomain is the registrable suffix used to resolve a tenant from the
 	// request host (for example "aveniq.app" resolves sur.aveniq.app).
 	BaseDomain string
@@ -53,6 +59,7 @@ func Load() (Config, error) {
 		// would silently disable tenant isolation.
 		DatabaseURL:       getEnv("DATABASE_URL", "postgres://aveniq_app:aveniq_app_dev@127.0.0.1:5433/aveniq?sslmode=disable"),
 		RedisAddr:         getEnv("REDIS_ADDR", "127.0.0.1:6380"),
+		MetricsAddr:       getEnv("METRICS_ADDR", ""),
 		BaseDomain:        getEnv("BASE_DOMAIN", "localhost"),
 		AccessTokenSecret: getEnv("AUTH_ACCESS_SECRET", developmentAccessTokenSecret),
 	}
@@ -84,6 +91,14 @@ func (c Config) validate() error {
 	}
 	if c.RedisAddr == "" {
 		return fmt.Errorf("config: REDIS_ADDR must not be empty")
+	}
+	// An empty METRICS_ADDR is the "no listener" default and is valid; anything
+	// non-empty must be parseable host:port, or a typo would surface as a bind
+	// error mid-startup instead of at validation time.
+	if c.MetricsAddr != "" {
+		if _, _, err := net.SplitHostPort(c.MetricsAddr); err != nil {
+			return fmt.Errorf("config: METRICS_ADDR %q is not host:port", c.MetricsAddr)
+		}
 	}
 
 	if len(c.AccessTokenSecret) < minAccessTokenSecretBytes {
