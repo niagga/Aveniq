@@ -7,8 +7,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/platform/config"
 	"github.com/niagga/aveniq/backend/internal/platform/logging"
+	"github.com/niagga/aveniq/backend/internal/platform/metrics"
 )
 
 const (
@@ -30,6 +33,13 @@ const (
 	queueCritical = "critical"
 	concurrency   = 4
 	shutdownGrace = 20 * time.Second
+
+	// queueScrapeTimeout bounds an Inspector read at scrape time. It must be
+	// comfortably under a Prometheus scrape deadline: a down Redis makes the
+	// scrape fail in seconds instead of hanging the scraper forever.
+	queueScrapeTimeout = 2 * time.Second
+
+	metricsShutdownGrace = 5 * time.Second
 )
 
 var version = "0.1.0-dev"
@@ -49,6 +59,32 @@ func run() error {
 
 	logger := logging.New(cfg.Env, cfg.LogLevel, "worker")
 	slog.SetDefault(logger)
+
+	// The queue depths are gauges read at scrape time straight from the asynq
+	// Inspector — never cached — so a scrape always answers with the moment it
+	// rendered. A failed read bounds itself and shows up as an error counter
+	// while the samples stay out: a missing number cannot be mistaken for an
+	// empty queue.
+	workerMetrics := metrics.New()
+	workerMetrics.RecordQueueSource(metrics.NewAsynqQueueSource(
+		asynq.NewInspector(asynq.RedisClientOpt{Addr: cfg.RedisAddr}),
+		[]string{queueDefault, queueCritical},
+		queueScrapeTimeout,
+	))
+
+	// METRICS_ADDR unset means no listener at all, the default everywhere: the
+	// scrape socket is an operator's explicit opt-in, never an accident.
+	serveErr := make(chan error, 1)
+	var scrapeServer *http.Server
+	if cfg.MetricsAddr != "" {
+		scrapeServer = metrics.Server(cfg.MetricsAddr, workerMetrics)
+		go func() {
+			logger.Info("worker: metrics listening", slog.String("addr", cfg.MetricsAddr))
+			if err := scrapeServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serveErr <- fmt.Errorf("worker: metrics server failed: %w", err)
+			}
+		}()
+	}
 
 	server := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: cfg.RedisAddr},
@@ -78,10 +114,22 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	<-ctx.Done()
 
-	logger.Info("worker: shutdown requested")
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+		logger.Info("worker: shutdown requested")
+	}
+
 	server.Shutdown()
+	if scrapeServer != nil {
+		scrapeCtx, cancel := context.WithTimeout(context.Background(), metricsShutdownGrace)
+		defer cancel()
+		if err := scrapeServer.Shutdown(scrapeCtx); err != nil {
+			return fmt.Errorf("worker: metrics server shutdown failed: %w", err)
+		}
+	}
 	logger.Info("worker: stopped")
 	return nil
 }

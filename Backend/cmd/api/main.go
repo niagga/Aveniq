@@ -39,6 +39,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/platform/config"
 	"github.com/niagga/aveniq/backend/internal/platform/idgen"
 	"github.com/niagga/aveniq/backend/internal/platform/logging"
+	"github.com/niagga/aveniq/backend/internal/platform/metrics"
 )
 
 // version is overridden at build time with:
@@ -72,6 +73,11 @@ func run() error {
 
 	logger := logging.New(cfg.Env, cfg.LogLevel, "api")
 	slog.SetDefault(logger)
+
+	// The registry must exist before the router, and the scrape listener must be
+	// an explicit opt-in: METRICS_ADDR unset instructs the process to publish
+	// nothing, so a multi-tenant API never serves its own internals by default.
+	requestMetrics := metrics.New()
 
 	// A cancellation context tied to the signals a container runtime or a
 	// developer sends is the only correct way to stop a server gracefully.
@@ -242,6 +248,7 @@ func run() error {
 		// The refresh grant is a browser cookie: HttpOnly so JavaScript cannot read
 		// it, and Secure everywhere except the local plain-HTTP loopback.
 		RefreshCookie: httpiface.DefaultRefreshCookieConfig(authapp.RefreshSessionTTL, !cfg.IsDevelopment()),
+		Metrics:       requestMetrics,
 		ReadyChecks: []httpiface.ReadyCheck{
 			{Name: "postgres", Check: pool.Ping},
 			{Name: "redis", Check: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }},
@@ -258,6 +265,22 @@ func run() error {
 	}
 
 	serveErr := make(chan error, 1)
+
+	// The scrape listener is a separate process surface: another socket, another
+	// mux, serving only /metrics from the same registry. A failed bind or serve
+	// fails the process like the public server does — an operator who asked for
+	// metrics must not unknowingly run without them.
+	var scrapeServer *http.Server
+	if cfg.MetricsAddr != "" {
+		scrapeServer = metrics.Server(cfg.MetricsAddr, requestMetrics)
+		go func() {
+			logger.Info("api: metrics listening", slog.String("addr", cfg.MetricsAddr))
+			if err := scrapeServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serveErr <- fmt.Errorf("api: metrics server failed: %w", err)
+			}
+		}()
+	}
+
 	go func() {
 		logger.Info("api: listening",
 			slog.String("addr", cfg.HTTPAddr),
@@ -283,6 +306,17 @@ func run() error {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("api: graceful shutdown failed: %w", err)
+	}
+
+	// The scrape listener owes in-flight requests none: a scrape is bounded by
+	// its own timeouts, and it shares the same shutdown window so the process
+	// does not leave a half-open socket behind.
+	if scrapeServer != nil {
+		scrapeCtx, scrapeCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer scrapeCancel()
+		if err := scrapeServer.Shutdown(scrapeCtx); err != nil {
+			return fmt.Errorf("api: metrics server shutdown failed: %w", err)
+		}
 	}
 
 	logger.Info("api: stopped")

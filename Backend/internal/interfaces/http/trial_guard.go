@@ -51,6 +51,12 @@ func trialGuard(tokens *authn.AccessTokens, expired *tenantapp.TrialExpiredUseCa
 				return
 			}
 
+			// The guard is often the first place the request's tenant becomes known
+			// in the chain above huma: report it, so the completion line names the
+			// practice even when the guard itself refuses the write with 403 or
+			// its read fails with 503.
+			recordRequestIdentity(r.Context(), Identity{UserID: claims.Subject, TenantID: claims.TenantID})
+
 			ended, err := expired.Execute(r.Context(), claims.TenantID)
 			if err != nil {
 				writeProblemJSON(w, http.StatusServiceUnavailable, "trial_unavailable",

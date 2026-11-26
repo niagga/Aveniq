@@ -138,6 +138,7 @@ variable, so a fresh clone runs with no `.env` file. Override through the enviro
 | `REDIS_ADDR` | `127.0.0.1:6380` | |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `BASE_DOMAIN` | `localhost` | suffix used to resolve a tenant from the request host |
+| `METRICS_ADDR` | *(empty)* | private listener for `/metrics`; empty means no listener, and the public port never serves it |
 | `API_ORIGIN` (frontend) | `http://127.0.0.1:8080` | server-side only; never reaches the browser |
 
 ### Two database roles, and why

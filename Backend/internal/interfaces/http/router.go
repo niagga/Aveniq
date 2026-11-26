@@ -18,8 +18,8 @@ import (
 	authapp "github.com/niagga/aveniq/backend/internal/application/auth"
 	billingapp "github.com/niagga/aveniq/backend/internal/application/billing"
 	careapp "github.com/niagga/aveniq/backend/internal/application/care"
-	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	clientapp "github.com/niagga/aveniq/backend/internal/application/client"
+	clinicalapp "github.com/niagga/aveniq/backend/internal/application/clinical"
 	insurerapp "github.com/niagga/aveniq/backend/internal/application/insurer"
 	invitationapp "github.com/niagga/aveniq/backend/internal/application/invitation"
 	landingapp "github.com/niagga/aveniq/backend/internal/application/landing"
@@ -43,6 +43,7 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/schedule"
 	"github.com/niagga/aveniq/backend/internal/domain/tenant"
 	"github.com/niagga/aveniq/backend/internal/platform/authn"
+	"github.com/niagga/aveniq/backend/internal/platform/metrics"
 )
 
 const (
@@ -148,7 +149,11 @@ type Deps struct {
 	UpdateLanding          *landingapp.UpdateUseCase
 	AccessTokens           *authn.AccessTokens
 	RefreshCookie          RefreshCookieConfig
-	ReadyChecks            []ReadyCheck
+	// Metrics is the registry the router records every request into. A nil one
+	// is created here: measurement is always on, and the composition root owns
+	// only where the exposition is served (Deps does not open listeners).
+	Metrics     *metrics.Registry
+	ReadyChecks []ReadyCheck
 }
 
 // NewRouter builds the HTTP handler: operational endpoints, then the versioned
@@ -159,6 +164,13 @@ func NewRouter(deps Deps) http.Handler {
 	// Order matters: request id first so every later log line can carry it, and
 	// the recoverer close to the top so a handler panic still yields a response.
 	router.Use(middleware.RequestID)
+	// Measurement rides right behind RequestID: it must observe the same requests
+	// the logger does, and the route pattern is only known to it after chi has
+	// matched, which the record-on-exit below relies on.
+	if deps.Metrics == nil {
+		deps.Metrics = metrics.New()
+	}
+	router.Use(deps.Metrics.Middleware())
 	router.Use(middleware.RealIP)
 	router.Use(requestLogger(deps.Logger))
 	router.Use(middleware.Recoverer)
@@ -277,16 +289,31 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			started := time.Now()
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-			next.ServeHTTP(wrapped, r)
+			// One holder per request, stored in the context so the middlewares
+			// that establish the identity can report into it even where they
+			// derive their own contexts. It dies with the request: no state
+			// survives for the next one to inherit.
+			holder := &requestIdentityHolder{}
+			next.ServeHTTP(wrapped, r.WithContext(withRequestIdentityHolder(r.Context(), holder)))
 
-			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request",
+			attrs := []slog.Attr{
 				slog.String("request_id", middleware.GetReqID(r.Context())),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", wrapped.Status()),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Duration("duration", time.Since(started)),
-			)
+			}
+			// The identity fields appear only when some middleware established
+			// them: an absent field must not read as an empty practice id.
+			identity := holder.snapshot()
+			if identity.TenantID != "" {
+				attrs = append(attrs, slog.String("tenant_id", identity.TenantID))
+			}
+			if identity.UserID != "" {
+				attrs = append(attrs, slog.String("user_id", identity.UserID))
+			}
+			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request", attrs...)
 		})
 	}
 }

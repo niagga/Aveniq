@@ -95,7 +95,11 @@ func resolveIdentity(api huma.API, ctx huma.Context, tokens *authn.AccessTokens)
 
 // withIdentity stores the identity under the unexported key. Handlers read it with
 // IdentityFrom and cannot forge it, because the key is private to this package.
+// It also reports the identity into the request log's holder: the holder was put
+// in the request context by the request logger, which sits before huma and can
+// only see a report, not this replaced context.
 func withIdentity(ctx huma.Context, identity Identity) huma.Context {
+	recordRequestIdentity(ctx.Context(), identity)
 	return huma.WithValue(ctx, identityContextKey{}, identity)
 }
 
