@@ -194,6 +194,7 @@ export function IssueVoucherModal({
       description="Comprobante interno: no es una factura electrónica. El número lo asigna Aveniq y no se reutiliza, ni siquiera si el comprobante se anula."
       size="lg"
       submitLabel="Emitir el comprobante"
+      busyLabel="Emitiendo…"
       busy={isSubmitting}
       error={error}
       onClose={onClose}

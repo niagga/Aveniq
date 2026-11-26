@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 
 import type { Patient } from "@/entities/patient/model";
 import { canSeePatients } from "@/entities/iam/model";
-import { PatientDetail, PatientLoadError } from "@/features/patients/components/patient-detail";
+import { PatientDetail } from "@/features/patients/components/patient-detail";
+import { PatientLoadError } from "@/features/patients/components/patient-load-error";
 import { PatientFormModal } from "@/features/patients/components/patient-form";
 import { useInsurers } from "@/features/insurers/use-insurers";
 import { browserApi } from "@/shared/api/client";

@@ -176,6 +176,26 @@ go test ./internal/infrastructure/postgres/ -run TestIsolation -v
 Both are needed: the migrator connection creates and seeds, the application role proves
 the enforcement. Running the test with the owner role would pass while testing nothing.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs three jobs on every push to `main` and every pull request:
+
+| Job | What it proves |
+| --- | --- |
+| `Backend (Go)` | `sqlc` output is not stale, `go vet`, `go test -race`, `go build` |
+| `Frontend (Next.js)` | `pnpm typecheck` and `pnpm build` against the committed `schema.d.ts` |
+| `E2E (Playwright)` | the whole suite against a real stack |
+
+The `e2e` job brings up what the suite needs and nothing more: Postgres and Redis as services,
+the application role created before the migrations that grant to it, the schema migrated as the
+owner, the practices seeded with `scripts/local-seed.ps1`, `demo.localhost` in `/etc/hosts`, the
+API built from the tree and the web app in dev mode — the server the suite has always run
+against. The seed password is minted per run with `openssl` rather than configured as a secret:
+it protects a database that dies with the job.
+
+The same pieces run locally through `scripts/local-up.ps1` and `scripts/local-seed.ps1`; the
+suite reuses the dev server on `:3000`. To re-run the job without pushing, `gh workflow run CI`.
+
 ---
 
 ## Commands

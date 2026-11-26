@@ -6,7 +6,7 @@ import type { Route } from "next";
 
 import type { Patient } from "@/entities/patient/model";
 import { canSeePatients } from "@/entities/iam/model";
-import { PatientLoadError } from "@/features/patients/components/patient-detail";
+import { PatientLoadError } from "@/features/patients/components/patient-load-error";
 import { PatientFormModal } from "@/features/patients/components/patient-form";
 import { PatientTable } from "@/features/patients/components/patient-table";
 import { useInsurers } from "@/features/insurers/use-insurers";

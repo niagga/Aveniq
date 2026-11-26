@@ -22,6 +22,7 @@ export function FormModal({
   size,
   submitLabel,
   busy = false,
+  busyLabel = "Guardando…",
   error = null,
   onClose,
   onSubmit,
@@ -32,6 +33,12 @@ export function FormModal({
   description?: ReactNode;
   size?: "sm" | "md" | "lg";
   submitLabel: string;
+  /**
+   * What the submit button says while the request is in flight. The default fits anything that
+   * saves; an action with its own verb passes its own (emitting says "Emitiendo…", not
+   * "Guardando…", which would describe a different operation).
+   */
+  busyLabel?: string;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -60,7 +67,7 @@ export function FormModal({
             Cancelar
           </Button>
           <Button type="submit" form={formId} variant="primary" busy={busy}>
-            {busy ? "Guardando…" : submitLabel}
+            {busy ? busyLabel : submitLabel}
           </Button>
         </>
       )}

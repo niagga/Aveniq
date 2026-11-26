@@ -27,7 +27,6 @@ import { apiErrorMessage, browserApi } from "@/shared/api/client";
 import { useWritesLocked } from "@/shared/auth/practice";
 import { getSessionUser } from "@/shared/auth/session";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { Notice } from "@/shared/ui/notice";
 
 /**
  * The read view of one patient.
@@ -326,16 +325,5 @@ function ClientSummary({ clientId, name }: { clientId: string; name: string }) {
         <span className="block text-xs text-ink-muted">No pudimos leer sus datos fiscales.</span>
       ) : null}
     </div>
-  );
-}
-
-/** Renders the API complaint when loading the roster fails, instead of an empty table. */
-export function PatientLoadError({ status }: { status: number }) {
-  return (
-    <Notice tone="danger" title="No pudimos leer los pacientes">
-      {status === 0
-        ? "La API no responde. Verificá que el backend esté corriendo en 127.0.0.1:8080."
-        : `La API respondió ${status}.`}
-    </Notice>
   );
 }
