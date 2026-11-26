@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
-	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
@@ -73,17 +72,6 @@ func normalizeProfile(ctx context.Context, catalog port.DocumentCatalog, tenantI
 		InsurerID:             &in.InsurerID,
 		MemberNumber:          &in.MemberNumber,
 	}, nil
-}
-
-// applyBillingFromClient copies fiscal and currency from the payer onto the patient
-// draft. The patients row keeps the mirror it was born with; nothing reads it for billing
-// since T81 (the reads take the client), so it exists only for the legacy NOT NULL
-// columns the schema still requires.
-func applyBillingFromClient(draft *patient.Draft, payer client.Client) {
-	draft.BillingCurrency = payer.BillingCurrency
-	draft.TaxID = payer.TaxID
-	draft.FiscalCondition = payer.FiscalCondition
-	draft.FiscalAddress = payer.FiscalAddress
 }
 
 // requireActiveInsurer confirms a mutual can be chosen for a patient's coverage: it is in

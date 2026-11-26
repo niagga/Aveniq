@@ -59,13 +59,13 @@ func TestSettlementSchema(t *testing.T) {
 				return err
 			}
 			if _, err := app.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, client_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
-				VALUES ($1, $2, $3, 'AR', 'Ana Mutual', 'insurer', $4, 'AF-1', 'ARS', now(), now())`, coveredA, scratchTenantA, clientID, insurerA); err != nil {
+				INSERT INTO patients (id, tenant_id, client_id, country, full_name, coverage_kind, insurer_id, member_number, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', 'Ana Mutual', 'insurer', $4, 'AF-1', now(), now())`, coveredA, scratchTenantA, clientID, insurerA); err != nil {
 				return err
 			}
 		} else if _, err := app.Exec(ctx, `
-			INSERT INTO patients (id, tenant_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
-			VALUES ($1, $2, 'AR', 'Ana Mutual', 'insurer', $3, 'AF-1', 'ARS', now(), now())`, coveredA, scratchTenantA, insurerA); err != nil {
+			INSERT INTO patients (id, tenant_id, country, full_name, coverage_kind, insurer_id, member_number, created_at, updated_at)
+			VALUES ($1, $2, 'AR', 'Ana Mutual', 'insurer', $3, 'AF-1', now(), now())`, coveredA, scratchTenantA, insurerA); err != nil {
 			return err
 		}
 		_, err := app.Exec(ctx, `

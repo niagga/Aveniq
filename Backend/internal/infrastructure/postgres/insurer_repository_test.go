@@ -204,12 +204,11 @@ func TestPatientCoverageAgainstMutuals(t *testing.T) {
 	insuredIn := func(tenantID string, insurerID string) patient.Patient {
 		t.Helper()
 		subject, err := patient.New(patient.ID(uuid.NewString()), tenant.ID(tenantID), patient.Draft{
-			FullName:        "Paciente con cobertura",
-			Country:         "AR",
-			CoverageKind:    patient.CoverageInsurer,
-			InsurerID:       strPtr(insurerID),
-			MemberNumber:    strPtr("A-12345"),
-			BillingCurrency: patient.CurrencyEUR,
+			FullName:     "Paciente con cobertura",
+			Country:      "AR",
+			CoverageKind: patient.CoverageInsurer,
+			InsurerID:    strPtr(insurerID),
+			MemberNumber: strPtr("A-12345"),
 		}, time.Now())
 		if err != nil {
 			t.Fatalf("cannot build the insured patient: %v", err)
@@ -217,7 +216,7 @@ func TestPatientCoverageAgainstMutuals(t *testing.T) {
 		return subject
 	}
 
-	t.Run("an insured patient persists with its mutual, member number and currency", func(t *testing.T) {
+	t.Run("an insured patient persists with its mutual and member number", func(t *testing.T) {
 		subject := insuredIn(tenantA, string(mutualA.ID))
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
 			return persistPatient(ctx, clients, patients, subject)
@@ -238,9 +237,6 @@ func TestPatientCoverageAgainstMutuals(t *testing.T) {
 			}
 			if got.MemberNumber == nil || *got.MemberNumber != "A-12345" {
 				t.Errorf("MemberNumber = %v, want A-12345", got.MemberNumber)
-			}
-			if got.BillingCurrency != patient.CurrencyEUR {
-				t.Errorf("BillingCurrency = %q, want EUR", got.BillingCurrency)
 			}
 			return nil
 		})

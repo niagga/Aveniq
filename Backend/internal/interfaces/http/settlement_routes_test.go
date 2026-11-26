@@ -11,6 +11,7 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/insurer"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
@@ -82,7 +83,8 @@ func (r *fakeSettlementRepository) SettlableSessions(ctx context.Context, insure
 			continue
 		}
 		subject, err := r.patients.ByID(ctx, patient.ID(session.PatientID))
-		if err != nil || subject.CoverageKind != patient.CoverageInsurer || subject.InsurerID == nil || *subject.InsurerID != insurerID {
+		payer, payerErr := r.sessions.clients.ByID(ctx, client.ID(subject.ClientID))
+		if err != nil || payerErr != nil || subject.CoverageKind != patient.CoverageInsurer || subject.InsurerID == nil || *subject.InsurerID != insurerID {
 			continue
 		}
 		out = append(out, billing.SettlableSession{
@@ -94,7 +96,7 @@ func (r *fakeSettlementRepository) SettlableSessions(ctx context.Context, insure
 			ProfessionalName: session.ProfessionalName,
 			Modality:         session.Modality,
 			StartsAt:         session.StartsAt,
-			Currency:         string(subject.BillingCurrency),
+			Currency:         string(payer.BillingCurrency),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartsAt.Before(out[j].StartsAt) })
@@ -206,7 +208,7 @@ func seedMutualInsurer(t *testing.T, h *harness, tenantID, name string, taxID *s
 	return id
 }
 
-// seedCoveredPatient makes a patient covered by the mutual, billed in pesos, and returns its id.
+// seedCoveredPatient makes a patient covered by the mutual, billed in pesos by its client, and returns its id.
 func seedCoveredPatient(t *testing.T, h *harness, owner, tenantID, insurerID, fullName, document string) string {
 	t.Helper()
 	patientID := createPatient(t, h, owner, fullName, document)
@@ -215,7 +217,6 @@ func seedCoveredPatient(t *testing.T, h *harness, owner, tenantID, insurerID, fu
 	subject.CoverageKind = patient.CoverageInsurer
 	subject.InsurerID = &insurerID
 	subject.MemberNumber = &member
-	subject.BillingCurrency = patient.CurrencyARS
 	h.repo.rows[tenantID][patient.ID(patientID)] = subject
 	return patientID
 }

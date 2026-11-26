@@ -79,8 +79,8 @@ Write-Host "`nGo tools"
 
 $goBin = Join-Path (& go env GOPATH) 'bin'
 $goTools = @(
-    @{ Name = 'sqlc';  Package = 'github.com/sqlc-dev/sqlc/cmd/sqlc@latest' },
-    @{ Name = 'goose'; Package = 'github.com/pressly/goose/v3/cmd/goose@latest' },
+    @{ Name = 'sqlc';  Package = 'github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1' },
+    @{ Name = 'goose'; Package = 'github.com/pressly/goose/v3/cmd/goose@v3.30.0' },
     @{ Name = 'air';   Package = 'github.com/air-verse/air@latest' }
 )
 

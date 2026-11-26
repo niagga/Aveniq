@@ -82,13 +82,13 @@ func TestSettlementRepository(t *testing.T) {
 				return err
 			}
 			if _, err := seeder.Exec(ctx, `
-				INSERT INTO patients (id, tenant_id, client_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
-				VALUES ($1, $2, $3, 'AR', 'Ana Mutual', 'insurer', $4, 'AF-1', 'ARS', now(), now())`, covered, tenantA, clientID, insurerID); err != nil {
+				INSERT INTO patients (id, tenant_id, client_id, country, full_name, coverage_kind, insurer_id, member_number, created_at, updated_at)
+				VALUES ($1, $2, $3, 'AR', 'Ana Mutual', 'insurer', $4, 'AF-1', now(), now())`, covered, tenantA, clientID, insurerID); err != nil {
 				return err
 			}
 		} else if _, err := seeder.Exec(ctx, `
-			INSERT INTO patients (id, tenant_id, country, full_name, coverage_kind, insurer_id, member_number, billing_currency, created_at, updated_at)
-			VALUES ($1, $2, 'AR', 'Ana Mutual', 'insurer', $3, 'AF-1', 'ARS', now(), now())`, covered, tenantA, insurerID); err != nil {
+			INSERT INTO patients (id, tenant_id, country, full_name, coverage_kind, insurer_id, member_number, created_at, updated_at)
+			VALUES ($1, $2, 'AR', 'Ana Mutual', 'insurer', $3, 'AF-1', now(), now())`, covered, tenantA, insurerID); err != nil {
 			return err
 		}
 		for id, startsAt := range sessions {

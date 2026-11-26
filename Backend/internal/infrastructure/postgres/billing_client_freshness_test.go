@@ -16,11 +16,11 @@ import (
 	"github.com/niagga/aveniq/backend/internal/infrastructure/postgres"
 )
 
-// TestBillingReadsFollowTheClient proves the defect L91 recorded is gone: the fiscal data
-// and the currency billing and the reports answer with belong to the client (S26), so
-// after the client is edited every read answers with the edited value. The patient row
-// keeps the mirror it was born with; if any of these reads still hit it, the stale value
-// comes back, and that is exactly what each check says out loud.
+// TestBillingReadsFollowTheClient proves the defect L91 recorded is gone: every billing
+// and reporting read answers with the client's data (S26), so after the client is edited
+// every read answers with the edited value. Since 0028 the patient row carries no copy
+// at all; if any of these reads still hit a patient-side mirror, a stale value comes
+// back, and that is exactly what each check says out loud.
 func TestBillingReadsFollowTheClient(t *testing.T) {
 	ownerDSN := os.Getenv("TEST_DATABASE_URL")
 	appDSN := os.Getenv("TEST_APP_DATABASE_URL")
@@ -55,8 +55,9 @@ func TestBillingReadsFollowTheClient(t *testing.T) {
 
 	tenantA := scratchTenantA
 
-	// Born the ordinary way: the client is created with the same data the patient
-	// mirrors, which is what makes a stale read invisible at birth.
+	// Born the ordinary way: the fixture client is created with the CUIT, the fiscal
+	// condition and the currency the shared fixture gives it, which is what makes a
+	// stale read detectable once the client is edited.
 	ana := newPatient(t, catalog, tenantA, "Ana Seguidora", "30.111.222")
 	if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
 		return persistPatient(ctx, clients, patientRepo, ana)
@@ -113,8 +114,7 @@ func TestBillingReadsFollowTheClient(t *testing.T) {
 	})
 
 	// The payer is edited through the real client repository, the way UpdateClient
-	// does: fiscal condition, tax id and currency all change. The patient row is not
-	// touched, so from here on the mirror disagrees with the client on all three.
+	// does: fiscal condition, tax id and currency all change.
 	newCUIT := patient.TaxID{Kind: "cuit", Number: "27-25874639-8", Normalized: "27258746398"}
 	responsible := "responsable_inscripto"
 	if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
@@ -150,7 +150,8 @@ func TestBillingReadsFollowTheClient(t *testing.T) {
 		if subject.BillingCurrency != "USD" {
 			t.Errorf("the search answered BillingCurrency = %q, want the edited USD; if it shows ARS the search still reads the patient's mirror", subject.BillingCurrency)
 		}
-		// And the birth CUIT no longer matches: the mirror is dead to billing.
+		// And the birth CUIT no longer matches: the identifier is matched against the
+		// client row, which no longer carries it.
 		var stale []billing.Subject
 		if err := transactor.WithTenant(ctx, tenantA, func(ctx context.Context) error {
 			var inner error
@@ -174,7 +175,7 @@ func TestBillingReadsFollowTheClient(t *testing.T) {
 			t.Fatalf("cannot read the billing terms: %v", err)
 		}
 		if terms.Currency != "USD" {
-			t.Errorf("PatientBilling.Currency = %q, want the client's edited USD; if it shows ARS the read still hits the patient's mirror", terms.Currency)
+			t.Errorf("PatientBilling.Currency = %q, want the client's edited USD; if it shows ARS a read still hits a patient-side mirror", terms.Currency)
 		}
 		if terms.Coverage != billing.CoveragePrivate {
 			t.Errorf("PatientBilling.Coverage = %q, want the patient's private coverage (S26: the mutual stays on the patient)", terms.Coverage)

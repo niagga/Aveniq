@@ -65,25 +65,11 @@ func newPatient(t *testing.T, catalog *postgres.PatientCatalog, tenantID, fullNa
 		built = &normalized
 	}
 
-	taxKind, err := catalog.TaxIDKind(ctx, "AR", "cuit")
-	if err != nil {
-		t.Fatalf("cannot load the AR cuit kind: %v", err)
-	}
-	taxID, err := patient.NormalizeTaxID(taxKind, "20-12345678-6")
-	if err != nil {
-		t.Fatalf("cannot normalize the CUIT: %v", err)
-	}
-
-	condition := "monotributo"
-
 	subject, err := patient.New(patient.ID(uuid.NewString()), tenant.ID(tenantID), patient.Draft{
-		FullName:        fullName,
-		Country:         "AR",
-		Document:        built,
-		TaxID:           &taxID,
-		FiscalCondition: &condition,
-		CoverageKind:    patient.CoveragePrivate,
-		BillingCurrency: patient.CurrencyARS,
+		FullName:     fullName,
+		Country:      "AR",
+		Document:     built,
+		CoverageKind: patient.CoveragePrivate,
 	}, time.Now())
 	if err != nil {
 		t.Fatalf("cannot build the domain patient: %v", err)
@@ -113,12 +99,6 @@ func TestPatientRepository(t *testing.T) {
 			}
 			if got.Document != nil && got.Document.Number != "30.111.222" {
 				t.Errorf("document number = %q, want what the person typed", got.Document.Number)
-			}
-			if got.TaxID == nil || got.TaxID.Kind != "cuit" {
-				t.Errorf("tax id = %+v, want the CUIT", got.TaxID)
-			}
-			if got.FiscalCondition == nil || *got.FiscalCondition != "monotributo" {
-				t.Errorf("fiscal condition = %v, want monotributo", got.FiscalCondition)
 			}
 			if got.Country != "AR" {
 				t.Errorf("Country = %q, want AR", got.Country)
@@ -202,12 +182,11 @@ func TestPatientRepository(t *testing.T) {
 
 		phone := "+54 11 5555-5555"
 		draft := patient.Draft{
-			FullName:        "Editable Corregida",
-			Country:         "AR",
-			Document:        subject.Document,
-			Phone:           &phone,
-			CoverageKind:    patient.CoveragePrivate,
-			BillingCurrency: patient.CurrencyARS,
+			FullName:     "Editable Corregida",
+			Country:      "AR",
+			Document:     subject.Document,
+			Phone:        &phone,
+			CoverageKind: patient.CoveragePrivate,
 		}
 		updated, err := subject.ChangeProfile(draft, time.Now())
 		if err != nil {

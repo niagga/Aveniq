@@ -6,14 +6,13 @@ import (
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 )
 
-// A mutual patient keeps the mutual and the member number, and the currency is the one
-// chosen, not one derived from the country.
-func TestInsuredPatientKeepsCoverageAndChosenCurrency(t *testing.T) {
+// A mutual patient keeps the mutual and the member number; the currency belongs to
+// the billing client (T72), not to the patient.
+func TestInsuredPatientKeepsCoverage(t *testing.T) {
 	draft := validDraft()
 	draft.CoverageKind = patient.CoverageInsurer
 	draft.InsurerID = str("0c1f3e2a-1111-4222-8333-944455556666")
 	draft.MemberNumber = str("  12345  ")
-	draft.BillingCurrency = patient.CurrencyUSD
 
 	subject := newPatient(t, draft)
 
@@ -25,9 +24,6 @@ func TestInsuredPatientKeepsCoverageAndChosenCurrency(t *testing.T) {
 	}
 	if subject.MemberNumber == nil || *subject.MemberNumber != "12345" {
 		t.Errorf("MemberNumber = %v, want it trimmed", subject.MemberNumber)
-	}
-	if subject.BillingCurrency != patient.CurrencyUSD {
-		t.Errorf("BillingCurrency = %q, want USD", subject.BillingCurrency)
 	}
 }
 
@@ -49,10 +45,6 @@ func TestChangingToPrivateClearsTheMutual(t *testing.T) {
 	}
 	if updated.CoverageKind != patient.CoveragePrivate || updated.InsurerID != nil || updated.MemberNumber != nil {
 		t.Errorf("coverage = (%q, %v, %v), want private with no mutual", updated.CoverageKind, updated.InsurerID, updated.MemberNumber)
-	}
-	// Billing currency lives on the client (T72): editing the patient profile does not move it.
-	if updated.BillingCurrency != insured.BillingCurrency {
-		t.Errorf("BillingCurrency = %q, want unchanged %q", updated.BillingCurrency, insured.BillingCurrency)
 	}
 }
 

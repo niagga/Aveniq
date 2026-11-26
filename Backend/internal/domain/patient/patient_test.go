@@ -23,8 +23,7 @@ func validDraft() patient.Draft {
 			Number:     "30.111.222",
 			Normalized: "30111222",
 		},
-		CoverageKind:    patient.CoveragePrivate,
-		BillingCurrency: patient.CurrencyARS,
+		CoverageKind: patient.CoveragePrivate,
 	}
 }
 
@@ -75,9 +74,6 @@ func TestNewPatientValidation(t *testing.T) {
 		"document without normalized": {func(d *patient.Draft) {
 			d.Document = &patient.Document{Country: "AR", Kind: "dni", Number: "30111222"}
 		}, "document_number"},
-		"tax id without normalized": {func(d *patient.Draft) {
-			d.TaxID = &patient.TaxID{Kind: "cuit"}
-		}, "tax_id"},
 		"birth date in the future": {func(d *patient.Draft) {
 			when := now.Add(24 * time.Hour)
 			d.BirthDate = &when
@@ -90,15 +86,6 @@ func TestNewPatientValidation(t *testing.T) {
 			when := now.UTC().Truncate(24 * time.Hour).Add(-24 * time.Hour)
 			d.BirthDate = &when
 		}, ""},
-		"billing currency missing": {func(d *patient.Draft) {
-			d.BillingCurrency = ""
-		}, "billing_currency"},
-		"billing currency outside the MVP": {func(d *patient.Draft) {
-			d.BillingCurrency = "BRL"
-		}, "billing_currency"},
-		"billing currency in lowercase": {func(d *patient.Draft) {
-			d.BillingCurrency = "usd"
-		}, "billing_currency"},
 		"unknown coverage": {func(d *patient.Draft) {
 			d.CoverageKind = "prepaga"
 		}, "coverage_kind"},

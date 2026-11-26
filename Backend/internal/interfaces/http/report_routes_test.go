@@ -11,6 +11,7 @@ import (
 
 	"github.com/niagga/aveniq/backend/internal/application/port"
 	"github.com/niagga/aveniq/backend/internal/domain/billing"
+	"github.com/niagga/aveniq/backend/internal/domain/client"
 	"github.com/niagga/aveniq/backend/internal/domain/iam"
 	"github.com/niagga/aveniq/backend/internal/domain/patient"
 	"github.com/niagga/aveniq/backend/internal/domain/report"
@@ -85,11 +86,15 @@ func (r *fakeReportRepository) PendingSessions(ctx context.Context, window repor
 		}
 		line := report.Line{
 			At:               session.StartsAt,
-			Currency:         string(subject.BillingCurrency),
 			Coverage:         string(subject.CoverageKind),
 			Modality:         session.Modality,
 			ProfessionalID:   session.ProfessionalID,
 			ProfessionalName: session.ProfessionalName,
+		}
+		// Since T81 the currency is reported from the billing client's row, like the
+		// real adapter does.
+		if payer, err := r.billing.clients.ByID(ctx, client.ID(subject.ClientID)); err == nil {
+			line.Currency = string(payer.BillingCurrency)
 		}
 		if subject.InsurerID != nil {
 			line.InsurerID = *subject.InsurerID
