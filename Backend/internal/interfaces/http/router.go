@@ -289,16 +289,31 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			started := time.Now()
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-			next.ServeHTTP(wrapped, r)
+			// One holder per request, stored in the context so the middlewares
+			// that establish the identity can report into it even where they
+			// derive their own contexts. It dies with the request: no state
+			// survives for the next one to inherit.
+			holder := &requestIdentityHolder{}
+			next.ServeHTTP(wrapped, r.WithContext(withRequestIdentityHolder(r.Context(), holder)))
 
-			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request",
+			attrs := []slog.Attr{
 				slog.String("request_id", middleware.GetReqID(r.Context())),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", wrapped.Status()),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Duration("duration", time.Since(started)),
-			)
+			}
+			// The identity fields appear only when some middleware established
+			// them: an absent field must not read as an empty practice id.
+			identity := holder.snapshot()
+			if identity.TenantID != "" {
+				attrs = append(attrs, slog.String("tenant_id", identity.TenantID))
+			}
+			if identity.UserID != "" {
+				attrs = append(attrs, slog.String("user_id", identity.UserID))
+			}
+			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request", attrs...)
 		})
 	}
 }

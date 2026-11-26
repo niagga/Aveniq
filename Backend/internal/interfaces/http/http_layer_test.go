@@ -291,6 +291,11 @@ type harness struct {
 	settlements *fakeSettlementRepository
 	landings    *fakeLandingRepository
 	domains     *fakeTenantDomains
+
+	// logs captures every line the router logs, so the tests of the completion
+	// log (request_log_test.go) can read what the real router produced rather
+	// than trusting a run by hand. The tests that do not look at logs ignore it.
+	logs *bytes.Buffer
 }
 
 func newHarness(t *testing.T) *harness {
@@ -333,8 +338,11 @@ func newHarness(t *testing.T) *harness {
 	landings := newFakeLandingRepository()
 	domains := &fakeTenantDomains{hosts: map[string]tenant.ID{}}
 
+	logBuffer := &bytes.Buffer{}
+	// The JSON form is what production answers with (APP_ENV=production); the
+	// tests read the same shape they will meet in an incident.
 	router := httpiface.NewRouter(httpiface.Deps{
-		Logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: slog.New(slog.NewJSONHandler(logBuffer, nil)),
 		ServiceVersion:         "test",
 		Signup:                 signupapp.NewUseCase(tenants, users, scope, audit, clock, uuidIDs{}, fakeHasher{}),
 		RateLimiter:            limiter,
@@ -404,7 +412,7 @@ func newHarness(t *testing.T) *harness {
 		UpdateLanding:          landingapp.NewUpdateUseCase(tenants, landings, scope, audit, clock),
 	})
 
-	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements, landings: landings, domains: domains}
+	return &harness{router: router, tokens: tokens, repo: repo, insurers: insurers, tenants: tenants, users: users, audit: audit, invitations: invitations, limiter: limiter, vouchers: vouchers, tariffs: tariffs, settlements: settlements, landings: landings, domains: domains, logs: logBuffer}
 }
 
 // token mints a signed access token for a role and a practice. It bypasses the
